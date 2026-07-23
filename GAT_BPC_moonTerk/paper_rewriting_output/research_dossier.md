@@ -1,0 +1,19 @@
+# Research Dossier: Transportation Research Part C
+
+## Venue Requirements
+
+*Transportation Research Part C: Emerging Technologies* is a credible target because its verified scope welcomes emerging technologies and quantitative methods—including operations research and artificial intelligence—when they advance transportation systems. The paper should therefore treat lunar water-ice prospecting as resource-constrained autonomous fleet transportation over a remote exploration and logistics network, not merely as rover navigation or algorithm engineering. Relevant system outcomes include operational efficiency, safety, reliability, and energy or other resource consumption. The official landing page also emphasizes open science, transferable datasets, and benchmarking ([journal page](https://www.sciencedirect.com/journal/transportation-research-part-c-emerging-technologies)).
+
+The canonical [Guide for Authors](https://www.sciencedirect.com/journal/transportation-research-part-c-emerging-technologies/publish/guide-for-authors) returned HTTP 403 to the current research client on 23 July 2026. Consequently, no page or word limit, abstract format, anonymization rule, manuscript template, figure/table rule, data/code statement, cover-letter requirement, or submission-file specification is verified. These items must be checked in a normal browser before formatting or submission.
+
+## Review Criteria and Risks
+
+Reviewers are likely to test whether the work contributes to transportation-system understanding rather than using a lunar setting as decoration. The strongest evaluation dimensions are formulation fidelity, methodological novelty, exactness, computational rigor, operational interpretation, and transferability. Major risks are desk rejection for an aerospace-only framing; novelty overstatement given recent learning-to-branch work in exact vehicle-routing BPC; blurred boundaries between learned guidance and valid proofs; and unsupported performance claims before learning experiments exist. Weak or selectively reported baselines, absent ablations, limited instance provenance, and no discussion of generalization beyond lunar maps would further reduce credibility.
+
+## Accepted-Paper Narrative Patterns
+
+A suitable arc begins with the fleet-level transportation problem and its resource, terrain, and sensing constraints, then narrows to the computational gap that prevents exact planning with explicit proofs at useful scales. The method section should proceed from the transport model to route-based decomposition, restricted master problem, pricing, deterministic cuts, and branching, followed by the learned pricing and branch-ranking policies and an explicit proof boundary. Results should move from benchmark provenance and exact baselines to no-guidance, pricing-only, and pricing-plus-branching comparisons, robustness, and operational implications. The discussion should return to system-level benefits and acknowledge scale, data, and transfer limits.
+
+## Constraints for This Paper
+
+The controlling contribution is **pricing-led, branching-assisted learning-guided exact Branch-Price-and-Cut for resource-constrained autonomous fleet routing**. Learning may prioritize pricing work and rank valid branching candidates, but it must not control cuts. Formal lower bounds, proof of no negative columns, branch validity and completeness, pruning, and optimality proofs must remain on the exact path. Every factual and numerical claim must trace to frozen project evidence. Until the user supplies learning-effect experiments, the manuscript may define protocols and labeled placeholders only; it must not imply speedups, better bounds, or improved solve rates. Position local trajectory planning as complementary rather than equivalent to mission-level fleet routing, and avoid any claim of being the first learning-guided exact BPC method.

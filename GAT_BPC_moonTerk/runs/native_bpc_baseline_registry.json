@@ -1,0 +1,77 @@
+{
+  "schema_version": "lunar_ice_bpc.baseline_registry.v1",
+  "updated_at": "2026-07-23T20:47:07+08:00",
+  "active_experiment_baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+  "production_default_policy": "no_cut",
+  "production_default_switch_authorized": false,
+  "baselines": [
+    {
+      "freeze_id": "FROZEN_NATIVE_NO_CUT_BASELINE_V1",
+      "status": "preserved_historical_baseline",
+      "algorithm": "Native exact Branch-and-Price without live cuts",
+      "git_commit": "ee2f853c003589cb717399209fe232dc793a854b",
+      "engine_hash": "66ab52c9b33b4551",
+      "manifest_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+      "manifest_sha256": "f374070b0e6b65eafd628ce4e60958e9112eb12b166aabc9bd12cdf0c18fe720",
+      "summary_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_summary.json",
+      "summary_sha256": "5c13e011c851de4b04b62cc3495b9b16feed3e7ac541c69b78d3210bfc10a86c",
+      "performance": {
+        "5": {
+          "mean_sec": 0.39595195,
+          "p50_sec": 0.393683
+        },
+        "10": {
+          "mean_sec": 0.82065975,
+          "p50_sec": 0.754397
+        },
+        "20": {
+          "mean_sec": 32.35200345,
+          "p50_sec": 18.3912995
+        },
+        "30": {
+          "mean_sec": 493.04546575,
+          "p50_sec": 346.03829
+        }
+      }
+    },
+    {
+      "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+      "status": "active_experiment_baseline",
+      "algorithm": "Native exact Branch-Price-and-Cut with root-only P0 SRI-3",
+      "git_commit": "0e52f622814cdb81e9e4c24cbbd3a1c9d320c965",
+      "engine_hash": "8e255a88436e937c",
+      "policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+      "manifest_path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/baseline_freeze_manifest.json",
+      "manifest_sha256": "48500a47dd84ae108b859e2707736c1546f8c6140407ffe57d0d87b71767d9c2",
+      "performance_evidence_role": "single_repeat_full80_control",
+      "formal_10_3_promotion_design_complete": false,
+      "performance": {
+        "5": {
+          "mean_sec": 0.3895144,
+          "p50_sec": 0.3898525
+        },
+        "10": {
+          "mean_sec": 0.80832295,
+          "p50_sec": 0.738066
+        },
+        "20": {
+          "mean_sec": 24.10467045,
+          "p50_sec": 14.3714855
+        },
+        "30": {
+          "mean_sec": 371.51445985,
+          "p50_sec": 274.684953
+        }
+      }
+    }
+  ],
+  "historical_experiments": [
+    {
+      "id": "P0_FORMAL_PAIRED_PROMOTION_CLEAN_V2_20260722",
+      "status": "NOT_PROMOTED",
+      "summary_path": "runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_summary.json",
+      "summary_sha256": "acd5cabf53a19fa51f22563d3fde2b2ed7d466e0c938efeb39a8fbca6f520fc9",
+      "note": "Preserved formal 1040-slot evidence for the pre-projection/pre-packed-state P0 candidate; do not merge its timings with the optimized V2 baseline."
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "workflow": "build_from_materials",
+  "scene": "journal",
+  "tier": "pro",
+  "output_language": "en",
+  "target_name": "Transportation Research Part C: Emerging Technologies",
+  "materials_dir": "/home/kai/work/GAT_BPC_moonTerk",
+  "draft_path": "",
+  "user_motivation": "场景是面向月表水冰探测的车辆路径规划。已确认采用定价主导、分支辅助的学习引导精确 Branch-Price-and-Cut：学习层主要引导定价工作顺序，并有限度地排序分支候选；割的生成、选择、激活和管理均不由学习引导。正式下界、无负列证明、分支完备性、剪枝和最优性证明仍由 exact path 产生。后续学习效果实验由用户补充，在此之前不虚构性能结论。",
+  "official_urls": [
+    "https://www.sciencedirect.com/journal/transportation-research-part-c-emerging-technologies"
+  ],
+  "special_requirements": [
+    "不虚构数据、指标、引用或实验结论",
+    "所有主张必须追溯到项目材料",
+    "明确区分严格证明、精确性保证、诊断信号和启发式策略",
+    "论文主线采用定价主导、分支辅助的学习引导精确 Branch-Price-and-Cut，并保持学习引导与正式证明来源分离",
+    "不使用学习引导割；割的有效性、生成、选择、激活、保留和删除均由确定性精确算法规则控制",
+    "学习引导分支仅排序候选，不替代分支有效性检查、完备性回退或节点证明",
+    "尚未提供的学习效果实验只建立实验协议与占位标识，不生成或暗示虚构结果",
+    "全文不要用第一人称，用“本文”代替",
+    "中文论文表述默认使用“证明”；英文默认使用 proof/prove。certify/certified 仅可用于有明确推导、完备搜索或正式证明链支撑且已限定精确范围的结论，不得用于学习评分、诊断、启发式或 benchmark gate",
+    "路径范围使用“固定逻辑路径解空间”或 fixed logical-path solution space；状态语境使用“状态空间”；不使用“宇宙”或 universe",
+    "算法整体使用“框架”或 framework；不使用“骨架”或 backbone",
+    "暂不写正文"
+  ],
+  "word_output": "docx",
+  "translation_package": "zh",
+  "reference_mode": "local_first",
+  "reference_paths": [
+    "."
+  ],
+  "citation_target_count": 20,
+  "humanize_tier": "light",
+  "detection_platform": "general",
+  "ui_language": "zh"
+}

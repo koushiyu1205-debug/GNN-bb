@@ -1,7 +1,7 @@
 {
   "candidate_id": "FROZEN_NATIVE_LIVE_SRI_P0_CANDIDATE_V1",
   "candidate_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_optimized_full80_paired_20260723/candidate_freeze_manifest.json",
-  "checked_at_utc": "2026-07-23T05:35:54.602580+00:00",
+  "checked_at_utc": "2026-07-23T08:43:59.017773+00:00",
   "config_hashes": {
     "live": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
     "no_cut": "beef1cf0c5f20fffff35fb87c06826926f2d15fc62294237d7ba5007af9a9f1a"

@@ -817,3 +817,38 @@ exact、no-cheat、零 redline。该单例不属于正式 promotion，不能据�
 
 最新测试快照：全量 pytest 414 passed + 22 subtests；`tests/native` 39 passed + 17
 subtests；normal Native CTest 2/2；ASAN+UBSAN CTest 2/2。
+
+## 18. 2026-07-23 新实验基准冻结与 GAT 主线
+
+完成 projection/packed-state 后的全量单重复 paired benchmark：
+
+- 5/10/20/30 各 20 个实例；
+- P0/no-cut 各一次，共 160 slots；
+- strict cold-start、fresh runtime、AB/BA、solver resume 关闭；
+- 160/160 exact、零 redline；
+- P0 在 5/10/20/30 的 mean 为
+  `0.389514 / 0.808323 / 24.104670 / 371.514460s`；
+- P0 在 5/10/20/30 的 p50 为
+  `0.389853 / 0.738066 / 14.371486 / 274.684953s`。
+
+该结果只有单重复，不能改写为 10/3 正式 promotion，但已经冻结为后续 GAT 实验的新 control：
+
+`FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2`
+
+入口：
+
+- `runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/baseline_freeze_manifest.json`；
+- `runs/native_bpc_baseline_registry.json`；
+- `plan/GAT_PRICING_AND_BRANCH_GUIDANCE_PREIMPLEMENTATION_PLAN_20260723_ZH.md`。
+
+旧 `FROZEN_NATIVE_NO_CUT_BASELINE_V1` 没有删除或覆盖，继续用于历史复现、纵向比较和 rollback。
+production default 仍是 `no_cut`；“新 P0 基准”表示后续 GAT on/off 实验的主要 control，不表示
+已经越过正式 release promotion。
+
+GAT 主线已明确为：
+
+1. 引导 pricing candidate/label/harvest 顺序，缓解负列发现和 exact proof tail；
+2. 对合法 Ryan–Foster pair 排序；
+3. 不引导 cuts，不启用 node-level cut separation；
+4. 只允许 immutable typed hints，不能删候选、剪枝、提供 lower bound 或签发 certificate；
+5. 最终 official closure 继续由当前 true dual 下的 exhaustive Native exact SPPRC 提供。

@@ -1,0 +1,253 @@
+{
+  "schema_version": "paperspine.source_inventory.v1",
+  "snapshot_date": "2026-07-23",
+  "timezone": "Asia/Shanghai",
+  "materials_dir": "/home/kai/work/GAT_BPC_moonTerk",
+  "inventory_method": "curated_emulation",
+  "inventory_reason": "The repository contains approximately 13 GB of raw maps, build products, caches, and per-slot run artifacts; paper-bearing sources are represented by controlling manifests, contracts, implementations, and summaries.",
+  "authority_levels": {
+    "A": "frozen_or_machine_readable_evidence",
+    "B": "mathematical_algorithmic_or_implementation_contract",
+    "C": "design_diagnostic_benchmark_only_or_visual_material",
+    "D": "missing_mutable_deprecated_or_non_paper_bearing"
+  },
+  "items": [
+    {
+      "id": "S001",
+      "path": "paper_rewriting_output/paper_spine_config.json",
+      "type": "json",
+      "role": "workflow_contract",
+      "authority": "A",
+      "status": "active"
+    },
+    {
+      "id": "S002",
+      "path": "paper_rewriting_output/confirmed_motivation.md",
+      "type": "markdown",
+      "role": "confirmed_paper_mainline",
+      "authority": "A",
+      "status": "confirmed"
+    },
+    {
+      "id": "S003",
+      "path": "paper_rewriting_output/research_dossier.md",
+      "type": "markdown",
+      "role": "research_synthesis",
+      "authority": "B",
+      "status": "complete"
+    },
+    {
+      "id": "S004",
+      "path": "paper_rewriting_output/citation_support_bank.md",
+      "type": "markdown",
+      "role": "external_citation_routing",
+      "authority": "B",
+      "status": "complete"
+    },
+    {
+      "id": "S005",
+      "path": "paper_rewriting_output/sota_gap_map.md",
+      "type": "markdown",
+      "role": "claim_calibration",
+      "authority": "B",
+      "status": "complete"
+    },
+    {
+      "id": "S006",
+      "path": "CODEX_lunar_gat_bpc_exact_algorithm_design.md",
+      "type": "markdown",
+      "role": "exact_algorithm_design",
+      "authority": "B",
+      "status": "current_design"
+    },
+    {
+      "id": "S007-S012",
+      "path": "plan/01_B0_Direct_DP_Frozen_Oracle.md through plan/06_B5_GAT_Guidance_Layer.md",
+      "type": "markdown_group",
+      "role": "layered_algorithm_contracts",
+      "authority": "B",
+      "status": "current"
+    },
+    {
+      "id": "S013",
+      "path": "plan/native_live_sri_v1_validity_and_certificate_boundary_zh.md",
+      "type": "markdown",
+      "role": "cut_validity_and_proof_contract",
+      "authority": "B",
+      "status": "implemented_contract"
+    },
+    {
+      "id": "S014",
+      "path": "plan/native_live_sri_bpc_v1_implementation_report_zh.md",
+      "type": "markdown",
+      "role": "implementation_synthesis",
+      "authority": "B",
+      "status": "current_synthesis"
+    },
+    {
+      "id": "S015",
+      "path": "plan/CODEX_HANDOFF_NATIVE_SPPRC_MAINLINE_20260722_ZH.md",
+      "type": "markdown",
+      "role": "current_solver_handoff",
+      "authority": "B",
+      "status": "current_synthesis"
+    },
+    {
+      "id": "S016-S022",
+      "path": "src/lunar_ice_bpc/exact/ and native/lunar_spprc/",
+      "type": "source_group",
+      "role": "exact_rmp_pricing_branching_cuts_and_proofs",
+      "authority": "B",
+      "status": "implemented"
+    },
+    {
+      "id": "S023-S024",
+      "path": "src/lunar_ice_bpc/exact/bpc/guidance/ and src/lunar_ice_bpc/guidance/",
+      "type": "source_group",
+      "role": "guidance_safety_shell_and_features",
+      "authority": "B/C",
+      "status": "shadow_or_future_model_scaffold"
+    },
+    {
+      "id": "S025",
+      "path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+      "type": "json",
+      "role": "frozen_no_cut_exact_baseline",
+      "authority": "A",
+      "status": "frozen",
+      "sha256": "f374070b0e6b65eafd628ce4e60958e9112eb12b166aabc9bd12cdf0c18fe720"
+    },
+    {
+      "id": "S026",
+      "path": "runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_decision_manifest.json",
+      "type": "json",
+      "role": "formal_p0_paired_promotion",
+      "authority": "A",
+      "status": "frozen_not_promoted",
+      "sha256": "61619dd7688da7f86b59339027f45c0bf6b9ad2dbbbcf3182dd87627c7338633"
+    },
+    {
+      "id": "S027",
+      "path": "runs/native_live_sri_v1_state_optimizations_20260723/state_optimization_summary.json",
+      "type": "json",
+      "role": "exact_safe_state_optimization_audit",
+      "authority": "A/C",
+      "status": "frozen_diagnostic"
+    },
+    {
+      "id": "S028",
+      "path": "runs/native_live_sri_v1_optimized_full80_paired_20260723/candidate_freeze_manifest.json",
+      "type": "json",
+      "role": "optimized_candidate_binding",
+      "authority": "A",
+      "status": "frozen_candidate",
+      "sha256": "cee364054e612e4873900f0535ccc4d122b981be5082645ee636807ca437d282"
+    },
+    {
+      "id": "S029",
+      "path": "runs/native_live_sri_v1_optimized_full80_paired_20260723/paired_run/promotion_summary.json",
+      "type": "json",
+      "role": "single_repeat_paired_benchmark",
+      "authority": "C",
+      "status": "complete_benchmark_only",
+      "sha256": "29a301cfa133407b2c50a91cd2ea65e89bb85186093fd526fdb49a485881954"
+    },
+    {
+      "id": "S030",
+      "path": "runs/native_live_sri_v1_post_promotion_no_cut_50_100_bounded_regression_v2_signed_zero_fix_20260723/bounded_regression_summary.json",
+      "type": "json",
+      "role": "large_scale_bounded_safety_run",
+      "authority": "A",
+      "status": "frozen_legal_incomplete"
+    },
+    {
+      "id": "S031",
+      "path": "data/manifests/lunar_ice_sp50_real_benchmark_manifest.json",
+      "type": "json",
+      "role": "benchmark_instance_manifest",
+      "authority": "A",
+      "status": "current",
+      "sha256": "011263566135c5ea64957439f02dbd2430ac7409c24b6987eea8394997be439e"
+    },
+    {
+      "id": "S032",
+      "path": "data/manifests/lunar_real_map_source_catalog.json",
+      "type": "json",
+      "role": "lunar_map_source_catalog",
+      "authority": "A",
+      "status": "current",
+      "sha256": "37d6cc762e56183ac004977403d938176ba78e64e682c7ffb1b6098af35eff96"
+    },
+    {
+      "id": "S033",
+      "path": "data/instances/lunar_ice_sp50_{005,010,020,030,050,100}/",
+      "type": "json_group",
+      "role": "fixed_logical_graph_instances",
+      "authority": "A",
+      "status": "generated_corpus"
+    },
+    {
+      "id": "S034-S036",
+      "path": "runs/figures/basemaps/, runs/figures/task_sites/, and scale-specific SVG figures",
+      "type": "figure_group",
+      "role": "candidate_paper_visuals",
+      "authority": "C",
+      "status": "caption_and_provenance_audit_required"
+    },
+    {
+      "id": "S037-S038",
+      "path": "参考文献/ and paper_rewriting_output/reference_materials/",
+      "type": "reference_group",
+      "role": "local_first_literature_and_exemplars",
+      "authority": "B/C",
+      "status": "research_input"
+    },
+    {
+      "id": "S039",
+      "path": "paper_rewriting_output/terminology_policy.md",
+      "type": "markdown",
+      "role": "mandatory_paper_terminology_and_restricted_certify_policy",
+      "authority": "A",
+      "status": "active"
+    }
+  ],
+  "missing_evidence": [
+    {
+      "id": "M001",
+      "material": "frozen_training_dataset_split_manifest_and_leakage_audit",
+      "status": "TBD"
+    },
+    {
+      "id": "M002",
+      "material": "trained_pricing_guidance_checkpoint_and_inference_record",
+      "status": "TBD"
+    },
+    {
+      "id": "M003",
+      "material": "trained_branch_ranking_checkpoint_and_valid_candidate_logs",
+      "status": "TBD"
+    },
+    {
+      "id": "M004",
+      "material": "paired_exact_bpc_learning_ablation",
+      "status": "TBD"
+    },
+    {
+      "id": "M005",
+      "material": "inference_overhead_fallback_equivalence_and_held_out_results",
+      "status": "TBD"
+    }
+  ],
+  "excluded_patterns": [
+    ".git/",
+    ".venv/",
+    "__pycache__/",
+    ".pytest_cache/",
+    "build/",
+    "compiled_objects",
+    "data/raw_maps/*.tif",
+    "derived_raster_tiles",
+    "duplicate_per_slot_logs",
+    "temporary_progress_files"
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "schema_version": "lunar_ice_bpc.baseline_freeze_manifest.v2",
+  "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+  "created_at": "2026-07-23T20:47:07+08:00",
+  "role": "active_experiment_control_and_gat_foundation",
+  "project_root": "/home/kai/work/GAT_BPC_moonTerk",
+  "git_binding": {
+    "freeze_commit": "0e52f622814cdb81e9e4c24cbbd3a1c9d320c965",
+    "candidate_source_commit": "bd0d81839731fd2c41718dfb2be3d533f4c90c0d",
+    "source_bundle_file_count": 132,
+    "source_bundle_sha256": "39cb1e8fade083fbc3f80c10865ee26303387f34593137891fbe69ccce646c28",
+    "source_bundle_mismatch_count_at_freeze": 0,
+    "source_bundle_git_status_at_freeze": "",
+    "note": "The freeze commit adds benchmark evidence; all 132 solver/config/native/test files still match the earlier candidate source bundle byte for byte."
+  },
+  "algorithm": {
+    "model_id": "NATIVE_LIVE_SRI_P0_PILOT_V1",
+    "algorithm_family": "exact_native_branch_price_and_cut",
+    "master": "HiGHS restricted master",
+    "pricing": "Native exact SPPRC in-process",
+    "branching": "Ryan-Foster same/different task-pair branching",
+    "cut_policy": "P0 root-only SRI-3 divisor-2",
+    "policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+    "policy": {
+      "name": "P0",
+      "version": "native_live_sri_bpc_v1",
+      "root_subset_sizes": [
+        3
+      ],
+      "node_subset_sizes": [],
+      "global_cap": 4,
+      "lineage_local_cap": 4,
+      "active_cap": 8,
+      "max_separation_rounds": 8,
+      "violation_eps": 1e-06,
+      "min_restricted_rmp_gain": 0.0001,
+      "completion_bound_with_active_cuts": false
+    },
+    "node_level_cut_separation_enabled": false,
+    "native_subset_dominance_enabled": true,
+    "native_completion_bound_enabled": false,
+    "native_cut_state_enabled": true,
+    "nonzero_dual_pricing_projection": "exact_enabled",
+    "cut_state_schema": "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+    "cut_state_bytes": 8,
+    "label_state_bytes": 152,
+    "max_native_active_cuts": 16,
+    "exactness_contract": "Learning or heuristic guidance may reorder work only. Official no-negative and node/tree certificates require current true-dual exhaustive Native exact pricing."
+  },
+  "config_snapshot": {
+    "path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/frozen_config.yaml",
+    "sha256": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
+    "source_path": "configs/native_live_sri_p0_pilot_v1.yaml"
+  },
+  "native_binary_snapshot": {
+    "path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/native/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+    "sha256": "6e37eeeee287395c294548afab35ff8093ffe18e941453c926feee6a3e9a3e4c",
+    "engine_hash": "8e255a88436e937c",
+    "python_abi": "cp313",
+    "build_type": "RelWithDebInfo",
+    "compiler": "13.3.0",
+    "cxx_standard": 23
+  },
+  "candidate_snapshot": {
+    "candidate_id": "FROZEN_NATIVE_LIVE_SRI_P0_CANDIDATE_V1",
+    "path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/candidate_freeze_manifest_snapshot.json",
+    "sha256": "cee364054e612e4873900f0535ccc4d122b981be5082645ee636807ca437d282"
+  },
+  "verification": {
+    "script": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/verify_freeze.py",
+    "script_sha256": "f153f4b3ede652dcb58f53f4d628f1d4dd83880469f5d611828f100c68a3b139",
+    "command": "/home/kai/miniconda3/bin/python runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/verify_freeze.py",
+    "expected_valid": true
+  },
+  "instance_binding": {
+    "scales": [
+      5,
+      10,
+      20,
+      30
+    ],
+    "instances_per_scale": 20,
+    "instance_count": 80,
+    "hash_manifest_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+    "hash_manifest_sha256": "f374070b0e6b65eafd628ce4e60958e9112eb12b166aabc9bd12cdf0c18fe720"
+  },
+  "performance_evidence": {
+    "evidence_id": "OPTIMIZED_P0_FULL80_PAIRED_SINGLE_REPEAT_20260723",
+    "role": "frozen_single_repeat_benchmark_for_future_experiment_control",
+    "strict_cold_start": true,
+    "fresh_python_native_runtime_per_slot": true,
+    "ab_ba_alternation": true,
+    "solver_resume": false,
+    "instance_count": 80,
+    "mode_count": 2,
+    "slot_count": 160,
+    "exact_slot_count": 160,
+    "zero_redline_slot_count": 160,
+    "repeats_per_instance_per_mode": 1,
+    "formal_10_3_promotion_design_complete": false,
+    "default_production_switch_authorized": false,
+    "summary": {
+      "path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/performance/full80_paired_summary_snapshot.json",
+      "sha256": "29a301cfa133407b2c50a91cd2ea65e89bb85186093fd526fdb49a485881954b"
+    },
+    "rows_json": {
+      "path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/performance/full80_paired_rows_snapshot.json",
+      "sha256": "99b117b83fd10656425acdb8bebea340aafbc2ec4d0fd537ca994d708257c346"
+    },
+    "rows_csv": {
+      "path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/performance/full80_paired_rows_snapshot.csv",
+      "sha256": "c72cbcfbd2fd61d05afcdf8eeb0e91d5a62589c3d419dbf9a7c33a8c706dfaaa"
+    },
+    "report": {
+      "path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/performance/full80_paired_report_snapshot_zh.md",
+      "sha256": "bc81b20034dc7af289a05161a505dedfe2592179b15155192dd9ed5d932735f6"
+    },
+    "p0_metrics": {
+      "5": {
+        "mean_sec": 0.3895144,
+        "p50_sec": 0.3898525,
+        "same_run_no_cut_mean_sec": 0.3930357,
+        "same_run_no_cut_p50_sec": 0.394901,
+        "mean_ratio_vs_same_run_no_cut": 0.9910407629637715,
+        "p50_ratio_vs_same_run_no_cut": 0.9872157831962948
+      },
+      "10": {
+        "mean_sec": 0.80832295,
+        "p50_sec": 0.738066,
+        "same_run_no_cut_mean_sec": 0.81909245,
+        "same_run_no_cut_p50_sec": 0.7575105,
+        "mean_ratio_vs_same_run_no_cut": 0.9868519115272031,
+        "p50_ratio_vs_same_run_no_cut": 0.9743310488765503
+      },
+      "20": {
+        "mean_sec": 24.10467045,
+        "p50_sec": 14.3714855,
+        "same_run_no_cut_mean_sec": 30.1787277,
+        "same_run_no_cut_p50_sec": 17.3286425,
+        "mean_ratio_vs_same_run_no_cut": 0.7987305061240206,
+        "p50_ratio_vs_same_run_no_cut": 0.8293486059280177
+      },
+      "30": {
+        "mean_sec": 371.51445985,
+        "p50_sec": 274.684953,
+        "same_run_no_cut_mean_sec": 413.404943,
+        "same_run_no_cut_p50_sec": 328.5094045,
+        "mean_ratio_vs_same_run_no_cut": 0.8986696123031117,
+        "p50_ratio_vs_same_run_no_cut": 0.8361555232127306
+      }
+    }
+  },
+  "legacy_baseline": {
+    "preserved": true,
+    "freeze_id": "FROZEN_NATIVE_NO_CUT_BASELINE_V1",
+    "role": "historical_no_cut_reproduction_and_longitudinal_reference",
+    "manifest_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+    "manifest_sha256": "f374070b0e6b65eafd628ce4e60958e9112eb12b166aabc9bd12cdf0c18fe720",
+    "summary_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_summary.json",
+    "summary_sha256": "5c13e011c851de4b04b62cc3495b9b16feed3e7ac541c69b78d3210bfc10a86c",
+    "engine_hash": "66ab52c9b33b4551",
+    "git_commit": "ee2f853c003589cb717399209fe232dc793a854b",
+    "metrics": {
+      "5": {
+        "mean_sec": 0.39595195,
+        "p50_sec": 0.393683
+      },
+      "10": {
+        "mean_sec": 0.82065975,
+        "p50_sec": 0.754397
+      },
+      "20": {
+        "mean_sec": 32.35200345,
+        "p50_sec": 18.3912995
+      },
+      "30": {
+        "mean_sec": 493.04546575,
+        "p50_sec": 346.03829
+      }
+    }
+  },
+  "experiment_use": {
+    "current_control_for_gat": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+    "required_gat_ablation_modes": [
+      "P0",
+      "P0_plus_pricing_guidance",
+      "P0_plus_branch_ranking",
+      "P0_plus_pricing_guidance_plus_branch_ranking"
+    ],
+    "legacy_no_cut_must_remain_runnable": true,
+    "node_level_cuts_default": false,
+    "gat_cut_guidance_allowed": false
+  }
+}

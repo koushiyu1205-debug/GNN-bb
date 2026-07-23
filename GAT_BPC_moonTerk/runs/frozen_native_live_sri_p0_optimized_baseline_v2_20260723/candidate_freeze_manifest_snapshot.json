@@ -1,0 +1,744 @@
+{
+  "base_git_commit": "bd0d81839731fd2c41718dfb2be3d533f4c90c0d",
+  "candidate_id": "FROZEN_NATIVE_LIVE_SRI_P0_CANDIDATE_V1",
+  "config_path": "configs/native_live_sri_p0_pilot_v1.yaml",
+  "config_sha256": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
+  "default_switch_authorized": false,
+  "dependencies": [
+    "affine==2.4.0",
+    "aiohappyeyeballs==2.6.2",
+    "aiohttp==3.14.0",
+    "aiosignal==1.4.0",
+    "anaconda-anon-usage==0.7.6",
+    "anaconda-auth==0.14.2",
+    "anaconda-cli-base==0.8.2",
+    "annotated-types==0.6.0",
+    "anyio==4.12.1",
+    "archspec==0.2.5",
+    "attrs==26.1.0",
+    "boltons==25.0.0",
+    "brotlicffi==1.2.0.0",
+    "certifi==2026.4.22",
+    "cffi==1.17.1",
+    "charset-normalizer==3.4.4",
+    "click==8.4.1",
+    "cligj==0.7.2",
+    "conda-anaconda-telemetry==0.3.0",
+    "conda-anaconda-tos==0.2.2",
+    "conda-content-trust==0.3.1",
+    "conda-libmamba-solver==26.4.0",
+    "conda-package-handling==2.4.0",
+    "conda==26.3.2",
+    "conda_package_streaming==0.12.0",
+    "contourpy==1.3.3",
+    "cryptography==45.0.7",
+    "cuda-bindings==13.0.3",
+    "cuda-pathfinder==1.2.2",
+    "cuda-toolkit==13.0.2",
+    "cycler==0.12.1",
+    "distro==1.9.0",
+    "filelock==3.29.0",
+    "fonttools==4.63.0",
+    "frozendict==2.4.6",
+    "frozenlist==1.8.0",
+    "fsspec==2026.4.0",
+    "gurobipy==13.0.2",
+    "h11==0.16.0",
+    "highspy==1.15.1",
+    "httpcore==1.0.9",
+    "httpx==0.28.1",
+    "idna==3.11",
+    "iniconfig==2.3.0",
+    "jaraco.classes==3.4.0",
+    "jaraco.context==6.1.0",
+    "jaraco.functools==4.4.0",
+    "jeepney==0.7.1",
+    "Jinja2==3.1.6",
+    "jsonpatch==1.33",
+    "jsonpointer==3.1.1",
+    "keyring==25.7.0",
+    "kiwisolver==1.5.0",
+    "libmambapy==2.3.2",
+    "lunar-ice-bpc==0.1.0",
+    "markdown-it-py==4.0.0",
+    "MarkupSafe==3.0.3",
+    "matplotlib==3.10.9",
+    "mdurl==0.1.2",
+    "menuinst==2.4.2",
+    "more-itertools==11.0.2",
+    "mpmath==1.3.0",
+    "msgpack==1.1.1",
+    "multidict==6.7.1",
+    "networkx==3.6.1",
+    "ninja==1.13.0",
+    "None==None",
+    "numpy==2.4.6",
+    "nvidia-cublas==13.1.1.3",
+    "nvidia-cuda-cupti==13.0.85",
+    "nvidia-cuda-nvrtc==13.0.88",
+    "nvidia-cuda-runtime==13.0.96",
+    "nvidia-cudnn-cu13==9.20.0.48",
+    "nvidia-cufft==12.0.0.61",
+    "nvidia-cufile==1.15.1.6",
+    "nvidia-curand==10.4.0.35",
+    "nvidia-cusolver==12.0.4.66",
+    "nvidia-cusparse==12.6.3.3",
+    "nvidia-cusparselt-cu13==0.8.1",
+    "nvidia-nccl-cu13==2.29.7",
+    "nvidia-nvjitlink==13.0.88",
+    "nvidia-nvshmem-cu13==3.4.5",
+    "nvidia-nvtx==13.0.85",
+    "packaging==26.0",
+    "pillow==12.2.0",
+    "pip==26.0.1",
+    "pkce==1.0.3",
+    "platformdirs==4.9.4",
+    "pluggy==1.6.0",
+    "propcache==0.5.2",
+    "psutil==7.2.2",
+    "pybind11==3.0.4",
+    "pycosat==0.6.6",
+    "pycparser==3.0",
+    "pydantic-settings==2.12.0",
+    "pydantic==2.13.2",
+    "pydantic_core==2.46.2",
+    "Pygments==2.20.0",
+    "PyJWT==2.12.1",
+    "pyparsing==3.3.2",
+    "PySCIPOpt==6.2.1",
+    "PySocks==1.7.1",
+    "pytest==9.1.1",
+    "python-dateutil==2.9.0.post0",
+    "python-dotenv==1.2.1",
+    "PyYAML==6.0.3",
+    "rasterio==1.5.0",
+    "readchar==4.2.1",
+    "requests==2.33.1",
+    "rich==14.2.0",
+    "ruamel.yaml.clib==0.2.14",
+    "ruamel.yaml==0.18.16",
+    "SecretStorage==3.5.0",
+    "semver==3.0.4",
+    "setuptools==70.2.0",
+    "shellingham==1.5.4",
+    "six==1.17.0",
+    "sympy==1.14.0",
+    "tomli==2.4.0",
+    "tomlkit==0.13.3",
+    "torch-geometric==2.7.0",
+    "torch==2.12.0+cu130",
+    "torch_scatter==2.1.2+pt212cu130",
+    "tqdm==4.67.3",
+    "triton==3.7.0",
+    "truststore==0.10.1",
+    "typer-slim==0.20.0",
+    "typer==0.20.0",
+    "typing-inspection==0.4.2",
+    "typing_extensions==4.15.0",
+    "urllib3==2.6.3",
+    "wheel==0.46.3",
+    "xxhash==3.7.0",
+    "yarl==1.24.2",
+    "zstandard==0.25.0"
+  ],
+  "dependencies_sha256": "a3279f202f76df25f88f505cb8221303d5852195fbe0d7798571eec0c22475f3",
+  "frozen_at_utc": "2026-07-23T05:35:06.865761+00:00",
+  "frozen_baseline_manifest_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+  "frozen_baseline_manifest_sha256": "f374070b0e6b65eafd628ce4e60958e9112eb12b166aabc9bd12cdf0c18fe720",
+  "frozen_control_id": "FROZEN_NATIVE_NO_CUT_BASELINE_V1",
+  "git_status_short_for_bundle": " M native/lunar_spprc/include/lunar_spprc/native_pricer.hpp\n M native/lunar_spprc/src/native_pricer.cpp\n M native/lunar_spprc/src/pybind_module.cpp\n M native/lunar_spprc/tests/test_native_pricer.cpp\n M scripts/run_live_sri_paired_promotion.py\n M src/lunar_ice_bpc/exact/bpc/pricing/backends/base.py\n M src/lunar_ice_bpc/exact/bpc/pricing/backends/native_rcspp.py\n M src/lunar_ice_bpc/exact/bpc/pricing/labeling_pricer.py\n M src/lunar_ice_bpc/exact/core/cuts.py\n M tests/native/test_native_spprc_backend.py\n M tests/test_live_sri_promotion_runner.py\n M tests/test_native_live_sri_v1.py",
+  "native_build_info": {
+    "branch_support": "ryan_foster_same_different_feasibility",
+    "build_type": "RelWithDebInfo",
+    "compiler": "13.3.0",
+    "completion_bound": "positive_cover_dual_threshold_pruning_v1",
+    "cut_state_bytes": "8",
+    "cut_state_max_bits": "48",
+    "cut_state_schema": "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+    "cut_support": "sri3_sri5_divisor2_threshold_crossing_v1",
+    "cxx_standard": "23",
+    "label_state_bytes": "152",
+    "max_active_cuts": "16",
+    "memory_pressure_policy": "disabled_for_exact_hard_limit_only",
+    "rcspp_commit": "2f1d53ba6806844e30ce43ee9c41041a5a1b4e79"
+  },
+  "native_host_engine_hash": "d06d8505205c55ba",
+  "native_inprocess_engine_hash": "8e255a88436e937c",
+  "native_module_path": "build/native-spprc/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "native_module_sha256": "6e37eeeee287395c294548afab35ff8093ffe18e941453c926feee6a3e9a3e4c",
+  "no_cut_config_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/frozen_config.yaml",
+  "no_cut_config_sha256": "beef1cf0c5f20fffff35fb87c06826926f2d15fc62294237d7ba5007af9a9f1a",
+  "no_cut_policy": {
+    "active_cap": 8,
+    "completion_bound_with_active_cuts": false,
+    "global_cap": 4,
+    "lineage_local_cap": 4,
+    "max_separation_rounds": 8,
+    "min_restricted_rmp_gain": 0.0001,
+    "name": "no_cut",
+    "node_subset_sizes": [],
+    "root_subset_sizes": [],
+    "version": "native_live_sri_bpc_v1",
+    "violation_eps": 1e-06
+  },
+  "no_cut_policy_hash": "37c44c29594e0b8b0ba429e5dd3cf7422c07ae17222bb31e16e31e57030d5e63",
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "policy": {
+    "active_cap": 8,
+    "completion_bound_with_active_cuts": false,
+    "global_cap": 4,
+    "lineage_local_cap": 4,
+    "max_separation_rounds": 8,
+    "min_restricted_rmp_gain": 0.0001,
+    "name": "P0",
+    "node_subset_sizes": [],
+    "root_subset_sizes": [
+      3
+    ],
+    "version": "native_live_sri_bpc_v1",
+    "violation_eps": 1e-06
+  },
+  "policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+  "policy_name": "P0",
+  "production_default": "no_cut",
+  "project_root": "/home/kai/work/GAT_BPC_moonTerk",
+  "promotion_status": "FROZEN_NOT_RUN",
+  "python_executable": "/home/kai/miniconda3/bin/python",
+  "python_version": "3.13.13",
+  "schema_version": "lunar_ice_bpc.live_sri_candidate_freeze.v2",
+  "screening_evidence_role": "candidate_selection_only_not_promotion",
+  "source_bundle": {
+    "file_count": 132,
+    "files": [
+      {
+        "path": "configs/native_live_sri_p0_pilot_v1.yaml",
+        "sha256": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d"
+      },
+      {
+        "path": "configs/native_live_sri_p1_pilot_v1.yaml",
+        "sha256": "468d7f4170125fba21abcc259fb8493d627cc3375620a625c7773580d2416ff0"
+      },
+      {
+        "path": "configs/native_live_sri_p2_pilot_v1.yaml",
+        "sha256": "d47f88a14eda5962917d5775ba12aa8ad60d27c2374297df6313709d5254b592"
+      },
+      {
+        "path": "configs/native_no_cut_50_100_bounded_regression_v1.yaml",
+        "sha256": "e613b79b59edede0fbd6e53347b12523c3b95dded6b2b1dc1934179cc56265ee"
+      },
+      {
+        "path": "native/lunar_spprc/CMakeLists.txt",
+        "sha256": "fd00c011625e8c2ff2484030999088b3aadcd6a6f9f5f6b2c02277af65e03b59"
+      },
+      {
+        "path": "native/lunar_spprc/include/lunar_spprc/native_pricer.hpp",
+        "sha256": "3fb4799bdd73ad20de9c75d884487738bee681d70694c9c96d6cf140bab81cd9"
+      },
+      {
+        "path": "native/lunar_spprc/src/native_pricer.cpp",
+        "sha256": "3fc9f3d56ee1421aa5b7a494956c8e0cc92a352064e0af38c5c22c8aed3672a1"
+      },
+      {
+        "path": "native/lunar_spprc/src/pybind_module.cpp",
+        "sha256": "d287c85158a8bb0ac0aabfd602beac24216a629617984bacae41cb8e415c6040"
+      },
+      {
+        "path": "native/lunar_spprc/tests/test_native_pricer.cpp",
+        "sha256": "b0f67083dc24bb9a82a14bea01a002e9c19992dca820a101355ca4e678c2d5ce"
+      },
+      {
+        "path": "scripts/freeze_live_sri_candidate.py",
+        "sha256": "7eba998dcd8ff9c5d8aaf680d4b247025da7b34e3c27f1bfcd28a20b6f37d874"
+      },
+      {
+        "path": "scripts/run_live_sri_paired_promotion.py",
+        "sha256": "1400979e10be51aebf4d265833f9b220a34bc9cf559a655a4e2fdc05c84680be"
+      },
+      {
+        "path": "scripts/run_live_sri_readiness.py",
+        "sha256": "46f0f2633395b7faa791b72ef3089ea3294152b4412fa36e713176acaa30a668"
+      },
+      {
+        "path": "scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py",
+        "sha256": "c7971cb3d046fa2c0705d8ba7f6e8c434c8cda1b58d776c7af5b5276df5e627f"
+      },
+      {
+        "path": "scripts/run_lunar_ice_b4_2_cold_exact.py",
+        "sha256": "50fb4e6bbf9c531518eeca10845bbab595df5de0e006264de665459e0c7def53"
+      },
+      {
+        "path": "scripts/run_lunar_ice_native_spprc_acceptance.py",
+        "sha256": "029cb8032fd23093a05823e22fa24134f1cf32592de521f54bfb5954dffbeb6e"
+      },
+      {
+        "path": "src/lunar_ice_bpc/__init__.py",
+        "sha256": "8da64987fb5e3bc27b2af38d9da631d7effb5a54ddebbb3503d682696701aa72"
+      },
+      {
+        "path": "src/lunar_ice_bpc/domain/__init__.py",
+        "sha256": "d73e6fea266891e5733b19bb1224b52b4b61bfcdf7b34d7a59038c7f708a810e"
+      },
+      {
+        "path": "src/lunar_ice_bpc/domain/polar_resources.py",
+        "sha256": "32bc0c7c744d1335ebadf03b2b06391695bbaa6e622eca1ba891a703082ede75"
+      },
+      {
+        "path": "src/lunar_ice_bpc/domain/real_instance.py",
+        "sha256": "8dce1becfedbc872065397fdb501eca8179fe112c514b976d1f00911388e5da9"
+      },
+      {
+        "path": "src/lunar_ice_bpc/domain/real_maps.py",
+        "sha256": "fd1821adef780b10a490c6f46c8173bb86b30e3df8487169e2b2c93b74bbe753"
+      },
+      {
+        "path": "src/lunar_ice_bpc/domain/scenario.py",
+        "sha256": "566fdb54d22d480aaee99378ae5a527bdd40fa88acec9ae78d458c92bbfb45e1"
+      },
+      {
+        "path": "src/lunar_ice_bpc/domain/scheduling.py",
+        "sha256": "9c3fb59b39e4259da2363b2ce27d4c1c152c28d4cac9ec0acc5d6b12a314acc3"
+      },
+      {
+        "path": "src/lunar_ice_bpc/domain/scientific_visualization.py",
+        "sha256": "2ebd052d7734dde06d7a51f4fcec3fb7caf3aec51a8fd47ce93c3efbb95f0dff"
+      },
+      {
+        "path": "src/lunar_ice_bpc/domain/visualization.py",
+        "sha256": "194a51a48408c220e93fd3dcf21fbb02ba40fd115e066619930fca32b43bf500"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/__init__.py",
+        "sha256": "5ac02e6616344bf1d4be41b4a97656b31d06aea35ca32d2b436d160100922208"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/__init__.py",
+        "sha256": "32bac7927ab25578ff55aab7a54339f66413258fe0dfc66c22ba9a9136c78b58"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/certificates/__init__.py",
+        "sha256": "05aa6a2011c5e3335d6bf35a34ce1bd7bc0afab8c45c931e9d8c0fdeb5858789"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/certificates/certificate_ledger.py",
+        "sha256": "07bd89c0071090b07b334ae4dc26e337863f3122b7b369a424934e2ac03a977b"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/certificates/proof_debt_queue.py",
+        "sha256": "5d1128df7927397a2a8c9cf0d1771d90a69560f15b917c6ffc91284ab530b3bd"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/core/__init__.py",
+        "sha256": "79a5f4981ec5f9cdd7885884752c2ec768d174639eea9a93f0bfd6c7449a1d87"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/core/column_pool.py",
+        "sha256": "71282b65202f8c918e18150fdf6e996c09e99bbc066996ff31a97a4d6e538a32"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/core/column_signature.py",
+        "sha256": "a5437468c545e17322a0f455d46ebb132d59d66a14cd316a5b323d9ecd534a78"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/core/master_column_view.py",
+        "sha256": "4de57fdd6d78950cece2a8c68a36339104902a5b0c1e4e94b27a9f2e99066cbd"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/core/task_index.py",
+        "sha256": "8ce43a0c26f54a7d4cef6d9b8142a0d3e8aa528f086d6c5297188f060bab8739"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/cuts/__init__.py",
+        "sha256": "701fe75524464f268d34cfb35bf8d9251cd0f2b73151f33feb09c9ad484e6f34"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/cuts/cut_audit.py",
+        "sha256": "099c0ff5d0e15a0544477f7b2df1547e3d81a71f0ab3cdfd1168af9c844f1b8e"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/cuts/live_sri.py",
+        "sha256": "9b863803bb363ba303db3ee654e423449701a06b93c348abcba76063d2950b0f"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/guidance/__init__.py",
+        "sha256": "0d55c1c82710c1d29c39925c92a8b6447ed77d7e0f4e71c42bb0b4d48c44bc72"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/guidance/shadow.py",
+        "sha256": "163f98c7c3a6391a2c1713db1bff890c2135d1931fbcb0c1d046d1aa077dca52"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/master/__init__.py",
+        "sha256": "c1e704d69baf7a847ddd935850a86795ba8c523128bcbb6869b54601eb001bdd"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/master/journey_master.py",
+        "sha256": "d8aabcf713fd88a4208b14f82d3d8f2ac6c106e73516e5e38d5cbc4a6af29254"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/master/reduced_cost.py",
+        "sha256": "8b70fa7bdb16989cea943359e3566da8f00ce5b81b38a47fa6fe98c887e7b19d"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/__init__.py",
+        "sha256": "7dc4441425faf27c98cdfcb2bae9491e850d267cf51c2ee01ddd8ee56f7c4cb2"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/backends/__init__.py",
+        "sha256": "fd612622b4f506bc642aca5790e1836e98fd969bc11d4d2d1270b798d4a4d2bb"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/backends/base.py",
+        "sha256": "d071d102bda0bd7e1428cc892c67bc3ef353d5bbb32f826a9697e7c759b3ceed"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/backends/native_rcspp.py",
+        "sha256": "47d9486e74c2e52a987d91761962dc531ed22058b1465fb2ed0c3793e82dff18"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/backends/python_reference.py",
+        "sha256": "8bdf8a82eb31e36f2a2a75b10d25a9a3f5ebc2f56dd350a6018d07e8d87e4b30"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/backends/registry.py",
+        "sha256": "2c78e15644347b5313d6775cfb53885585418516f5bffb19fc63a00eceebdca4"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/backends/scale_profiles.py",
+        "sha256": "9bde6fc949da677fd82562c6f9b17dfc18c8039cf38d3153770b140c3b4a0430"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/completion_bounds.py",
+        "sha256": "e090deff06a8be5f185c12d60f1fbc80b01eef7ddb46342d38b398316343ed2a"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/dual_stabilization.py",
+        "sha256": "edc5d70943602cf86227a29f15998454baf63f78c75ee78fb28e1113bddb99d3"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/duplicate_only_audit.py",
+        "sha256": "9c74788b8e4c5ca9af7d632775734c0d6fef3d914c15454ad2f017c2ad6cb830"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/final_judge.py",
+        "sha256": "734acc1cdbb0df780c51644166d276f8863614e4451a430115bf62d903f96407"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/harvest.py",
+        "sha256": "3ee2fd42103f7251b18358a76dcfd11f4e64229d4d53cc529fc85171ffbb133f"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/hidden_negative_audit.py",
+        "sha256": "1c6e1892047a28417131181a53cf3f4aee42c18be0aa6291514d5e55880290e7"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/labeling_pricer.py",
+        "sha256": "85fb74c023dc6fec264e0a9dada40325b26a0da55d460837800c15e697d4e2e0"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/profiling.py",
+        "sha256": "023ae25cb93bee0be64b1ed0bd092e9f48989b9b522ca14c7a6acc5953ef6d7b"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/resource_label_core.py",
+        "sha256": "e46f4e99c30889abf63fc018838118e97fd341d29cd3df93025eeeb3f3bb6217"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/spprc_pricer.py",
+        "sha256": "100934adbba90b264a845b3da01fcdbef845f726f0bff70573501ba5e4075925"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/status.py",
+        "sha256": "07e649730be419f42e7d01ba9910006ac0261298542624ec0f7e7f0639a3580d"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/pricing/worker_seed_catalog.py",
+        "sha256": "ddad08be6e4fdcdebec84517dced6e488e6bcdd8b758c0a02264ca1486bc1197"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/solver/__init__.py",
+        "sha256": "6b27163d4494fdc5a67cbc859fb878bdddac06e8d723612196aeab98da9746e1"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/solver/branch_tree_solver.py",
+        "sha256": "53cde79b86968813dbfd31b0ed05bb10a65de7b890460f57fe7ee7866d9e6598"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/solver/cut_formulation_solver.py",
+        "sha256": "28bbaa626cc2ae4c2449410010066fccb06d64f13723bba1378f5389066e6c7e"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/solver/gat_guidance_solver.py",
+        "sha256": "da2f62934a0560154d691908b6e18a2ce71b26be29454c5328ebaed6daa3b245"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/solver/live_sri_solver.py",
+        "sha256": "b48436d531ec9802bb667b803af74688d0dc436802e996db82f7ee2b7f95a260"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/solver/pricing_tail_solver.py",
+        "sha256": "565ead33084412a57c6ca19e28ca35a0cc7c15d9301d3784e11abbbbebda4011"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/bpc/solver/root_node_solver.py",
+        "sha256": "a8bb4f0d939022a5565b7e235cda771eac72fb753787733dfb881c5b165c39c9"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/__init__.py",
+        "sha256": "a435c10382ee14784bd577eb823a17c2dc750be34c1da55087fab4c3c001607c"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/bound_ledger.py",
+        "sha256": "7d07826f55072d94c6ff5a9b275f5186cfc4058b40a6ba110d87bee699e3ee85"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/certificate_readiness.py",
+        "sha256": "1bdd2b5ff2a46ceb8bd9709832910de38772e25f539cd6fb496fa4d894e0b314"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/completion_bound_consistency.py",
+        "sha256": "664c52d29a81cd0a6a6c9fb6210efc8fecd2f49025ecee5b1816fc05dc85bbd4"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/dual_binding.py",
+        "sha256": "f6298bf73797fcfc5fbf6ff53370336e85d778ec9e32926beeed56c7b97f11f8"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/fixed_graph_pricing_proof.py",
+        "sha256": "2a480164ae7e7cc15c4fe137212221656c3657b9e303de0d1d8b4065bc97c0d1"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/node_bound.py",
+        "sha256": "a7fa9978d6a5ba065fa3cfba4793fd41288fd9b91b5a8d8a6fd5dee21187c86e"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/pricing_certificate.py",
+        "sha256": "4552528b009dc1e4052dc1df052e7d9fb989b416fc869df296c8de0025828786"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/pricing_frontier.py",
+        "sha256": "cfc7ff6a0f02191ca7dff815353ef65248241ad15b6375f7b1c4b512b8fc4a95"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/certificates/true_dual_pricing_tail.py",
+        "sha256": "25a6c9b711e81927d35cd9d191d3db3c98b67f42cfed3a7b681e790dc3825777"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/core/__init__.py",
+        "sha256": "aed4819d35cf553b85c82e3f3faaff4b1659b308a69a49231b91530f7533f212"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/core/branching.py",
+        "sha256": "4aa9690f3cd1a940e6ce5a2352523d1166ba5c4b89199e11c6919facdf8d0c52"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/core/columns.py",
+        "sha256": "b09ddcb26ff7882207de6c1efbaaadee651c7251bd5e49bba3505ab50d759784"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/core/cuts.py",
+        "sha256": "a482343b950a35f4db59e55fca4bc34a081c298359fd16d4e9c7717d25dd6abb"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/core/data.py",
+        "sha256": "938e3beda9a3761141e420ca6c3f350d2be9f5954d681803d6d7bb4eac8367d3"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/core/journey.py",
+        "sha256": "69fc61c62d3234369fa9518fb94e1ce27f1a2c94c0738f6cd3129707a380faa6"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/core/objective.py",
+        "sha256": "22f5c1ee93a9006af74c06b4bb0cef857144bbdd4b688a25905be57d19c1a16f"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/master/__init__.py",
+        "sha256": "aa0fc73ac9c54a0a339d0d8a7ab5406758336b06e81499fa38a4125510cde8a6"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/master/journey_rmp.py",
+        "sha256": "5ca1cd1a14ff38067e321ddf09bf373e23d7a060d558e75ad70ba462381755db"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/pricing/__init__.py",
+        "sha256": "101440c60e62ee4a8bc687af501d9fba62384067ba0e2f39d034c65a0321a1e6"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/pricing/completion_bounds.py",
+        "sha256": "3b7709f5767d6f041dd2db4477b125379fbde2be218ae37d5940556479426078"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/pricing/journey_pricing.py",
+        "sha256": "b2b6ed25a4c46a6d57f1300bebf56f06dfff8de87d251869348bdcd44184637e"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/__init__.py",
+        "sha256": "75ca2b83743117ef4329af91b3940c23dd6da9cc751c8dafab1100fabf5f1706"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/branch_node_queue.py",
+        "sha256": "061ffb9689324794784c43f0bd427bf15460fec3f659aa7c0d11d91d6f6e28e6"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/branch_probe.py",
+        "sha256": "d7dd27c427c8c15fc0abf6cb4c0a3b4fdd691597830752ad318789097292427b"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/branch_tree.py",
+        "sha256": "04d5fdaa050a2a23d9bd59d8a16a2795e71c583a85ed99bdcc1c55be50308133"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/column_pool.py",
+        "sha256": "46f29807b1388b9e7ce312d2ed92df65ccb7b0d611460730537d75728e92f17e"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/cut_probe.py",
+        "sha256": "9285e8fe08836f2db1879fc650694229d4dbbf43975a1ecf0f7f39eb18c5e555"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/cut_separator.py",
+        "sha256": "408bba0e0c2393abd3c45b7d0e2c719c6d93d34cc38064c079689dbe4e4d79d4"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/direct_root_certificate.py",
+        "sha256": "dc9b673088229538c1ca43624e5461b5f1197187f1c2de5b21a835f2b81f19f8"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/fixed_graph_pricing_closure.py",
+        "sha256": "9eddd512d728550021ac9b121766e22c9dcd01bd6688e8a126ad2aa254963531"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/gurobi_compact.py",
+        "sha256": "ffff0a13db238e22dfd11f2407f78d1aaebf738791f47ee8bc82af2a66bca834"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/journey_driver.py",
+        "sha256": "dfb59dd2629e041ac6f746a7294f3a8149178e7e9e0d6f911a176f23b884e202"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/lower_bounds.py",
+        "sha256": "b69ba825a53c476ba50d91fcb673904a4e242f0d46ff7b3af0aac17a2c0cab82"
+      },
+      {
+        "path": "src/lunar_ice_bpc/exact/solver/seed_columns.py",
+        "sha256": "ee430896b90b7488bad2b92e98e90ba6170ca9bd31e5c0f982a3fd72c8c8322c"
+      },
+      {
+        "path": "src/lunar_ice_bpc/guidance/__init__.py",
+        "sha256": "6e0265c6839cc657298bab1a6ebbc8ac9498d6877d5cd33f6a129700090e01d6"
+      },
+      {
+        "path": "src/lunar_ice_bpc/guidance/graph_builder.py",
+        "sha256": "304259cacac5b1f919c3d0fcda63cd95ed9f0204eba708020b49a4557a4a8165"
+      },
+      {
+        "path": "src/lunar_ice_bpc/guidance/shadow_policy.py",
+        "sha256": "07883e913a67952492b928e08dff94f6cfdce7dd83b4d4c6af20e5a6d71182ac"
+      },
+      {
+        "path": "src/lunar_ice_bpc/io/__init__.py",
+        "sha256": "83acf6259ad9f631bc6f8cdf7ceddb35377de84f91dba796560dada9c5d0bec5"
+      },
+      {
+        "path": "src/lunar_ice_bpc/io/config.py",
+        "sha256": "d91e076a5b361c14608a367fca25d1eb46cfdbcfc9a695e3ea27810b71dd85bd"
+      },
+      {
+        "path": "src/lunar_ice_bpc/io/instance_io.py",
+        "sha256": "563a674b973474b73ed9f131b4b1e5ad6215a0aa98f2ef89986db944e82acb2a"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/__init__.py",
+        "sha256": "243ae25dfa33663a82e276016088e9e6fe8f37d4a403ecb285bdbcee31346305"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/audit.py",
+        "sha256": "a5108bdbcafab8d6e6930855a6b6e38b2d4dda19db5cfcdb87cedbec27817d87"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/b0_b1_ablation.py",
+        "sha256": "09c1faa86e7b4a66280ee8f996275cf8a2a9a7df2135e538a4f0ecc4e2b5cb53"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/b2_pricing_tail_ablation.py",
+        "sha256": "e9474471170e1e4a3dda9e817908ae561dc5971df9a5abaf5842a14294feb0d5"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/b3_branch_tree_ablation.py",
+        "sha256": "c53b66c76cc1b6053cdf65bbf03ba76353430ffefd1edec60de4f117fc5e3e60"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/b4_1_true_dual_proof_tail.py",
+        "sha256": "89a750e7b67fb5d5f82d6e732279d7b5737fbe15a595e60c2e36295d355b9de7"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/b4_cut_formulation_ablation.py",
+        "sha256": "8eb218a1e0b97a34c1c3646261fdcdd59bc0a66471c4f33e5ce5e61c48c91411"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/b4_pricing_formulation_diagnostic.py",
+        "sha256": "3c867ed8f58bd8d1b75197092b2bbedabdc16f145ef655456babfc80f0ad9477"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/benchmark.py",
+        "sha256": "adb201a380573990a97a80e058ffe67d074c18dbbdd2f33f7c2ba7d5406592d3"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/gat_b5_suite.py",
+        "sha256": "cc23410ed4ebea6bad04b0d0246d680b4eaa822aaf825a66823343fbd2da6a91"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/generate_instances.py",
+        "sha256": "e8777f678bd7fcb63e741028a201bad9ea61b76698d8e1b30ad60d237b409931"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/labeling_worker_diagnostic.py",
+        "sha256": "b2b95fb25bf271c88305cffa19f4f975f0609bf906022706bd6a2f5b6761f2b1"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/native_spprc_acceptance.py",
+        "sha256": "32058b253eb7b4333080aeef76a9a0ba63886ffed2e55bb40a84137616dbf5d2"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/refactor_audit.py",
+        "sha256": "826b45bc6e84c9dedccdf10aeabe2c0f16d538051b94e4b39b7e38b2a58dcfae"
+      },
+      {
+        "path": "src/lunar_ice_bpc/runners/solve.py",
+        "sha256": "c344d69e1137c4a330f724eb7d360c9002c202bfe1cbe59a95787cfa8d740af9"
+      },
+      {
+        "path": "tests/native/__init__.py",
+        "sha256": "e7650c218c2135256beb0992bffae56e58c3975d9e2b49c0621fc38a2d5308cd"
+      },
+      {
+        "path": "tests/native/test_native_spprc_backend.py",
+        "sha256": "9c96a63904ab8276a8e6abe6b7cb8cb7d82921768598a4f67571eb816e00d26d"
+      },
+      {
+        "path": "tests/test_live_sri_promotion_runner.py",
+        "sha256": "605f9315822dac5c78cffb7b912682ad73416ef411fd398a89ee2a7fe415bb15"
+      },
+      {
+        "path": "tests/test_lunar_ice_labeling_pricer.py",
+        "sha256": "2396b7392b7c039d1ede36a04f91f1a1bf85006fd594bdd003a5673a83b9afc6"
+      },
+      {
+        "path": "tests/test_lunar_ice_smoke.py",
+        "sha256": "0da2004c10b9532c1cbedf6a513c7b988a1869793eaff9c1c8cf1333261f224c"
+      },
+      {
+        "path": "tests/test_native_live_sri_v1.py",
+        "sha256": "6ad4cadfc6682bc852e81bc4b52dc5056691442ec45682b05022ed768931c8f0"
+      },
+      {
+        "path": "tests/test_real_instance_sampling.py",
+        "sha256": "6ddbf16161a9777d2692e3f10ba544e6b1e516bd0efa20e0956f91c07c07825e"
+      },
+      {
+        "path": "tests/test_real_map_edge_checkpoint.py",
+        "sha256": "72f4e86f343ef29da94de0462a65520dcd5de39abbf764f7a071eb11512ddd8d"
+      }
+    ],
+    "sha256": "39cb1e8fade083fbc3f80c10865ee26303387f34593137891fbe69ccce646c28"
+  }
+}
