@@ -1,0 +1,243 @@
+{
+  "acceptance": {
+    "b4_1_code_path_exercised": true,
+    "b4_1_full_experiment_complete": false,
+    "requires_long_experiment_completion": true,
+    "stage_a_regression_clean": false,
+    "stage_b_diagnostic_clean": false,
+    "stage_b_matrix_complete": false,
+    "stage_c_diagnostic_clean": false
+  },
+  "diagnostics": {
+    "candidate_search_false_positive_row_count": 0,
+    "dual_search_diagnostic_row_count": 1,
+    "feasibility_proof_budget_exhausted_count": 0,
+    "hidden_negative_miss_reason_counts": {},
+    "hidden_negative_pricing_timeout_only_count": 0,
+    "hidden_negative_pruned_by_dominance_count": 0,
+    "hidden_negative_top_miss_reason": "",
+    "hidden_negative_worker_not_generated_count": 0,
+    "mean_candidate_search_false_positive_rate": null,
+    "mean_true_negative_candidate_search_miss_rate": null,
+    "negative_discovery_budget_exhausted_count": 0,
+    "optimization_proof_missing_count": 0,
+    "partition_active_pool_after_dual_delta_max": 0,
+    "partition_best_negative_rc": null,
+    "partition_candidate_audit_row_count": 0,
+    "partition_candidate_can_certify_no_negative_count": 0,
+    "partition_candidate_full_space_valid_count": 0,
+    "partition_candidate_gate_fail_count": 0,
+    "partition_candidate_gate_pass_count": 0,
+    "partition_candidate_issue_counts": {},
+    "partition_candidate_redline_fail_count": 0,
+    "partition_candidate_top_issue": "none",
+    "partition_dual_refresh_min_rc": null,
+    "partition_dual_refresh_negative_count": 0,
+    "partition_dual_scope_mismatch_count": 0,
+    "partition_exact_region_mip_start_ok_count": 0,
+    "partition_negative_already_active_count": 0,
+    "partition_negative_new_task_set_count": 0,
+    "partition_negative_payload_available_count": 0,
+    "partition_negative_rc_audit_fail_count": 0,
+    "partition_negative_region_count": 0,
+    "partition_negative_replacement_task_set_count": 0,
+    "partition_refreshed_dual_row_count": 0,
+    "partition_region_constraint_count_max": 0,
+    "partition_region_constraint_count_mean_max": null,
+    "partition_region_mip_start_enabled_count": 0,
+    "partition_region_mip_start_ok_count": 0,
+    "partition_region_resource_arc_demand_pruned_option_count_sum": 0,
+    "partition_region_resource_arc_energy_pruned_option_count_sum": 0,
+    "partition_region_resource_arc_pruned_option_count_sum": 0,
+    "partition_region_resource_arc_shadow_pruned_option_count_sum": 0,
+    "partition_region_single_task_per_active_sortie_arc_pruned_option_count_sum": 0,
+    "partition_region_slot_arc_time_pruned_option_count_sum": 0,
+    "partition_region_slot_task_time_feasible_assignment_count_max": 0,
+    "partition_region_slot_task_time_pruned_assignment_count_sum": 0,
+    "partition_region_variable_count_max": 0,
+    "partition_region_variable_count_mean_max": null,
+    "partition_residual_region_mip_start_ok_count": 0,
+    "positive_best_rc_negative_bound_count": 1,
+    "residual_task_count_partition_enabled_count": 0,
+    "residual_task_count_region_expected_count": 0,
+    "residual_task_count_region_incomplete_count": 0,
+    "residual_task_count_region_missing_count": 0,
+    "residual_task_count_region_negative_count": 0,
+    "residual_task_count_region_observed_count": 0,
+    "residual_task_count_region_proven_count": 0,
+    "stage_a_missing_regression_mode_count": 2,
+    "stage_a_missing_regression_modes": [
+      "stageA_B3B_accepted_baseline",
+      "stageA_B4V2_default_final_judge_harvesting"
+    ],
+    "stage_a_observed_regression_modes": [],
+    "stage_a_required_regression_modes": [
+      "stageA_B3B_accepted_baseline",
+      "stageA_B4V2_default_final_judge_harvesting"
+    ],
+    "stage_b_missing_matrix_cell_count": 6,
+    "stage_b_missing_matrix_cells": [
+      "B4V2_baseline",
+      "B4V2_harvesting",
+      "B4V2_hidden_negative_audit",
+      "B4V2_frontier_ledger_diagnostic",
+      "B4V2_harvesting_frontier_ledger_diagnostic",
+      "B4V4_combined_formulation_diagnostic"
+    ],
+    "stage_b_observed_matrix_cells": [],
+    "stage_b_required_matrix_cells": [
+      "B4V2_baseline",
+      "B4V2_harvesting",
+      "B4V2_hidden_negative_audit",
+      "B4V2_frontier_ledger_diagnostic",
+      "B4V2_harvesting_frontier_ledger_diagnostic",
+      "B4V4_combined_formulation_diagnostic"
+    ],
+    "tail_dual_enabled_count": 1,
+    "tail_dual_no_column_can_certify_count": 0,
+    "tail_dual_official_true_dual_source_count": 1,
+    "tail_dual_true_dual_recomputed_count": 1,
+    "tail_dual_worker_only_count": 1,
+    "thirty_scale_underlying_exhaustive_no_negative_count": 1,
+    "thirty_scale_underlying_node_lp_certified_count": 1,
+    "true_negative_candidate_search_miss_row_count": 0
+  },
+  "latest_frontier_rows": [],
+  "mode_counts": {
+    "B4.1_30_tree_closure_from_probe": 1
+  },
+  "redlines": {
+    "certificate_leak_count": 0,
+    "diagnostic_claimed_certificate_count": 0,
+    "exception_fail_closed_count": 0,
+    "manual_rc_fail_count": 0,
+    "partition_candidate_certificate_leak_count": 0,
+    "pricing_rc_fail_count": 0,
+    "resource_guard_stopped_count": 0,
+    "stage_a_tree_closure_miss_count": 0,
+    "tail_dual_certificate_leak_count": 0
+  },
+  "requirement_audit": [
+    {
+      "evidence": {
+        "redline_count": 9,
+        "redline_failures": {}
+      },
+      "id": "R1_redlines_zero",
+      "next_action": "",
+      "requirement": "All certificate, RC, resource, exception, and tail-dual safety redlines are zero.",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "missing_modes": [
+          "stageA_B3B_accepted_baseline",
+          "stageA_B4V2_default_final_judge_harvesting"
+        ],
+        "observed_modes": [],
+        "stage_a_regression_clean": false,
+        "stage_a_row_count": 0
+      },
+      "id": "R2_stage_a_regression_clean",
+      "next_action": "Run/import Stage A 5/10/20 regression rows and keep redlines at zero.",
+      "requirement": "Stage A regression rows are present and clean.",
+      "status": "missing"
+    },
+    {
+      "evidence": {
+        "missing": [
+          "B4V2_baseline",
+          "B4V2_harvesting",
+          "B4V2_hidden_negative_audit",
+          "B4V2_frontier_ledger_diagnostic",
+          "B4V2_harvesting_frontier_ledger_diagnostic",
+          "B4V4_combined_formulation_diagnostic"
+        ],
+        "observed": [],
+        "stage_b_row_count": 0
+      },
+      "id": "R3_stage_b_matrix_complete",
+      "next_action": "Import or run evidence for every missing Stage B matrix cell.",
+      "requirement": "Stage B planned diagnostic matrix covers all required B4.1 cells.",
+      "status": "missing"
+    },
+    {
+      "evidence": {
+        "stage_c_diagnostic_clean": false,
+        "stage_c_row_count": 0,
+        "stage_c_selected_row_count": 0
+      },
+      "id": "R4_stage_c_selected_diagnostic",
+      "next_action": "Run/import the selected 30-scale Stage C diagnostic rows.",
+      "requirement": "Stage C selected 30-scale diagnostic rows are present and do not claim certificates.",
+      "status": "missing"
+    },
+    {
+      "evidence": {
+        "frontier_lb_official_row_count": 0,
+        "stage_bc_certificate_claim_count": 0,
+        "stage_bc_row_count": 0
+      },
+      "id": "R5_stage_bc_diagnostic_only",
+      "next_action": "",
+      "requirement": "Stage B/C rows remain diagnostic-only unless a true-dual no-negative proof is actually certified.",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "tail_dual_certificate_leak_count": 0,
+        "tail_dual_enabled_count": 1,
+        "tail_dual_no_column_can_certify_count": 0,
+        "tail_dual_official_true_dual_source_count": 1,
+        "tail_dual_true_dual_recomputed_count": 1,
+        "tail_dual_worker_only_count": 1
+      },
+      "id": "R6_tail_dual_worker_only",
+      "next_action": "",
+      "requirement": "Tail dual stabilization is worker-only and every tail-dual candidate path is true-dual RC recomputed.",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "known_boundary": "A 30-scale root LP no-negative proof can be recorded as underlying evidence, but R7 remains incomplete until BPC_TREE_OPTIMAL is proven.",
+        "thirty_scale_bpc_tree_optimal_count": 0,
+        "thirty_scale_underlying_exhaustive_no_negative_count": 1,
+        "thirty_scale_underlying_node_lp_certified_count": 1
+      },
+      "id": "R7_30_scale_exact_closure",
+      "next_action": "Use the root no-negative proof as B4.1 tail evidence, then continue tree-level closure work toward BPC_TREE_OPTIMAL.",
+      "requirement": "30-scale exact BPC_TREE_OPTIMAL closure is proven.",
+      "status": "incomplete"
+    }
+  ],
+  "row_count": 1,
+  "schema_version": "lunar_ice_bpc.b4_1_true_dual_proof_tail.v1",
+  "stage_counts": {
+    "D": 1
+  },
+  "summary_rows": [
+    {
+      "best_global_remaining_rc_lb": -1e-06,
+      "best_last_best_reduced_cost": null,
+      "best_negative_rc": null,
+      "bpc_tree_optimal_count": 1,
+      "can_certify_no_negative_count": 1,
+      "diagnostic_claimed_certificate_count": 0,
+      "hidden_negative_count": 0,
+      "hidden_negative_miss_reason_counts": {},
+      "hidden_negative_top_miss_reason": "",
+      "mean_active_column_count": 25.0,
+      "mean_active_columns_after_merge": 25.0,
+      "mean_final_judge_wall_time": 0.012099,
+      "mean_wall_time": 0.064589,
+      "mode": "B4.1_30_tree_closure_from_probe",
+      "negative_column_count": 0,
+      "row_count": 1,
+      "stage": "D",
+      "variant": "V4_root_tail_probe_tree_gate"
+    }
+  ],
+  "variant_counts": {
+    "V4_root_tail_probe_tree_gate": 1
+  }
+}

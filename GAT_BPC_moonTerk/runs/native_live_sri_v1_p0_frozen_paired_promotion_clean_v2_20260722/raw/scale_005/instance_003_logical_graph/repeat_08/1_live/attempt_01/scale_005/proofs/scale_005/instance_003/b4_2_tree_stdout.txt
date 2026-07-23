@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/raw/scale_005/instance_003_logical_graph/repeat_08/1_live/attempt_01/scale_005/proofs/scale_005/instance_003/b4_1_report_zh.md

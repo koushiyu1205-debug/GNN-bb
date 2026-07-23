@@ -1,0 +1,62 @@
+{
+  "affected_row_count": 3,
+  "affected_rows": [
+    {
+      "abs_delta": 9.999999999177334e-07,
+      "objective": 1.636391,
+      "reference_objective": 1.63639,
+      "slot_id": "s020:instance_010:r01:o1:live"
+    },
+    {
+      "abs_delta": 9.999999999177334e-07,
+      "objective": 1.636391,
+      "reference_objective": 1.63639,
+      "slot_id": "s020:instance_010:r02:o2:live"
+    },
+    {
+      "abs_delta": 9.999999999177334e-07,
+      "objective": 1.636391,
+      "reference_objective": 1.63639,
+      "slot_id": "s020:instance_010:r03:o1:live"
+    }
+  ],
+  "all_1040_rows_within_new_tolerance": true,
+  "amendment_id": "LIVE_SRI_PROMOTION_OBJECTIVE_AUDIT_TOLERANCE_V1",
+  "applied_at_utc": "2026-07-23T04:00:29.760662+00:00",
+  "candidate_source_bundle_hash_during_formal_run": "a17622e0b3486da30156d9fc3f464daeeb555b9157fa4956d014cde15c05b5e1",
+  "formal_run_final_binding_issues": [],
+  "frozen_harness_sha256": "85e8ad4a19767d9bdd82d80cee728ca1a52f1711db8cb5f3657d706b674d719b",
+  "input_rows": {
+    "path": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_rows.json",
+    "row_count": 1040,
+    "sha256": "03597348a114fffdde9f428aafc977ce7047852e07a7131ae97e94b4926ee7dd"
+  },
+  "new_objective_tolerance": 1e-06,
+  "old_objective_tolerance": 1e-08,
+  "post_amendment_harness_sha256": "4f33fecf31bac0b4a2b698a8164cea2e81b0a5c8ff3ab2b3e1bab396e379d63c",
+  "post_run_source_bundle_drift_expected_only_for_audit_harness": true,
+  "pre_amendment_report": {
+    "path": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_report_pre_audit_tolerance_amendment_zh.md",
+    "sha256": "e795cbdfaf4b9d9c04c6255b2dd41814afe6bd9afea5ac9686aea712cf9770e0"
+  },
+  "pre_amendment_summary": {
+    "path": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_summary_pre_audit_tolerance_amendment.json",
+    "sha256": "996811cd101f9778ba7a39949ebda6147034594790f2f75fa7c994cd697750ed"
+  },
+  "pre_amendment_summary_sha256": "996811cd101f9778ba7a39949ebda6147034594790f2f75fa7c994cd697750ed",
+  "reason": "Frozen reference objectives are stored to 6 decimals; the 1e-8 harness comparison falsely rejected three exact live rows whose absolute delta is 1e-6.",
+  "resummarized_from_existing_rows": true,
+  "resummarized_report": {
+    "path": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_report_zh.md",
+    "sha256": "13064081fe9b88a8ac91ac3e2b4e86df3ee5924f3c8f208e1178e0a12377e8cb"
+  },
+  "resummarized_summary": {
+    "path": "/home/kai/work/GAT_BPC_moonTerk/runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_summary.json",
+    "sha256": "acd5cabf53a19fa51f22563d3fde2b2ed7d466e0c938efeb39a8fbca6f520fc9"
+  },
+  "rows_sha256": "03597348a114fffdde9f428aafc977ce7047852e07a7131ae97e94b4926ee7dd",
+  "schema_version": "lunar_ice_bpc.live_sri_promotion_audit_amendment.v1",
+  "scope": "post_run_audit_harness_only",
+  "solver_config_native_changed": false,
+  "solver_slot_rerun_count": 0
+}
