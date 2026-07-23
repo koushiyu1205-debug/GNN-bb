@@ -1,0 +1,47 @@
+name: Pre-commit
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write   # ✅ allow pushing back
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -------------------------
+      # Checkout the repo
+      # -------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Setup Python (for Python hooks)
+      # -------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # -------------------------
+      # Install dependencies
+      # -------------------------
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-tidy clang-format cppcheck
+          python -m pip install --upgrade pip
+          pip install cpplint
+
+      # -------------------------
+      # use pre-commit action to run the hooks
+      # -------------------------
+      - uses: pre-commit/action@v3.0.1

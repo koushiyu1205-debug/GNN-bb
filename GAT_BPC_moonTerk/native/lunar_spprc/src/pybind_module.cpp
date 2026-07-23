@@ -1,5 +1,6 @@
 #include "lunar_spprc/native_pricer.hpp"
 
+#include <bit>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -79,6 +80,7 @@ lunar_spprc::Model parse_model(const py::dict& payload) {
     if (cut_rows.size() > 16U) {
         throw std::invalid_argument("native active cut count exceeds 16");
     }
+    std::size_t cut_state_bit_offset = 0;
     for (const auto item : cut_rows) {
         const auto row = py::cast<py::dict>(item);
         const auto cut_type = py::cast<std::string>(row["cut_type"]);
@@ -98,6 +100,14 @@ lunar_spprc::Model parse_model(const py::dict& payload) {
         if (cut_tasks.size() != 3U && cut_tasks.size() != 5U) {
             throw std::invalid_argument("native live-cut v1 supports SRI-3 and SRI-5 only");
         }
+        cut.state_bit_offset = static_cast<std::uint8_t>(cut_state_bit_offset);
+        cut.state_bit_width =
+            static_cast<std::uint8_t>(cut_tasks.size() == 3U ? 2U : 3U);
+        cut.max_overlap = static_cast<std::uint8_t>(cut_tasks.size());
+        cut_state_bit_offset += cut.state_bit_width;
+        if (cut_state_bit_offset > 64U) {
+            throw std::invalid_argument("native packed cut state exceeds 64 bits");
+        }
         for (const auto task_value : cut_tasks) {
             const auto task_id = py::cast<std::string>(task_value);
             const auto found = task_index_by_id.find(task_id);
@@ -106,6 +116,13 @@ lunar_spprc::Model parse_model(const py::dict& payload) {
             }
             cut.task_mask[found->second / 64U] |=
                 (std::uint64_t{1} << (found->second % 64U));
+        }
+        std::size_t unique_cut_tasks = 0;
+        for (const auto word : cut.task_mask) {
+            unique_cut_tasks += std::popcount(word);
+        }
+        if (unique_cut_tasks != cut_tasks.size()) {
+            throw std::invalid_argument("native cut task list contains duplicates");
         }
         model.cuts.push_back(std::move(cut));
     }
@@ -217,6 +234,10 @@ py::dict solve_payload(const py::dict& payload) {
              "rmp_iteration_id",
              "active_cut_context_hash",
              "active_cut_count",
+             "pricing_cut_context_hash",
+             "pricing_cut_count",
+             "cut_dual_projection_enabled",
+             "cut_dual_projection_schema_version",
              "cut_lineage_hash",
              "live_cut_policy_hash",
              "cut_state_schema_version",

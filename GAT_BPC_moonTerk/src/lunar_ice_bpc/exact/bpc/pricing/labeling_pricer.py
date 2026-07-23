@@ -36,7 +36,9 @@ from lunar_ice_bpc.exact.bpc.pricing.resource_label_core import (
 from lunar_ice_bpc.exact.bpc.pricing.status import PricingState
 from lunar_ice_bpc.exact.core.branching import BranchContext, journey_satisfies_branch_context
 from lunar_ice_bpc.exact.core.cuts import (
+    CUT_DUAL_PROJECTION_SCHEMA_VERSION,
     CutContext,
+    pricing_cut_context_from_duals,
     stable_payload_hash,
     true_dual_binding_hash,
 )
@@ -544,6 +546,22 @@ def _native_exact_backend_payload(
         {
             "cut_context_active": not cut_context.empty,
             "cut_count": len(cut_context.cuts),
+            "pricing_cut_context_hash": result.telemetry.get(
+                "pricing_cut_context_hash",
+                "",
+            ),
+            "pricing_cut_count": int(
+                result.telemetry.get("pricing_cut_count") or 0
+            ),
+            "projected_zero_dual_cut_count": int(
+                result.telemetry.get("projected_zero_dual_cut_count") or 0
+            ),
+            "cut_dual_projection_enabled": bool(
+                result.telemetry.get("cut_dual_projection_enabled")
+            ),
+            "cut_dual_projection_schema_version": str(
+                result.telemetry.get("cut_dual_projection_schema_version") or ""
+            ),
             "live_cut_certificate_supported": live_cut_supported,
             "cut_certificate_support": cut_certificate_support,
         }
@@ -1542,14 +1560,24 @@ def _cut_certificate_support_report(
     *,
     negative_eps: float,
 ) -> dict:
+    projection = _cut_dual_projection_certificate_report(
+        duals,
+        cut_context,
+        pricing_payload,
+    )
     if cut_context.empty:
         return {
             "cut_context_active": False,
             "cut_count": 0,
-            "live_cut_certificate_supported": True,
+            "live_cut_certificate_supported": bool(projection["valid"]),
             "cut_dominance_compatibility": build_cut_dominance_compatibility_report(cut_context),
             "cut_reduced_cost_audit": {},
-            "note": "No live cuts are active.",
+            "cut_dual_projection_audit": projection,
+            "note": (
+                "No live cuts are active and the empty pricing projection is bound."
+                if projection["valid"]
+                else "The empty pricing projection binding failed."
+            ),
         }
     dominance = build_cut_dominance_compatibility_report(cut_context)
     rc_audit = audit_cut_reduced_cost_consistency(
@@ -1564,6 +1592,7 @@ def _cut_certificate_support_report(
         and dominance.get("dominance_key_covers_active_cut_coefficients")
         and rc_audit.get("manual_rc_cut_consistency_pass")
         and rc_audit.get("cut_dual_sign_audit_pass")
+        and projection.get("valid")
     )
     return {
         "cut_context_active": True,
@@ -1571,10 +1600,71 @@ def _cut_certificate_support_report(
         "live_cut_certificate_supported": bool(supported),
         "cut_dominance_compatibility": dominance,
         "cut_reduced_cost_audit": rc_audit,
+        "cut_dual_projection_audit": projection,
         "note": (
             "Live cuts are task-set-only and passed dominance/reduced-cost audits."
             if supported
             else "At least one live cut is not supported for exact no-negative certification."
+        ),
+    }
+
+
+def _cut_dual_projection_certificate_report(
+    duals: JourneyDuals,
+    cut_context: CutContext,
+    pricing_payload: dict,
+) -> dict:
+    telemetry = dict(pricing_payload.get("telemetry") or {})
+    native_backend_id = str(pricing_payload.get("native_backend_id") or "")
+    binding_required = native_backend_id.startswith("native_rcspp")
+    binding_present = "cut_dual_projection_schema_version" in telemetry
+    enabled = bool(telemetry.get("cut_dual_projection_enabled")) if binding_present else False
+    projected = pricing_cut_context_from_duals(
+        cut_context,
+        duals.cuts,
+        enabled=enabled,
+    )
+    expected = {
+        "active_cut_context_hash": cut_context.active_cut_context_hash,
+        "active_cut_count": len(cut_context.cuts),
+        "pricing_cut_context_hash": projected.active_cut_context_hash,
+        "pricing_cut_count": len(projected.cuts),
+        "projected_zero_dual_cut_count": (
+            len(cut_context.cuts) - len(projected.cuts)
+        ),
+        "cut_dual_projection_schema_version": CUT_DUAL_PROJECTION_SCHEMA_VERSION,
+    }
+    issues = []
+    if binding_required and not binding_present:
+        issues.append("native_cut_dual_projection_binding_missing")
+    if binding_present:
+        issues.extend(
+            f"cut_dual_projection_binding_mismatch:{key}"
+            for key, expected_value in expected.items()
+            if telemetry.get(key) != expected_value
+        )
+    active_ids = {cut.cut_id for cut in cut_context.cuts}
+    for cut_id, value in (duals.cuts or {}).items():
+        if float(value) != 0.0 and str(cut_id) not in active_ids:
+            issues.append(f"nonzero_cut_dual_without_active_cut:{cut_id}")
+    return {
+        "schema_version": "lunar_ice_bpc.cut_dual_projection_certificate_audit.v1",
+        "native_backend_id": native_backend_id,
+        "binding_required": binding_required,
+        "binding_present": binding_present,
+        "projection_enabled": enabled,
+        "full_active_cut_count": len(cut_context.cuts),
+        "pricing_cut_count": len(projected.cuts),
+        "projected_zero_dual_cut_count": len(cut_context.cuts) - len(projected.cuts),
+        "full_active_cut_context_hash": cut_context.active_cut_context_hash,
+        "pricing_cut_context_hash": projected.active_cut_context_hash,
+        "projection_schema_version": CUT_DUAL_PROJECTION_SCHEMA_VERSION,
+        "issues": issues,
+        "valid": not issues,
+        "note": (
+            "Native exact pricing projection is explicitly bound."
+            if binding_present
+            else "Reference pricing uses the full active-cut context; Native projection binding is not applicable."
         ),
     }
 

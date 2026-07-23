@@ -1,0 +1,146 @@
+{
+  "schema_version": "lunar_ice_bpc.native_live_sri_v1_bounded_no_cut_regression.v1",
+  "generated_at": "2026-07-23T12:29:38+08:00",
+  "status": "PASS_LEGAL_INCOMPLETE",
+  "overall_pass": true,
+  "requirement": {
+    "scales": [
+      50,
+      100
+    ],
+    "instance": "instance_001",
+    "backend": "native_rcspp_host",
+    "row_time_limit_sec": 600.0,
+    "effective_memory_limit_gb": 8.0,
+    "serial": true,
+    "strict_cold_start": true,
+    "solver_resume": false,
+    "live_sri_policy": "no_cut",
+    "cut_state_enabled": false,
+    "accepted_terminal_classes": [
+      "EXACT",
+      "LEGAL_INCOMPLETE"
+    ]
+  },
+  "configuration": {
+    "path": "configs/native_no_cut_50_100_bounded_regression_v1.yaml",
+    "sha256": "e613b79b59edede0fbd6e53347b12523c3b95dded6b2b1dc1934179cc56265ee",
+    "host_engine_hash": "d44cd21da6dae8c0",
+    "current_inprocess_engine_hash": "7e4c1b7ade427e9e"
+  },
+  "pre_fix_diagnostic": {
+    "evidence_dir": "runs/native_live_sri_v1_post_promotion_no_cut_50_100_bounded_regression_20260723",
+    "scale_050": {
+      "engine_status": "HASH_MISMATCH",
+      "certificate_blockers": [
+        "native_dual_binding_hash_mismatch"
+      ]
+    },
+    "scale_100": {
+      "engine_status": "HASH_MISMATCH",
+      "certificate_blockers": [
+        "native_dual_binding_hash_mismatch"
+      ]
+    },
+    "root_cause": "Host IPC reconstructed a legal fleet dual of -0.0 with `value or 0.0`, changing it to +0.0. Canonical true-dual JSON hashing distinguishes signed zero even though the mathematical value is unchanged.",
+    "fix": {
+      "path": "src/lunar_ice_bpc/exact/bpc/pricing/backends/native_rcspp.py",
+      "file_sha256": "80eb1dd791e36d44e0f7db637ac6bb3ff2b0cf9f5df06a5b524be0267221791f",
+      "semantic_change": "Use `dual_payload.get(\"fleet_limit\", 0.0)` so a present -0.0 survives IPC reconstruction.",
+      "hash_check_relaxed": false,
+      "regression_test": "tests/native/test_native_spprc_backend.py::NativeSpprcBackendTests::test_host_ipc_preserves_signed_zero_dual_binding",
+      "test_file_sha256": "8f53934313e7086318b330a2098773540e76b885cab01badb2932ed27170194c"
+    }
+  },
+  "rows": [
+    {
+      "scale": 50,
+      "instance": "data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json",
+      "instance_sha256": "7ce78dc6c325be167eb4db9dcfd599227978bea277ffd748949da28f11c02725",
+      "evidence_dir": "scale_050",
+      "acceptance_summary_sha256": "63262cd563d862fac76b5c41e458b6b7a58f6f3829d2065992012cf03ed3f4f2",
+      "wall_time_sec": 340.135371,
+      "algorithm_status": "BPC_INCOMPLETE_PRICING",
+      "runner_status": "FAIL_CLOSED",
+      "terminal_class": "LEGAL_INCOMPLETE",
+      "engine_status": "MEMORY_LIMIT",
+      "certificate_blockers": [
+        "host_memory_limit"
+      ],
+      "search_exhaustive": false,
+      "frontier_empty": false,
+      "labels_dropped": false,
+      "host_peak_rss_bytes": 8592949248,
+      "host_peak_rss_gib": 8.0028076171875,
+      "redlines_zero": true,
+      "no_cheat": true,
+      "certificate_leak_count": 0,
+      "pricing_rc_fail_count": 0,
+      "manual_rc_fail_count": 0,
+      "engine_hash_start": "d44cd21da6dae8c0",
+      "engine_hash_child": "d44cd21da6dae8c0",
+      "engine_hash_end": "d44cd21da6dae8c0",
+      "engine_binding_valid": true,
+      "cut_state_enabled": false,
+      "active_cut_count": 0,
+      "same_run_checkpoint_resume_used": false,
+      "mature_pool_used": false,
+      "external_probe_used": false,
+      "manual_columns_used": false,
+      "hash_mismatch_count": 0,
+      "resume_mismatch_count": 0,
+      "cache_error_count": 0
+    },
+    {
+      "scale": 100,
+      "instance": "data/instances/lunar_ice_sp50_100/instance_001_logical_graph.json",
+      "instance_sha256": "77c2c2c4e3390c9a1b88bb6ea1326a8d9474ba1ae9999834fa26a4d826bc614e",
+      "evidence_dir": "scale_100",
+      "acceptance_summary_sha256": "cf810c96bdd0ccd919392ed436eb5baf5c12dfa3eaf865625e56d8bff5493d8c",
+      "wall_time_sec": 300.159294,
+      "algorithm_status": "BPC_INCOMPLETE_PRICING",
+      "runner_status": "FAIL_CLOSED",
+      "terminal_class": "LEGAL_INCOMPLETE",
+      "engine_status": "MEMORY_LIMIT",
+      "certificate_blockers": [
+        "host_memory_limit"
+      ],
+      "search_exhaustive": false,
+      "frontier_empty": false,
+      "labels_dropped": false,
+      "host_peak_rss_bytes": 8590614528,
+      "host_peak_rss_gib": 8.000633239746094,
+      "redlines_zero": true,
+      "no_cheat": true,
+      "certificate_leak_count": 0,
+      "pricing_rc_fail_count": 0,
+      "manual_rc_fail_count": 0,
+      "engine_hash_start": "d44cd21da6dae8c0",
+      "engine_hash_child": "d44cd21da6dae8c0",
+      "engine_hash_end": "d44cd21da6dae8c0",
+      "engine_binding_valid": true,
+      "cut_state_enabled": false,
+      "active_cut_count": 0,
+      "same_run_checkpoint_resume_used": false,
+      "mature_pool_used": false,
+      "external_probe_used": false,
+      "manual_columns_used": false,
+      "hash_mismatch_count": 0,
+      "resume_mismatch_count": 0,
+      "cache_error_count": 0
+    }
+  ],
+  "gate_audit": {
+    "row_count": 2,
+    "legal_terminal_count": 2,
+    "zero_redline_count": 2,
+    "engine_binding_valid_count": 2,
+    "no_cut_state_count": 2,
+    "active_cut_count_zero_count": 2,
+    "no_resume_count": 2,
+    "no_cheat_count": 2,
+    "no_hash_resume_cache_error_count": 2,
+    "certificate_blockers_exactly_resource_limit_count": 2,
+    "false_exact_certificate_count": 0
+  }
+}

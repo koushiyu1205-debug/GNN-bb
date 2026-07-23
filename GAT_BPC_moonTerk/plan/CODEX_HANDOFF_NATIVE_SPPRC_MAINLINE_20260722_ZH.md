@@ -1,6 +1,6 @@
 # GAT_BPC_moonTerk 当前主线与 Native SPPRC 交接文档
 
-更新时间：2026-07-22
+更新时间：2026-07-23
 
 面向对象：接手本项目的下一个 Codex 对话
 
@@ -8,8 +8,9 @@
 
 ## 0. 接手者先读结论
 
-当前项目最成熟的主线不是“GAT 已经驱动求解”，也不是“live cuts 已经投入正式
-Branch-Price-and-Cut”。当前真正通过 release gate 的主线是：
+当前项目最成熟的生产主线不是“GAT 已经驱动求解”，也不是“live cuts 已经默认开启”。
+Native Live SRI BPC V1 的功能、证书闭环和正式性能实验已经完成，但候选 P0 未通过全部
+promotion 门槛。当前真正通过 release gate 的生产主线仍是：
 
 > HiGHS restricted master + native exact SPPRC pricing + Ryan–Foster branching，
 > 即具备真分支、真列生成和 exact no-negative pricing proof 的 Branch-and-Price。
@@ -22,21 +23,27 @@ Branch-Price-and-Cut”。当前真正通过 release gate 的主线是：
   `1679.705969s`；
 - Ryan–Foster `same_journey/different_journey` 已进入真实 B&B 子节点；
 - Python exact backend 没有删除，仍是 reference、fallback 和 rollback；
-- native subset-row/fleet cut state 的代码和小规模 differential 已存在，但默认关闭，
-  live master cuts 也关闭，所以不能把当前默认主线称为已经启用切割的完整 BPC；
+- SRI-3/SRI-5 live master cuts、active-cut Phase-I、lineage/hash/certificate、P0/P1/P2
+  node loop 和 Native compact cut state 已完整实现并测试；
+- P0 已完成 1040/1040 formal fresh paired slots，全部正确性门禁通过；5/10/20 性能门禁
+  通过，但 30 规模 mean、paired point estimate 和 paired CI 上界失败，因此总状态
+  `NOT_PROMOTED`；
+- production default 和显式 rollback 都是 `no_cut`；P0/P1/P2 仅保留为实验能力，
+  node cuts 默认关闭；
 - 50/100 各 20 个正式实例已经生成并验收，但前 5 个实例的求解均在 root exact
   pricing 先达到 8 GiB host memory limit，尚未得到 50/100 最优解时间；
 - 50/100 当前首要问题是 exact label frontier 的内存/数量增长，不是把 1800 秒改成
   3600 秒；
-- 下一步不建议继续扫参数，也不建议先开 live cuts、GAT 或 bidirectional。先补 native
-  host 的搜索心跳与内存剖面，再根据“单标签太重”还是“活标签数量爆炸”决定优化路径。
+- 若继续 Live SRI，下一步先固定正式 30-scale 退化实例，解释树节点和 cut-aware pricing
+  的慢化来源，再形成新候选；不得把旧 P0 改写为已晋级。
+- 50/100 仍是 exact frontier 内存问题，但本轮优先级低于 5/10/20/30 主线的稳定性。
 
 ## 1. 当前代码与证据快照
 
 ### 1.1 Git 与实现基线
 
 - 当前 Git 根目录：`/home/kai/work`；
-- 本文核对时的 HEAD：`c1a3f570dbe926af4d1e1dbb3ac45225e29a97d4`，提交标题 `720`；
+- 本文核对时的 HEAD：`bd0d81839731fd2c41718dfb2be3d533f4c90c0d`，提交标题 `722`；
 - native 实施最初冻结基线：`48552b04c7bfc69ab95c0e2d664cbbe7c2ef206e`；
 - upstream：`lab-core/rcspp@2f1d53ba6806844e30ce43ee9c41041a5a1b4e79`；
 - 当前没有 solver-core fork，也没有 core patch；采用 pinned upstream + project-local
@@ -44,36 +51,49 @@ Branch-Price-and-Cut”。当前真正通过 release gate 的主线是：
 - feasibility spike 发现的 pressure/false-COMPLETE 风险可通过 exact 配置禁止 label
   trimming 规避，因此当前 patch queue 为空，`fork_required=false`。
 
-当前本机扩展返回的 engine hash：
+Stage -1 冻结基线 engine hash 为 `66ab52c9b33b4551`。正式 P0 paired promotion 使用：
 
-- in-process：`66ab52c9b33b4551`；
-- persistent host：`ee0ea1fb74eb8035`。
+- in-process：`dfaedf6d273c5c56`；
+- 当时 persistent host：`bddc7afddc232ceb`。
+
+正式重复后修复 host IPC signed-zero dual 保真问题，当前 source binding 为：
+
+- in-process：`7e4c1b7ade427e9e`；
+- persistent host：`d44cd21da6dae8c0`。
+
+5/10/20/30 formal slots 使用 in-process backend，没有执行被修复的 host IPC reconstruction；
+历史正式证据仍严格绑定 `dfaedf6d273c5c56`，不得替换成当前 hash。
 
 不要把 hash 当成手填版本号。正式 artifact 必须同时绑定 instance、model、objective、
 config、dual、branch/cut context 和 engine build hash；运行中 hash 漂移必须 fail closed。
 
 ### 1.2 本次交接前的快速验证
 
-本次只重跑了低风险的 native gate：
+最终源状态已重跑：
 
 ```text
 ctest --test-dir build/native-spprc --output-on-failure
   -> 2/2 passed
 
 python -m pytest -q tests/native
-  -> 34 passed, 17 subtests passed
+  -> 36 passed, 16 subtests passed
+
+ctest --test-dir build/native-spprc-asan --output-on-failure
+  -> 2/2 passed
+
+python -m pytest -q
+  -> 410 passed, 21 subtests passed
 ```
 
-历史完整 gate 记录为 `395 passed + 22 subtests passed, 0 failed`，但本次没有重跑全量
-pytest，接手者不要把“历史全量”和“本次快速验证”混写成同一次测试。
+以上均在 signed-zero host 修复之后执行，失败数为 0。
 
 ### 1.3 当前机器资源边界
 
 本文核对时：
 
 - 物理内存约 15 GiB，约 12 GiB available；
-- swap 约 4 GiB，几乎未使用；
-- 磁盘尚有约 822 GiB；
+- swap 约 4 GiB，当前使用约 589 MiB；
+- 磁盘尚有约 818 GiB；
 - 没有正在运行的 Moon Trek 求解进程；
 - VS Code extension host 单进程约占 1.15 GiB，桌面常驻进程仍需保留安全余量。
 
@@ -113,7 +133,8 @@ Master 以 journey columns 为变量，核心约束是：
 - 每个 task 的 exact cover equality；
 - fleet limit；
 - 当前正式主线中的 Ryan–Foster branch constraints；
-- cut framework 虽然存在，但 live master cuts 默认关闭。
+- live SRI master-cut framework 已实现并通过 correctness gate，但 promotion 未通过，所以
+  live master cuts 默认关闭。
 
 当前 reduced cost 的最终审计公式是：
 
@@ -258,6 +279,7 @@ exhaustive search。
 | 9 | 完成 | persistent host、50/100 bounded stability、RSS/cancel/hash/resume gate |
 | 10 | 部分完成 | cut-state differential、completion-bound differential、visited-subset dominance；resource partition 与 bidirectional join 未实现 |
 | 11 | 完成 | 30-scale 20/20 release gate，通过后默认 exact backend 切到 native |
+| 12 | 完成但未晋级 | Native Live SRI BPC V1 功能/证书闭环、P0/P1/P2、1040-slot formal promotion；P0 因 30 性能门槛失败保持默认关闭 |
 
 这里有一个容易误读的地方：Phase 11 的默认 release 是在明确定义的默认 feature scope 上通过
 的，并不等于 Phase 10 列出的所有高级能力都实现或启用了。
@@ -286,23 +308,27 @@ native_cut_state_enabled: false
 注意：这里的“bucket optimistic minima”只是 dominance 索引优化，不等于完整的 resource
 bucket/partition 算法。
 
-### 6.2 已实现/差分，但默认关闭
+### 6.2 已实现并完整测试，但默认关闭
 
-- subset-row `floor(overlap/divisor)` threshold-crossing state；
+- SRI-3/SRI-5 live separator、master rows 和 `floor(overlap/2)` threshold-crossing state；
 - fleet-cut coefficient state；
+- active-cut Phase-I；
+- global/local lineage、sibling isolation、三类独立 hash；
+- P0/P1 root cuts、P2 branch-node cuts；
+- active-cut Native/Python/HiGHS reduced-cost reconstruction；
 - positive-cover completion bound。
 
 关闭原因：
 
-- cut state 尚未通过正式 live-master-cut promotion；
+- P0 正确性通过，但 30-scale 正式性能 promotion 未通过；
+- P1/P2 没有被选择为正式候选，node cuts 仅保留 capability；
 - completion bound 在真实 RMP dual 上 prune count 为 0，并出现慢例，尚未提供生产收益；
-- `Phase-I + nonempty cut` 当前仍显式 fail closed。
+- fleet lower-bound cut 仍是 diagnostic，不属于 V1 live family。
 
 ### 6.3 尚未实现或尚未获得 exact role
 
 - resource partition/bucket algorithm；
 - bidirectional join；
-- live cut certification；
 - PathWyse/DSSR/NG 的 exact-certificate role。
 
 NG/DSSR/其他 worker 现在最多只能产生候选列，不是 proof source。将来只有完成 lunar
@@ -314,10 +340,10 @@ multi-sortie 表达、license 审计和 certificate differential，才能重新�
 
 | Scale | 当前 exact 证据 | total-wall 统计 | 备注 |
 |---:|---|---|---|
-| 5 | 20/20 exact | mean `0.406318s`，p50 `0.406548s`，max `0.431486s` | pricing-core native `0.000328s` vs Python `0.002829s`，8.64x |
-| 10 | 20/20 exact | mean `0.828971s`，p50 `0.761838s`，max `1.252164s` | pricing-core native `0.008953s` vs Python `0.034181s`，3.82x |
-| 20 | 20/20 exact | mean `31.171581s`，p50 `17.648412s`，max `124.627828s` | root mean `10.767889s`，tree mean `20.067419s` |
-| 30 | 20/20 exact | mean `453.915594s`，p50 `327.598609s`，max `1679.705969s` | root p50 `124.933467s`，tree p50 `213.869142s` |
+| 5 | 20/20 exact | mean `0.395952s`，p50 `0.393683s` | Stage -1 frozen fresh baseline |
+| 10 | 20/20 exact | mean `0.820660s`，p50 `0.754397s` | Stage -1 frozen fresh baseline |
+| 20 | 20/20 exact | mean `32.352003s`，p50 `18.391300s` | Stage -1 frozen fresh baseline |
+| 30 | 20/20 exact | mean `493.045466s`，p50 `346.038290s` | Stage -1 frozen fresh baseline |
 
 30 的难例曾采用“先给 3600 秒拿到真 exact 时间，再剖析结构热点”的策略：
 
@@ -329,26 +355,41 @@ multi-sortie 表达、license 审计和 certificate differential，才能重新�
 这说明 30 规模优化不是纯调参：先获得合法 exact closure，再固定 instance/dual/branch
 context 做结构 A/B，是正确做法。
 
-### 7.2 一个必须补救的证据问题
+### 7.2 冻结基线与正式 paired promotion
 
-上述 5/10/20/30 最终数字已写入仓库报告，但当时的部分完整 raw artifacts 位于：
+旧 `/tmp` 证据缺口已经通过 Stage -1 正式恢复消除。冻结 baseline 位于：
 
 ```text
-/tmp/native-spprc-fixed-mask-gate-5-10-20-current
-/tmp/native-spprc-fixed-mask-scale30-full20-current
-/tmp/native-spprc-subset-index-scale30-012-1800-current
-/tmp/native-spprc-fixed-mask-scale30-014-1800-current
+runs/native_spprc_no_cut_5_30_full3600_frozen_v1/
+  baseline_freeze_manifest.json
+  frozen_config.yaml
+  ...
 ```
 
-本文核对时这些目录已经不存在。因此：
+它包含 80/80 exact、80/80 no-cheat、零 redline、无 engine 漂移和历史恢复容差审计，正式
+ID 为 `FROZEN_NATIVE_NO_CUT_BASELINE_V1`。paired promotion 没有复用 baseline 的单次时间，
+而是重新 fresh 运行 control。
 
-- 报告内仍保留当时结论、hash、aggregate 和关键 differential 数据；
-- 但下一个正式 release 不能继续依赖已消失的 `/tmp` 原始目录；
-- 需要把一次最小复现 gate，以及下一次计划内的完整 30 batch，直接写入 `runs/`；
-- 新 artifact 必须含 row JSON/CSV、config、engine/instance hash、summary 和 no-cheat audit。
+正式 P0 paired promotion：
 
-不要因为原始目录缺失就否定已经完成的实现，也不要反过来把只有 Markdown 汇总的旧数字冒充
-当前 HEAD 的新鲜重跑证据。
+| Scale | live/base mean | live/base p50 | paired point | 95% CI | promotion |
+|---:|---:|---:|---:|---|---|
+| 5 | 1.003516 | 0.999396 | 1.003480 | [0.996809, 1.009628] | pass |
+| 10 | 0.981068 | 0.958215 | 0.979668 | [0.951791, 0.999489] | pass |
+| 20 | 0.805249 | 0.793010 | 0.864355 | [0.771307, 0.951162] | pass |
+| 30 | 1.087746 | 0.835094 | 0.959039 | [0.824718, 1.103403] | **fail** |
+
+证据目录：
+
+```text
+runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/
+  promotion_rows.json
+  promotion_summary.json
+  promotion_post_amendment_audit.json
+  promotion_decision_manifest.json
+```
+
+30 规模 mean、paired point estimate 和 CI 上界失败，所以总状态为 `NOT_PROMOTED`。
 
 ### 7.3 50/100 数据与求解状态
 
@@ -388,6 +429,24 @@ can_certify_no_negative = false
 fail closed。由于 host 在提交完整 BackendResult 前被 hard-kill，这十条行也没有从最后一次
 pricing call 留下可审计的 partial native payload；此前已经加入 master 的 harvest columns 不受
 影响。
+
+Live SRI 共享代码完成后的最新 bounded regression 位于：
+
+```text
+runs/native_live_sri_v1_post_promotion_no_cut_50_100_bounded_regression_v2_signed_zero_fix_20260723/
+```
+
+50/100 的 instance001 都使用 `no_cut`、host、600 秒、8 GiB、单实例串行：
+
+| Scale | wall time | 状态 | 唯一 blocker | peak host RSS |
+|---:|---:|---|---|---:|
+| 50 | 340.135371s | legal incomplete | `host_memory_limit` | 8.0028 GiB |
+| 100 | 300.159294s | legal incomplete | `host_memory_limit` | 8.0006 GiB |
+
+第一次运行发现 host IPC 会把 legal fleet dual `-0.0` 改成 `+0.0`，触发
+`native_dual_binding_hash_mismatch`。修复只保留 signed zero，没有放宽 hash 检查；新运行
+dual mismatch 为 0，engine start/child/end hash 一致，zero redline，cut state off，
+active cut count=0。两例仍不是 exact closure，只是符合计划的安全回归。
 
 ## 8. GAT/B5 当前状态
 
@@ -539,16 +598,20 @@ core API 无法安全承载并满足既定 fork 触发条件，才建立 patch q
 
 不要现在并行扫 20 个 scale100 实例。当前机器资源和算法状态都不支持这种做法。
 
-### P3：之后再 promotion cuts 和其他高级功能
+### P3：Live SRI 后续只允许形成新候选
 
-live cuts 的建议顺序：
+V1 的 correctness、Phase-I、certificate ledger 和正式 P0 promotion 已完成，不要重复执行
+旧的 readiness 清单。若继续，建议顺序：
 
-1. 5/10 nonempty cut full/representative differential；
-2. 20/30 固定 root 和 branch-child dual snapshot；
-3. Phase-I + nonempty cut 的 fail-closed 边界改为正式支持；
-4. cut-state-aware dominance 和 certificate ledger；
-5. 小规模 live master cut A/B；
-6. 有稳定收益且无 certificate leak 后才进入默认主线。
+1. 固定 30_009、30_012、30_018、30_019、30_020 的 paired evidence；
+2. 分解 root、tree node count、pricing、separation、final-judge 时间，确定退化来自树形改变
+   还是 cut-aware label state；
+3. 实现并证明 pricing projected-cut context：RMP 保留全部 active cuts，pricing 只携带
+   nonzero-dual cuts，同时 certificate 仍绑定完整 active context；
+4. 评估更紧凑的 SRI threshold state；不能只存 coefficient 而丢失下一次 crossing 所需状态；
+5. cut-aware dominance 只有在给出对所有共同 suffix 的完整单调性证明后才能放宽；
+6. 形成新的唯一候选并重新冻结 config/policy/engine hash；旧 P0 的 screening 或 formal rows
+   不能混入新 promotion。
 
 resource partition、bidirectional join、PathWyse/DSSR exact role 均应在内存/长-mask dominance
 问题得到测量和首轮解决后再评估。尤其 bidirectional join 面对 multi-sortie recharge cycle，
@@ -569,28 +632,30 @@ resource partition、bidirectional join、PathWyse/DSSR exact role 均应在内�
 
 ## 12. 接手后的推荐第一项具体任务
 
-建议下一个对话接受以下任务，而不是直接跑大规模实例：
+如果继续 Live SRI，建议下一个对话接受以下任务：
 
-> 在不改变任何 official result、column pool 或 certificate 语义的前提下，为
-> `NativeRcsppHostBackend` 和 native exact core 加入固定大小 heartbeat telemetry；建立真实
-> scale50 instance001 的固定 true-dual snapshot；在 2/4/6/8 GiB cap 下串行测量 label
-> 数量、bucket 分布、dominance 效率和 bytes/live-label；输出一份决定“先做 packed arena
-> 还是先做长-mask subset index”的证据报告。
+> 冻结正式 promotion 中 30-scale 的 gain/regression paired instances，逐例重建 root cut
+> selection、active dual、tree-node count、pricing/separation/final-judge 时间与 cut lineage；
+> 解释为什么 P0 的 p50 改善但 mean 和 paired CI 失败，并提出一个不会破坏完整 active-context
+> certificate 的 projected-cut-state 优化设计。
 
 该任务的 Definition of Done：
 
-- default-off 或 telemetry-only，不改变 solver/certificate；
-- host hard kill 后能返回最后 heartbeat；
-- telemetry 本身有固定内存上限；
-- 5/10/20 differential 和 current native tests 不回归；
-- scale50 snapshot 每档都有 hash、RSS 曲线、label 曲线和结论；
-- 未运行 20 个 scale100，不触发系统 OOM/reboot；
-- 报告和 raw artifact 写入 `runs/`，不写 `/tmp`。
+- 不修改或覆盖 1040-slot 正式 raw evidence；
+- 每个重点实例给出 no-cut/live 的 root、tree、pricing 和 active-cut 对比；
+- 区分有真实 active cuts 的退化与 `active_cut_count=0` 的运行波动；
+- RMP 全 active context 与 pricing nonzero-dual projection 分开建模和绑定；
+- 任何 dominance 放宽先给数学证明，未证明时保持完整 active-prefix equality；
+- 新策略默认关闭，只有重新冻结并通过全量 paired promotion 才可切换；
+- 50/100 不扩大运行，继续保持 no-cut。
 
 ## 13. 常用入口与文件地图
 
 ### 当前结论与计划
 
+- `plan/native_live_sri_bpc_v1_implementation_report_zh.md`
+- `plan/native_live_sri_v1_validity_and_certificate_boundary_zh.md`
+- `runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_decision_manifest.json`
 - `plan/07_native_spprc_backend_execution_plan.md`
 - `runs/native_spprc_implementation_report_zh.md`
 - `runs/native_spprc_feasibility_spike_report_zh.md`
@@ -656,9 +721,9 @@ free -h
 df -h "$PROJECT_ROOT"
 ps -eo pid,ppid,rss,etime,cmd --sort=-rss | head -25
 
-. .venv-native-spprc/bin/activate
+export PYTHONPATH=src:build/native-spprc
 ctest --test-dir build/native-spprc --output-on-failure
-python -m pytest -q tests/native
+/home/kai/miniconda3/bin/python -m pytest -q tests/native
 ```
 
 若要做 5/10/20 acceptance：
@@ -677,13 +742,12 @@ python scripts/run_lunar_ice_native_spprc_acceptance.py \
 
 ## 15. 一句话交接
 
-项目已经把 5–30 规模推进到可认证的 native exact Branch-and-Price，并通过 30 规模默认
-release；高级 cut/completion 框架只完成了部分实现和 differential，尚未进入默认 live-cut
-主线。50/100 的数据已齐，但求解先被 exact pricing 的 8 GiB 标签内存压垮。下一步最有价值
-的工作是补 hard-kill 前的 label/frontier 内存遥测和固定 dual snapshot，再用证据决定 packed
-label arena 与长-mask dominance index 的先后，而不是继续调时间、开 GAT 或堆更多高级功能。
+项目已经把 5–30 规模推进到可认证的 native exact Branch-and-Price，也完整实现了 Live SRI
+BPC V1；但正式 1040-slot P0 promotion 因 30 规模性能分布失败而 `NOT_PROMOTED`，所以生产
+默认和 rollback 都继续是 `no_cut`。若继续 live cuts，先解释正式 30-scale 退化并形成新候选；
+50/100 仍由 8 GiB exact label frontier 内存限制主导，暂不扩大求解。
 
-## 16. 2026-07-22 Native Live SRI BPC V1 实施补充
+## 16. 2026-07-23 Native Live SRI BPC V1 最终补充
 
 上述“live cuts 尚未形成闭环”的状态已经被本轮实现更新，但默认策略没有改变。
 
@@ -695,16 +759,18 @@ label arena 与长-mask dominance index 的先后，而不是继续调时间、�
 - active-cut mathematics、lineage、true-dual 三类独立 hash 与完整 certificate invalidation；
 - Native `uint8_t[16] + active_count` state、完整 active-prefix dominance、17 cuts fail closed；
 - P0/P1 root cuts 和 P2 branch cuts，global/local inheritance 与 sibling isolation；
-- 50/100 instance001 host/8 GiB/600 秒 bounded no-cut regression，两例均合法 incomplete、零 redline；
-- paired promotion runner 已实现并通过 dry-run。
+- 1040/1040 formal paired slots：strict cold-start、fresh runtime、AB/BA、no resume、全部 exact、零 redline和合法 certificate binding；
+- 50/100 instance001 host/8 GiB/600 秒 bounded no-cut regression，两例都仅因 `host_memory_limit` 合法 incomplete、零 redline；
+- signed-zero host dual binding 缺陷已修复，未放宽 hash 检查。
 
-当前选择 P0 作为唯一 screened candidate。最终 policy hash 为
+P0 是唯一正式候选。policy hash 为
 `9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1`，加入了
 `min_restricted_rmp_gain=1e-4` 的预提交性能门控。该门控只决定是否采用可选 cuts，不是 official
 proof 来源。
 
-当前不能切换默认值：P0 尚未完成正式 fresh paired promotion，30_017 的门控版单次比值约
-0.916，也未达到计划要求的 0.90。故 production default 仍是 `no_cut`；P2 能力保留但默认关闭；
+最终不能切换默认值：P0 在 5/10/20 通过性能门槛，但 30 的 live/base mean=`1.087746`、
+paired point=`0.959039`、CI 上界=`1.103403`，未达到正式门槛。故
+`default_switch_allowed=false`；production default 仍是 `no_cut`，P2 能力保留但默认关闭，
 50/100 继续只允许 no-cut。
 
 接手时优先阅读：
@@ -712,6 +778,42 @@ proof 来源。
 - `plan/native_live_sri_v1_validity_and_certificate_boundary_zh.md`；
 - `plan/native_live_sri_bpc_v1_implementation_report_zh.md`；
 - `runs/native_live_sri_v1_candidate_freeze_20260722/candidate_freeze_manifest.json`；
-- `runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json`。
+- `runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json`；
+- `runs/native_live_sri_v1_p0_frozen_paired_promotion_clean_v2_20260722/promotion_decision_manifest.json`；
+- `runs/native_live_sri_v1_post_promotion_no_cut_50_100_bounded_regression_v2_signed_zero_fix_20260723/bounded_regression_summary.json`。
 
-测试快照：全量 pytest 406 passed + 21 subtests；normal Native CTest 2/2；ASAN+UBSAN CTest 2/2。
+测试快照：全量 pytest 410 passed + 21 subtests；`tests/native` 36 passed + 16 subtests；
+normal Native CTest 2/2；ASAN+UBSAN CTest 2/2。
+
+## 17. 2026-07-23 非零-dual projection 与 packed state 更新
+
+上一节列出的正式 P0 promotion 结论不变：production default 仍为 `no_cut`。在旧候选
+`NOT_PROMOTED` 后，已完成两个 exact-safe 性能改进：
+
+1. RMP 保留全部 active cuts，Native pricing 只接收 dual 数值严格非零的 cuts；不用 epsilon，
+   `±0.0` 投影掉，任意微小非零值保留。
+2. Native overlap state 从 `uint8_t[16]+active_count` 改为精确 packed `uint64_t`：
+   SRI-3 用 2 bit 表示 0..3，SRI-5 用 3 bit 表示 0..5。
+
+证书新增 full/projected 双 context hash、双 count、projection flag/schema binding；完整 true
+dual hash 仍保留。17 条完整 active cuts 仍在投影前 fail closed。cut-state schema 已升为
+`lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2`，旧证书不可复用。
+dominance 仍要求精确 overlap state 相等，未实现未经证明的 reward-aware dominance。
+
+当前 in-process engine hash：`8e255a88436e937c`。当前最终代码的定价重放中 projection 使
+engine mean 0.540599s 降至 0.316356s（约 -41.5%），packed state 在 guard 前的受控前后
+对比中再带来约 3% 的定价时间下降；
+`CutState` 17→8 bytes，完整 label `State` 168→152 bytes。scale20 instance009 的单次
+strict cold-start 诊断为 no-cut 15.951197s、P0 11.883917s，双方 objective=1.893717、
+exact、no-cheat、零 redline。该单例不属于正式 promotion，不能据此切换默认值。
+
+新证据目录：
+
+- `runs/native_live_sri_v1_state_optimizations_20260723/projection_pre_packing_scale20_009.json`；
+- `runs/native_live_sri_v1_state_optimizations_20260723/projection_post_packing_scale20_009.json`；
+- `runs/native_live_sri_v1_state_optimizations_20260723/projection_post_packing_schema_guard_scale20_009.json`；
+- `runs/native_live_sri_v1_state_optimizations_20260723/end_to_end_schema_guard_scale20_009_no_cut/`；
+- `runs/native_live_sri_v1_state_optimizations_20260723/end_to_end_schema_guard_scale20_009_p0/`。
+
+最新测试快照：全量 pytest 414 passed + 22 subtests；`tests/native` 39 passed + 17
+subtests；normal Native CTest 2/2；ASAN+UBSAN CTest 2/2。

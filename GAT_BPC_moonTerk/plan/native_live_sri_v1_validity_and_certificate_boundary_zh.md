@@ -1,7 +1,7 @@
 # Native Live SRI BPC V1 数学有效性与证书边界
 
-日期：2026-07-22  
-状态：实现完成，默认策略仍为 `no_cut`  
+日期：2026-07-23  
+状态：实现完成；正式 P0 promotion 未通过；默认策略仍为 `no_cut`  
 适用范围：divisor=2 的 SRI-3/SRI-5、HiGHS journey RMP、Native exact SPPRC、Ryan–Foster branching
 
 ## 1. SRI 的有效性
@@ -113,20 +113,27 @@ certificate_blockers = empty
 
 证书同时绑定 instance、model、config、policy、engine、objective mode、RMP iteration、branch context、cut-state schema、epsilon 和 active cut count。加入 cut、改变 branch、重解 RMP、dual 改变、Phase-I/II 切换或 resume binding 不符，都会使旧证书失效。
 
+非零-dual projection 启用后，证书还独立绑定实际传入 Native 的
+`pricing_cut_context_hash`、pricing cut count、projection enable flag 和 projection schema。
+完整 `true_dual_binding_hash` 不做投影；所以即使 active row 当前 dual 为零，它的 dual 状态变化
+仍会使旧证书失效。
+
 物理列去重使用不含 branch/cut context 的 `PhysicalColumnSignature`。branch/cut 只进入 pricing state 与 certificate signature，避免同一物理 journey 因上下文变化被错误复制。
 
 ## 6. Native cut state 与 dominance
 
-Native state 固定为：
+Native state 当前固定为：
 
 ```text
-uint8_t overlap[16]
-uint8_t active_count
+uint64_t packed_exact_overlap
+SRI-3: 2 bits, exact 0..3
+SRI-5: 3 bits, exact 0..5
+maximum: 16 * 3 = 48 bits
 ```
 
 策略 cap 为 global=4、lineage-local=4、active=8；engine 能力上限仍为 16。cut count=17、未知 type/divisor、task 不存在、state 截断或 schema/capability 不匹配都 fail closed。
 
-active cuts 下 dominance 比较完整 active-prefix overlap，不使用未经证明的 parity 或 reward-only shortcut。cut dual reward 在 overlap 跨越 divisor 阈值时累加。completion bound 在 active cuts 下强制关闭，并记录 `active_live_sri_cuts` 原因。
+packed state 保存完整 overlap，不只保存 `floor(overlap/2)`。dominance 比较完整精确 packed overlap，不使用未经证明的 parity 或 reward-only shortcut。cut dual reward 在 overlap 跨越 divisor 阈值时累加。completion bound 在完整 RMP active-cut context 非空时仍强制关闭，并记录 `active_live_sri_cuts` 原因。
 
 ## 7. 节点闭环
 
@@ -144,7 +151,37 @@ global cuts 由整棵后代树继承。local cuts 只沿其产生节点的后代
 
 - `no_cut` 是生产默认和显式 rollback；
 - P0/P1/P2 能力已实现并测试；
-- P0 是当前 screened candidate；
+- P0 已完成 1040-slot 正式 fresh paired promotion，但总状态为 `NOT_PROMOTED`；
 - P2 node-cut 能力保留但默认关闭；
-- 完整 fresh paired promotion 尚未通过，因此不得把任何 live policy 描述为默认主线；
+- 正式重复全部通过正确性门禁，但 P0 在 30 规模未通过 mean、paired point estimate 和 paired 95% CI 上界门槛，因此不得把任何 live policy 描述为默认主线；
+- 5/10/20 虽分别通过性能门槛，也不得绕过“所有规模全部通过”条件而拆分切换；
 - 50/100 始终默认 no-cut，bounded regression 的合法 incomplete 不等于 exact closure。
+
+正式结果绑定 in-process engine `dfaedf6d273c5c56`。之后修复了仅由 host backend 执行的
+signed-zero dual IPC 保真缺陷：合法 `-0.0` 不再被重建为 `+0.0`。该修复没有放宽 hash
+检查；修复后的 50/100 host 回归都只因 `host_memory_limit` 合法 incomplete，dual-binding
+mismatch 为 0。由于 source binding 随代码变化，当前 engine hash 与历史正式 hash 不同，
+两者不得混写。
+
+## 10. 已实现的 projection/状态压缩与 dominance 边界
+
+以下两项已经实现，并保持如下边界：
+
+1. RMP 必须维护全部 active cuts，以保证 primal feasibility 和 lineage；pricing request
+   只携带当前 dual 数值严格非零的 active cuts。投影判断不用 epsilon；`±0.0` 删除，
+   `-1e-15` 仍保留。certificate 继续绑定完整 RMP context、完整 true dual，同时另行绑定
+   projected context。完整 active count=17 在投影前仍 fail closed。
+2. SRI-3 overlap 最大为 3，使用 2 bit；SRI-5 最大为 5，使用 3 bit。实现保存精确 overlap，
+   因而延伸时下一次 threshold crossing、terminal coefficient 和 dominance 都与压缩前相同。
+   仅存 \(\lfloor overlap/2\rfloor\) 仍被禁止。
+3. V1 dominance 继续要求完整 active-prefix overlap 相同。仅比较当前
+   `cut_dual_reward` 大小不足以证明未来延伸下仍保持优势，因为两个 label 到下一次 threshold
+   crossing 的距离可能不同。任何 reward-aware 或 componentwise dominance 都必须先证明
+   对所有共同可行 suffix 保持 reduced-cost、资源和 branch/cut 可行性单调，再进入 exact
+   proof engine。
+
+当前 schema 为
+`lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2`。
+压缩前后真实 dual snapshot 的扩展 label 数完全一致，Native/Python SRI-3/SRI-5 reduced
+cost 差分、Phase-I、0/1/8/16/17 cuts、graph-cache 序列、full/projected binding、全量 pytest
+和 ASAN+UBSAN 均通过。

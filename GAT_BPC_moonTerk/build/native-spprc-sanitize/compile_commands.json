@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize",
+  "command": "/usr/bin/c++ -I/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-src/cpp/rcspp/.. -fsanitize=address,undefined -fno-omit-frame-pointer -g -std=c++23 -fPIC -o _deps/rcspp-build/cpp/rcspp/CMakeFiles/rcspp_objects.dir/utils/timer.cpp.o -c /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-src/cpp/rcspp/utils/timer.cpp",
+  "file": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-src/cpp/rcspp/utils/timer.cpp",
+  "output": "_deps/rcspp-build/cpp/rcspp/CMakeFiles/rcspp_objects.dir/utils/timer.cpp.o"
+}
+]

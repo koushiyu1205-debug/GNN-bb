@@ -26,6 +26,11 @@ from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import (
     run_spprc_pricer,
     spprc_instance_hash,
 )
+from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
+    EXACT_ELEMENTARY_MODE,
+    LabelingPricingConfig,
+    run_bpc_labeling_pricer,
+)
 from lunar_ice_bpc.exact.core.branching import (
     DIFFERENT_JOURNEY,
     SAME_JOURNEY,
@@ -33,7 +38,12 @@ from lunar_ice_bpc.exact.core.branching import (
     PairBranchDecision,
     journey_satisfies_branch_context,
 )
-from lunar_ice_bpc.exact.core.cuts import CutContext, fleet_lower_bound_cut, subset_row_cut
+from lunar_ice_bpc.exact.core.cuts import (
+    CutContext,
+    fleet_lower_bound_cut,
+    subset_row_cut,
+    true_dual_binding_hash,
+)
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.solver.journey_driver import enumerate_direct_journey_columns
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals, manual_journey_reduced_cost
@@ -402,8 +412,11 @@ class NativeSpprcBackendTests(unittest.TestCase):
                 )
 
     def test_subset_row_cut_reduced_costs_match_python(self) -> None:
-        for cut in (subset_row_cut("sri-1", self.data.task_ids[:3]),):
-            with self.subTest(cut_type=cut.cut_type):
+        for cut in (
+            subset_row_cut("sri-3", self.data.task_ids[:3]),
+            subset_row_cut("sri-5", self.data.task_ids[:5]),
+        ):
+            with self.subTest(cut_id=cut.cut_id):
                 cut_context = CutContext(cuts=(cut,))
                 duals = JourneyDuals(
                     cover={task_id: 0.2 for task_id in self.data.task_ids},
@@ -436,6 +449,13 @@ class NativeSpprcBackendTests(unittest.TestCase):
 
                 self.assertEqual(native.engine_status, "COMPLETE")
                 self.assertFalse(native.certificate_blockers)
+                build_info = native.telemetry["native_build_info"]
+                self.assertEqual(
+                    build_info["cut_state_schema"],
+                    "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+                )
+                self.assertEqual(int(build_info["cut_state_bytes"]), 8)
+                self.assertEqual(int(build_info["cut_state_max_bits"]), 48)
                 self.assertAlmostEqual(native.best_found_rc, python.best_found_rc, places=8)
                 python_negative_task_sets = {
                     frozenset(column.task_set)
@@ -451,6 +471,66 @@ class NativeSpprcBackendTests(unittest.TestCase):
                     {frozenset(column.task_set) for column in native.columns},
                     python_negative_task_sets,
                 )
+
+    def test_branch_plus_subset_row_cut_matches_python_reference(self) -> None:
+        branch = BranchContext(
+            pair_decisions=(
+                PairBranchDecision(
+                    self.data.task_ids[0],
+                    self.data.task_ids[1],
+                    DIFFERENT_JOURNEY,
+                ),
+            )
+        )
+        cut = subset_row_cut("sri-branch-cut", self.data.task_ids[:3])
+        cut_context = CutContext(cuts=(cut,))
+        duals = JourneyDuals(
+            cover={task_id: 10.0 for task_id in self.data.task_ids},
+            cuts={cut.cut_id: 0.3},
+        )
+        native = NativeRcsppInprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=duals,
+                branch_context=branch,
+                cut_context=cut_context,
+            )
+        )
+        request = build_spprc_request(
+            self.data,
+            mode=SPPRC_EXACT_MODE,
+            config_hash="native-branch-plus-cut",
+            backend_id="python_reference",
+            max_exact_tasks=5,
+            harvest_target=1000,
+            exact_negative_harvest_target=1000,
+            branch_context=branch,
+            cut_context=cut_context,
+        )
+        python = run_spprc_pricer(
+            self.data,
+            duals,
+            request,
+            branch_context=branch,
+            cut_context=cut_context,
+        )
+
+        self.assertEqual(native.engine_status, "COMPLETE")
+        self.assertTrue(native.search_exhaustive)
+        self.assertTrue(native.frontier_empty)
+        self.assertFalse(native.certificate_blockers)
+        self.assertEqual(native.telemetry["rc_mismatch_count"], 0)
+        self.assertAlmostEqual(native.best_found_rc, python.best_found_rc, places=8)
+        self.assertEqual(
+            {frozenset(column.task_set) for column in native.columns},
+            {frozenset(column.task_set) for column in python.columns},
+        )
+        self.assertTrue(
+            all(
+                journey_satisfies_branch_context(column, branch)
+                for column in native.columns
+            )
+        )
 
     def test_phase_one_with_nonempty_cut_matches_manual_rc(self) -> None:
         cut_context = CutContext(
@@ -477,7 +557,7 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertEqual(result.telemetry["rc_mismatch_count"], 0)
         self.assertTrue(result.telemetry["cut_state_required"])
 
-    def test_nonempty_cut_state_is_derived_from_context(self) -> None:
+    def test_zero_dual_active_cut_requires_no_native_cut_state(self) -> None:
         cut_context = CutContext(
             cuts=(subset_row_cut("sri-1", self.data.task_ids[:3]),)
         )
@@ -492,7 +572,129 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertEqual(result.engine_status, "COMPLETE")
         self.assertFalse(result.certificate_blockers)
         self.assertTrue(result.telemetry["cut_state_required"])
-        self.assertTrue(result.telemetry["cut_state_effective"])
+        self.assertFalse(result.telemetry["cut_state_effective"])
+        self.assertEqual(result.telemetry["active_cut_count"], 1)
+        self.assertEqual(result.telemetry["pricing_cut_count"], 0)
+        self.assertEqual(result.telemetry["projected_zero_dual_cut_count"], 1)
+
+    def test_exact_nonzero_dual_cut_projection_matches_full_cut_pricing(self) -> None:
+        task_ids = self.data.task_ids
+        cuts = (
+            subset_row_cut("sri-zero", (task_ids[0], task_ids[1], task_ids[2])),
+            subset_row_cut("sri-neg-zero", (task_ids[0], task_ids[1], task_ids[3])),
+            subset_row_cut("sri-tiny", (task_ids[0], task_ids[1], task_ids[4])),
+            subset_row_cut("sri-positive", (task_ids[0], task_ids[2], task_ids[3])),
+        )
+        cut_context = CutContext(cuts=cuts)
+        duals = JourneyDuals(
+            cover={task_id: 10.0 for task_id in task_ids},
+            cuts={
+                "sri-zero": 0.0,
+                "sri-neg-zero": -0.0,
+                "sri-tiny": -1.0e-15,
+                "sri-positive": -0.3,
+            },
+        )
+        projected = NativeRcsppInprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=duals,
+                cut_context=cut_context,
+            )
+        )
+        full = NativeRcsppInprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=duals,
+                cut_context=cut_context,
+                cut_dual_projection_enabled=False,
+            )
+        )
+
+        self.assertEqual(projected.engine_status, "COMPLETE")
+        self.assertEqual(full.engine_status, "COMPLETE")
+        self.assertFalse(projected.certificate_blockers)
+        self.assertFalse(full.certificate_blockers)
+        self.assertAlmostEqual(projected.best_found_rc, full.best_found_rc, places=8)
+        self.assertEqual(
+            {frozenset(column.task_set) for column in projected.columns},
+            {frozenset(column.task_set) for column in full.columns},
+        )
+        self.assertEqual(projected.telemetry["active_cut_count"], 4)
+        self.assertEqual(projected.telemetry["pricing_cut_count"], 2)
+        self.assertEqual(projected.telemetry["projected_zero_dual_cut_count"], 2)
+        self.assertTrue(projected.telemetry["cut_state_effective"])
+        self.assertEqual(full.telemetry["pricing_cut_count"], 4)
+        self.assertEqual(full.telemetry["projected_zero_dual_cut_count"], 0)
+        self.assertNotEqual(
+            projected.telemetry["active_cut_context_hash"],
+            projected.telemetry["pricing_cut_context_hash"],
+        )
+        self.assertEqual(
+            full.telemetry["active_cut_context_hash"],
+            full.telemetry["pricing_cut_context_hash"],
+        )
+
+        phase_one_projected = NativeRcsppInprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=duals,
+                objective_mode=BACKEND_OBJECTIVE_PHASE_ONE,
+                cut_context=cut_context,
+            )
+        )
+        phase_one_full = NativeRcsppInprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=duals,
+                objective_mode=BACKEND_OBJECTIVE_PHASE_ONE,
+                cut_context=cut_context,
+                cut_dual_projection_enabled=False,
+            )
+        )
+        self.assertEqual(phase_one_projected.engine_status, "COMPLETE")
+        self.assertEqual(phase_one_full.engine_status, "COMPLETE")
+        self.assertAlmostEqual(
+            phase_one_projected.best_found_rc,
+            phase_one_full.best_found_rc,
+            places=8,
+        )
+        self.assertEqual(
+            {frozenset(column.task_set) for column in phase_one_projected.columns},
+            {frozenset(column.task_set) for column in phase_one_full.columns},
+        )
+        self.assertEqual(phase_one_projected.telemetry["rc_mismatch_count"], 0)
+
+    def test_native_projection_is_bound_into_final_cut_certificate(self) -> None:
+        cut = subset_row_cut("sri-projection-certificate", self.data.task_ids[:3])
+        cut_context = CutContext(cuts=(cut,))
+        payload, columns = run_bpc_labeling_pricer(
+            self.data,
+            JourneyDuals(
+                cover={task_id: 0.0 for task_id in self.data.task_ids},
+                cuts={cut.cut_id: -0.0},
+            ),
+            config=LabelingPricingConfig(
+                mode=EXACT_ELEMENTARY_MODE,
+                max_exact_tasks=5,
+                completion_bound_enabled=False,
+            ),
+            cut_context=cut_context,
+        )
+
+        self.assertFalse(columns)
+        self.assertTrue(payload["can_certify_no_negative"])
+        self.assertTrue(payload["live_cut_certificate_supported"])
+        self.assertEqual(payload["cut_count"], 1)
+        self.assertEqual(payload["pricing_cut_count"], 0)
+        self.assertEqual(payload["projected_zero_dual_cut_count"], 1)
+        projection = payload["cut_certificate_support"][
+            "cut_dual_projection_audit"
+        ]
+        self.assertTrue(projection["binding_required"])
+        self.assertTrue(projection["binding_present"])
+        self.assertTrue(projection["projection_enabled"])
+        self.assertTrue(projection["valid"])
 
     def test_fleet_cut_is_diagnostic_only_for_native_live_v1(self) -> None:
         cut_context = CutContext(
@@ -975,6 +1177,37 @@ class NativeSpprcBackendTests(unittest.TestCase):
             NativeRcsppHostBackend.close()
 
         self.assertEqual(result.engine_status, "COMPLETE")
+        self.assertTrue(result.can_enter_certificate_audit)
+
+    def test_host_ipc_preserves_signed_zero_dual_binding(self) -> None:
+        NativeRcsppHostBackend.close()
+        duals = JourneyDuals(
+            cover={task_id: 0.0 for task_id in self.data.task_ids},
+            fleet_limit=-0.0,
+            cuts={},
+        )
+        try:
+            result = NativeRcsppHostBackend().solve(
+                BackendPricingRequest(
+                    data=self.data,
+                    true_duals=duals,
+                    dual_binding_hash=true_dual_binding_hash(
+                        duals.cover,
+                        fleet_limit=duals.fleet_limit,
+                        cuts=duals.cuts,
+                    ),
+                    wall_time_limit_sec=10.0,
+                    memory_limit_gb=1.0,
+                )
+            )
+        finally:
+            NativeRcsppHostBackend.close()
+
+        self.assertEqual(result.engine_status, "COMPLETE")
+        self.assertNotIn(
+            "native_dual_binding_hash_mismatch",
+            result.certificate_blockers,
+        )
         self.assertTrue(result.can_enter_certificate_audit)
 
     def test_persistent_host_reuses_process_and_sends_same_instance_delta(self) -> None:

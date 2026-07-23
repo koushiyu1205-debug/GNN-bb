@@ -29,6 +29,9 @@ struct CutDefinition {
     std::vector<std::uint64_t> task_mask;
     std::size_t divisor = 2;
     double dual = 0.0;
+    std::uint8_t state_bit_offset = 0;
+    std::uint8_t state_bit_width = 0;
+    std::uint8_t max_overlap = 0;
 };
 
 struct Task {

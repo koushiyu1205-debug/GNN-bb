@@ -39,6 +39,7 @@ class BackendPricingRequest:
     reconstruction_eps: float = 2.0e-6
     completion_bound_enabled: bool = False
     subset_dominance_enabled: bool = False
+    cut_dual_projection_enabled: bool = True
     cut_state_enabled: bool = False
     instance_hash: str = ""
     config_hash: str = ""
@@ -70,6 +71,11 @@ class BackendPricingRequest:
         object.__setattr__(self, "reconstruction_eps", abs(float(self.reconstruction_eps)))
         object.__setattr__(self, "completion_bound_enabled", bool(self.completion_bound_enabled))
         object.__setattr__(self, "subset_dominance_enabled", bool(self.subset_dominance_enabled))
+        object.__setattr__(
+            self,
+            "cut_dual_projection_enabled",
+            bool(self.cut_dual_projection_enabled),
+        )
         # Cut state is a mathematical request requirement, not an independent
         # performance toggle. Empty-context calls remain on the no-cut path.
         object.__setattr__(self, "cut_state_enabled", not self.cut_context.empty)

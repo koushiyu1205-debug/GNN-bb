@@ -1,0 +1,91 @@
+{
+  "schema_version": "lunar_ice_bpc.live_sri_state_optimization_summary.v1",
+  "date": "2026-07-23",
+  "formal_promotion_status": "NOT_PROMOTED",
+  "production_default": "no_cut",
+  "current_engine_build_hash": "8e255a88436e937c",
+  "native_so_sha256": "6e37eeeee287395c294548afab35ff8093ffe18e941453c926feee6a3e9a3e4c",
+  "optimizations": {
+    "exact_nonzero_dual_projection": {
+      "zero_test": "numeric_exact",
+      "epsilon_used": false,
+      "full_context_remains_in_rmp_and_certificate": true,
+      "full_true_dual_binding_retained": true,
+      "projected_context_bound_separately": true
+    },
+    "packed_exact_overlap": {
+      "sri3_bits": 2,
+      "sri3_values": [0, 1, 2, 3],
+      "sri5_bits": 3,
+      "sri5_values": [0, 1, 2, 3, 4, 5],
+      "max_active_cuts": 16,
+      "max_packed_bits": 48,
+      "cut_state_bytes_before": 17,
+      "cut_state_bytes_after": 8,
+      "label_state_bytes_before": 168,
+      "label_state_bytes_after": 152,
+      "dominance_rule": "exact_packed_overlap_equality"
+    }
+  },
+  "pricing_replay": {
+    "instance": "data/instances/lunar_ice_sp50_020/instance_009_logical_graph.json",
+    "snapshot_count": 2,
+    "repetitions_per_snapshot_per_mode": 10,
+    "graph_cache_entries": 0,
+    "all_exact_result_pairs_equivalent": true,
+    "rc_mismatch_count": 0,
+    "before_packing_artifact": {
+      "path": "projection_pre_packing_scale20_009.json",
+      "sha256": "9a960c0ed210621a0c71c138b9d71b82d3c23af39efa9c49dd4d7dce78f62aee",
+      "full_engine_mean_sec": 0.56706233515,
+      "projected_engine_mean_sec": 0.33130315705
+    },
+    "controlled_after_packing_artifact": {
+      "path": "projection_post_packing_scale20_009.json",
+      "sha256": "2f21f06ff660ad0f3f4791ffdaf02689162909155f01d7251b85488bd91cad27",
+      "full_engine_mean_sec": 0.5490630869,
+      "projected_engine_mean_sec": 0.32127544135
+    },
+    "current_after_schema_guard_artifact": {
+      "path": "projection_post_packing_schema_guard_scale20_009.json",
+      "sha256": "339e513b006199cc4de979c8ed7a943a3a7700978cb1ad288af551be02197195",
+      "full_engine_mean_sec": 0.54059902365,
+      "projected_engine_mean_sec": 0.31635639965,
+      "projected_full_mean_ratio": 0.585196024798629,
+      "projected_full_extended_labels_ratio": 0.6103774264294464
+    }
+  },
+  "end_to_end_diagnostic": {
+    "scale": 20,
+    "instance": "instance_009",
+    "strict_cold_start": true,
+    "resume": false,
+    "repeat_count_per_mode": 1,
+    "no_cut": {
+      "total_sec": 15.951197,
+      "root_cg_sec": 7.725982,
+      "tree_sec": 7.875293,
+      "objective": 1.893717,
+      "exact_closed": true,
+      "redlines_zero": true,
+      "summary_sha256": "ff63226043d1f6005913fcae98262fed3196573cb7d003b563828621a353c3c4"
+    },
+    "p0_optimized": {
+      "total_sec": 11.883917,
+      "root_cg_sec": 7.718583,
+      "tree_sec": 3.826938,
+      "objective": 1.893717,
+      "exact_closed": true,
+      "redlines_zero": true,
+      "summary_sha256": "02e6606c4a1c7eaaaa5dcb7a022d2c5d8777e81be534cb891e4e08ee17be4eb2"
+    },
+    "p0_no_cut_total_ratio": 0.7450172548179299,
+    "promotion_evidence": false
+  },
+  "tests": {
+    "full_pytest": "414 passed, 22 subtests passed",
+    "native_pytest": "39 passed, 17 subtests passed",
+    "normal_ctest": "2/2 passed",
+    "asan_ubsan_ctest": "2/2 passed"
+  }
+}

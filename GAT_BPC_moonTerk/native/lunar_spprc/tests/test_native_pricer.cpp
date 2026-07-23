@@ -127,6 +127,9 @@ int main() {
         .task_mask = {0b11U},
         .divisor = 2,
         .dual = 5.0,
+        .state_bit_offset = 0,
+        .state_bit_width = 2,
+        .max_overlap = 2,
     });
     const auto subset_cut = lunar_spprc::solve(subset_cut_model, params);
     assert(subset_cut.status == "complete");

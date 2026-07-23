@@ -1,0 +1,19 @@
+# Google C++ style with small tweaks
+BasedOnStyle: Google
+Language: Cpp
+ColumnLimit: 100
+UseTab: Never
+IndentWidth: 4
+ContinuationIndentWidth: 4
+AlwaysBreakAfterReturnType: None
+AlwaysBreakAfterDefinitionReturnType: None
+BreakBeforeBraces: Attach
+AlignAfterOpenBracket: Align
+AllowShortFunctionsOnASingleLine: Inline
+AllowAllArgumentsOnNextLine: false
+BinPackArguments: false
+DerivePointerAlignment: false
+PointerAlignment: Left
+IndentAccessModifiers: true
+IndentCaseLabels: true
+AccessModifierOffset: -1

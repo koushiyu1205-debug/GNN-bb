@@ -29,20 +29,33 @@ using VisitedMask = std::array<std::uint64_t, 2>;
 constexpr std::size_t kMaxActiveCuts = 16;
 
 struct CutState {
-    std::array<std::uint8_t, kMaxActiveCuts> overlap{};
-    std::uint8_t active_count = 0;
+    // Exact overlap values: SRI-3 uses 2 bits (0..3), SRI-5 uses 3 bits
+    // (0..5).  Sixteen SRI-5 rows occupy only 48 of the 64 inline bits.
+    std::uint64_t packed_overlap = 0;
 };
 
 bool same_active_cut_state(const CutState& lhs, const CutState& rhs) {
-    if (lhs.active_count != rhs.active_count) {
-        return false;
-    }
-    for (std::size_t index = 0; index < lhs.active_count; ++index) {
-        if (lhs.overlap[index] != rhs.overlap[index]) {
-            return false;
-        }
-    }
-    return true;
+    return lhs.packed_overlap == rhs.packed_overlap;
+}
+
+std::uint64_t cut_state_value_mask(const CutDefinition& cut) {
+    return (std::uint64_t{1} << cut.state_bit_width) - 1U;
+}
+
+std::uint8_t cut_overlap(const CutState& state, const CutDefinition& cut) {
+    return static_cast<std::uint8_t>(
+        (state.packed_overlap >> cut.state_bit_offset) &
+        cut_state_value_mask(cut));
+}
+
+void set_cut_overlap(CutState* state, const CutDefinition& cut,
+                     std::uint8_t overlap) {
+    const auto value_mask = cut_state_value_mask(cut);
+    const auto shifted_mask = value_mask << cut.state_bit_offset;
+    state->packed_overlap =
+        (state->packed_overlap & ~shifted_mask) |
+        ((static_cast<std::uint64_t>(overlap) & value_mask)
+         << cut.state_bit_offset);
 }
 
 struct Action {
@@ -174,12 +187,6 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         const auto& current_value = resource.get_value();
         const auto& action_value = extender.get_value();
         State next = current_value.state;
-        if (next.cut_state.active_count == 0 && !model_->cuts.empty()) {
-            if (model_->cuts.size() > kMaxActiveCuts) {
-                throw std::invalid_argument("native active cut count exceeds 16");
-            }
-            next.cut_state.active_count = static_cast<std::uint8_t>(model_->cuts.size());
-        }
         if (!next.valid || !action_value.is_action) {
             next.valid = false;
             output->set_value(JourneyValue{.state = std::move(next)});
@@ -258,14 +265,15 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
                 ((cut.task_mask[word] >> bit) & 1U) == 0U) {
                 continue;
             }
-            auto& overlap = state->cut_state.overlap.at(cut_index);
+            const auto overlap = cut_overlap(state->cut_state, cut);
             const auto old_coefficient = overlap / cut.divisor;
-            if (overlap == std::numeric_limits<std::uint8_t>::max()) {
+            if (overlap >= cut.max_overlap) {
                 state->valid = false;
                 return;
             }
-            ++overlap;
-            const auto new_coefficient = overlap / cut.divisor;
+            const auto next_overlap = static_cast<std::uint8_t>(overlap + 1U);
+            set_cut_overlap(&state->cut_state, cut, next_overlap);
+            const auto new_coefficient = next_overlap / cut.divisor;
             if (new_coefficient > old_coefficient) {
                 state->cut_dual_reward +=
                     static_cast<double>(new_coefficient - old_coefficient) * cut.dual;
@@ -1099,10 +1107,47 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     if (input_model.cuts.size() > kMaxActiveCuts) {
         throw std::invalid_argument("native v1 supports at most 16 active cuts");
     }
+    std::size_t expected_state_bit_offset = 0;
     for (const auto& cut : input_model.cuts) {
         if (cut.kind != CutKind::SubsetRow || cut.divisor != 2U) {
             throw std::invalid_argument("native live-cut v1 supports divisor-2 subset-row cuts only");
         }
+        if (!std::isfinite(cut.dual)) {
+            throw std::invalid_argument("native live-cut dual must be finite");
+        }
+        if (cut.task_mask.size() !=
+            (input_model.tasks.size() + 63U) / 64U) {
+            throw std::invalid_argument("native cut mask width is invalid");
+        }
+        if (cut.state_bit_offset != expected_state_bit_offset ||
+            (cut.state_bit_width != 2U && cut.state_bit_width != 3U) ||
+            cut.max_overlap == 0U ||
+            cut.max_overlap >
+                ((std::uint8_t{1} << cut.state_bit_width) - 1U) ||
+            expected_state_bit_offset + cut.state_bit_width > 64U) {
+            throw std::invalid_argument("native packed cut-state layout is invalid");
+        }
+        std::size_t member_count = 0;
+        for (std::size_t word_index = 0; word_index < cut.task_mask.size();
+             ++word_index) {
+            auto word = cut.task_mask[word_index];
+            if (word_index + 1U == cut.task_mask.size() &&
+                input_model.tasks.size() % 64U != 0U) {
+                const auto valid_bits = input_model.tasks.size() % 64U;
+                const auto valid_mask =
+                    (std::uint64_t{1} << valid_bits) - 1U;
+                if ((word & ~valid_mask) != 0U) {
+                    throw std::invalid_argument(
+                        "native cut mask references an unknown task");
+                }
+            }
+            member_count += std::popcount(word);
+        }
+        if (member_count != cut.max_overlap) {
+            throw std::invalid_argument(
+                "native packed cut-state overlap bound does not match cut tasks");
+        }
+        expected_state_bit_offset += cut.state_bit_width;
     }
     std::unique_lock cache_lock(graph_cache_mutex());
     auto& cache = graph_cache();
@@ -1248,7 +1293,10 @@ std::unordered_map<std::string, std::string> build_info() {
         {"memory_pressure_policy", "disabled_for_exact_hard_limit_only"},
         {"branch_support", "ryan_foster_same_different_feasibility"},
         {"cut_support", "sri3_sri5_divisor2_threshold_crossing_v1"},
-        {"cut_state_schema", "uint8_overlap_x16_active_prefix_v1"},
+        {"cut_state_schema", "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2"},
+        {"cut_state_bytes", std::to_string(sizeof(CutState))},
+        {"label_state_bytes", std::to_string(sizeof(State))},
+        {"cut_state_max_bits", "48"},
         {"max_active_cuts", "16"},
         {"completion_bound", "positive_cover_dual_threshold_pruning_v1"},
     };

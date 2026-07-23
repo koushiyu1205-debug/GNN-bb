@@ -1,0 +1,6 @@
+mip; sys_platform != "win32"
+networkx
+pytest
+pytest-cov
+numpy
+scipy

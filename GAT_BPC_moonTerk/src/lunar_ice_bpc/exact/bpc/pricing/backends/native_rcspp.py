@@ -8,6 +8,7 @@ from dataclasses import fields, replace
 import hashlib
 import importlib
 import json
+from math import isfinite
 import multiprocessing
 import os
 from pathlib import Path
@@ -26,9 +27,12 @@ from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
 from lunar_ice_bpc.exact.core.branching import branch_context_from_payload
 from lunar_ice_bpc.exact.core.cuts import (
+    CUT_DUAL_PROJECTION_SCHEMA_VERSION,
     CUT_STATE_SCHEMA_VERSION,
     MAX_NATIVE_ACTIVE_CUTS,
+    CutContext,
     cut_context_from_payload,
+    pricing_cut_context_from_duals,
     stable_payload_hash,
     true_dual_binding_hash,
     validate_live_sri_context,
@@ -45,7 +49,10 @@ from lunar_ice_bpc.exact.master.journey_rmp import (
 
 NATIVE_INPROCESS_BACKEND_ID = "native_rcspp_inprocess"
 NATIVE_HOST_BACKEND_ID = "native_rcspp_host"
-NATIVE_HOST_PROTOCOL = "lunar_spprc_host.v1"
+NATIVE_HOST_PROTOCOL = "lunar_spprc_host.v2"
+_NATIVE_CUT_STATE_BUILD_SCHEMA = (
+    "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2"
+)
 _STATIC_PAYLOAD_CACHE_LOCK = threading.RLock()
 _STATIC_PAYLOAD_CACHE: OrderedDict[int, tuple[weakref.ReferenceType, dict]] = OrderedDict()
 _STATIC_PAYLOAD_CACHE_MAX_ENTRIES = 16
@@ -417,7 +424,7 @@ def _request_from_ipc_payload(
             "data": data,
             "true_duals": JourneyDuals(
                 cover=dict(dual_payload.get("cover") or {}),
-                fleet_limit=float(dual_payload.get("fleet_limit") or 0.0),
+                fleet_limit=float(dual_payload.get("fleet_limit", 0.0)),
                 cuts=dict(dual_payload.get("cuts") or {}),
             ),
             "branch_context": branch_context_from_payload(
@@ -499,6 +506,13 @@ def _capability_blockers(request: BackendPricingRequest) -> tuple[str, ...]:
     if request.cut_state_required and request.cut_state_schema_version != CUT_STATE_SCHEMA_VERSION:
         blockers.append("native_cut_state_schema_mismatch")
     blockers.extend(validate_live_sri_context(request.cut_context))
+    active_ids = {cut.cut_id for cut in request.cut_context.cuts}
+    for cut_id, raw_dual in (request.true_duals.cuts or {}).items():
+        dual = float(raw_dual)
+        if not isfinite(dual):
+            blockers.append(f"native_nonfinite_cut_dual:{cut_id}")
+        elif dual != 0.0 and str(cut_id) not in active_ids:
+            blockers.append(f"native_nonzero_cut_dual_without_active_cut:{cut_id}")
     if len(request.cut_context.cuts) > MAX_NATIVE_ACTIVE_CUTS:
         blockers.append("native_active_cut_count_above_16")
     if len(request.data.task_ids) > 100:
@@ -559,9 +573,26 @@ def _stable_hash(payload) -> str:
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
+def _pricing_cut_context(request: BackendPricingRequest) -> CutContext:
+    """Return the exact cut subset that can affect this pricing objective.
+
+    The full RMP context remains on ``request.cut_context`` and is always bound
+    into the certificate.  Projection removes only IEEE values equal to zero;
+    no tolerance is permitted because an arbitrarily small nonzero dual still
+    contributes to reduced cost.
+    """
+
+    return pricing_cut_context_from_duals(
+        request.cut_context,
+        request.true_duals.cuts,
+        enabled=request.cut_dual_projection_enabled,
+    )
+
+
 def _native_request_payload(request: BackendPricingRequest) -> dict:
     data = request.data
     static = _native_static_payload(data)
+    pricing_cut_context = _pricing_cut_context(request)
     tasks = [
         {
             **row,
@@ -580,7 +611,7 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
                 **cut.to_payload(),
                 "dual": float((request.true_duals.cuts or {}).get(cut.cut_id, 0.0)),
             }
-            for cut in request.cut_context.cuts
+            for cut in pricing_cut_context.cuts
         ],
         "weight_cost": (
             0.0
@@ -627,6 +658,10 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
         "cut_state_schema_version": request.cut_state_schema_version,
         "active_cut_context_hash": request.cut_context.active_cut_context_hash,
         "active_cut_count": len(request.cut_context.cuts),
+        "pricing_cut_context_hash": pricing_cut_context.active_cut_context_hash,
+        "pricing_cut_count": len(pricing_cut_context.cuts),
+        "cut_dual_projection_enabled": bool(request.cut_dual_projection_enabled),
+        "cut_dual_projection_schema_version": CUT_DUAL_PROJECTION_SCHEMA_VERSION,
         "cut_lineage_hash": request.cut_lineage_hash,
         "live_cut_policy_hash": request.live_cut_policy_hash,
         "rmp_iteration_id": request.rmp_iteration_id,
@@ -711,6 +746,7 @@ def _audit_native_result(
 ) -> BackendResult:
     blockers = [str(item) for item in raw.get("certificate_blockers", [])]
     raw_bindings = dict(raw.get("request_bindings") or {})
+    pricing_cut_context = _pricing_cut_context(request)
     expected_bindings = {
         "instance_hash": request.instance_hash or _native_static_payload(request.data)["instance_hash"],
         "config_hash": request.config_hash,
@@ -720,6 +756,10 @@ def _audit_native_result(
         "rmp_iteration_id": request.rmp_iteration_id,
         "active_cut_context_hash": request.cut_context.active_cut_context_hash,
         "active_cut_count": len(request.cut_context.cuts),
+        "pricing_cut_context_hash": pricing_cut_context.active_cut_context_hash,
+        "pricing_cut_count": len(pricing_cut_context.cuts),
+        "cut_dual_projection_enabled": bool(request.cut_dual_projection_enabled),
+        "cut_dual_projection_schema_version": CUT_DUAL_PROJECTION_SCHEMA_VERSION,
         "cut_lineage_hash": request.cut_lineage_hash,
         "live_cut_policy_hash": request.live_cut_policy_hash,
         "cut_state_schema_version": request.cut_state_schema_version,
@@ -732,6 +772,11 @@ def _audit_native_result(
             binding_mismatches.append(key)
             blockers.append(f"native_result_binding_mismatch:{key}")
     build_info = dict(raw.get("build_info") or {})
+    if (
+        request.cut_state_required
+        and build_info.get("cut_state_schema") != _NATIVE_CUT_STATE_BUILD_SCHEMA
+    ):
+        blockers.append("native_engine_cut_state_schema_mismatch")
     native_engine_build_hash = _stable_hash(build_info) if build_info else ""
     if not native_engine_build_hash:
         blockers.append("native_engine_build_hash_missing")
@@ -838,10 +883,19 @@ def _audit_native_result(
                 default=0.0,
             ),
             "cut_state_required": request.cut_state_required,
-            "cut_state_effective": request.cut_state_enabled,
+            "full_cut_context_active": not request.cut_context.empty,
+            "pricing_cut_state_required": not pricing_cut_context.empty,
+            "cut_state_effective": not pricing_cut_context.empty,
             "cut_state_schema_version": request.cut_state_schema_version,
             "active_cut_count": len(request.cut_context.cuts),
             "active_cut_context_hash": request.cut_context.active_cut_context_hash,
+            "pricing_cut_count": len(pricing_cut_context.cuts),
+            "pricing_cut_context_hash": pricing_cut_context.active_cut_context_hash,
+            "projected_zero_dual_cut_count": (
+                len(request.cut_context.cuts) - len(pricing_cut_context.cuts)
+            ),
+            "cut_dual_projection_enabled": bool(request.cut_dual_projection_enabled),
+            "cut_dual_projection_schema_version": CUT_DUAL_PROJECTION_SCHEMA_VERSION,
             "cut_lineage_hash": request.cut_lineage_hash,
             "true_dual_binding_hash": request.dual_binding_hash,
             "objective_mode": request.objective_mode,

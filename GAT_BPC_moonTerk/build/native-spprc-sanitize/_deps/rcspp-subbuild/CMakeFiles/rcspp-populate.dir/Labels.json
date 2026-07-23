@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/CMakeFiles/rcspp-populate"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/CMakeFiles/rcspp-populate.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/CMakeFiles/rcspp-populate-complete.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/rcspp-populate-prefix/src/rcspp-populate-stamp/rcspp-populate-build.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/rcspp-populate-prefix/src/rcspp-populate-stamp/rcspp-populate-configure.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/rcspp-populate-prefix/src/rcspp-populate-stamp/rcspp-populate-download.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/rcspp-populate-prefix/src/rcspp-populate-stamp/rcspp-populate-install.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/rcspp-populate-prefix/src/rcspp-populate-stamp/rcspp-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/rcspp-populate-prefix/src/rcspp-populate-stamp/rcspp-populate-patch.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/rcspp-populate-prefix/src/rcspp-populate-stamp/rcspp-populate-test.rule"
+		},
+		{
+			"file" : "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-subbuild/rcspp-populate-prefix/src/rcspp-populate-stamp/rcspp-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"rcspp-populate"
+		],
+		"name" : "rcspp-populate"
+	}
+}

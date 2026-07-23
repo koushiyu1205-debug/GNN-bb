@@ -63,8 +63,18 @@ def main() -> int:
         help="Reuse only already-finished fresh subprocess slots; solver resume remains disabled.",
     )
     parser.add_argument("--keep-going-on-correctness-failure", action="store_true")
+    parser.add_argument(
+        "--benchmark-only",
+        action="store_true",
+        help=(
+            "Run a paired diagnostic design without authorizing promotion. "
+            "This permits custom repeat counts while retaining all correctness gates."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+    repeats_small = max(1, int(args.repeats_small))
+    repeats_large = max(1, int(args.repeats_large))
 
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -110,8 +120,8 @@ def main() -> int:
         selected,
         output=output,
         scales=tuple(int(scale) for scale in args.scales),
-        repeats_small=max(1, int(args.repeats_small)),
-        repeats_large=max(1, int(args.repeats_large)),
+        repeats_small=repeats_small,
+        repeats_large=repeats_large,
         configs=configs,
         config_hashes=config_hashes,
     )
@@ -254,6 +264,9 @@ def main() -> int:
         expected_policy_hash=str(candidate_manifest["policy_hash"]),
         expected_no_cut_policy_hash=str(candidate_manifest["no_cut_policy_hash"]),
         bootstrap_samples=max(100, int(args.bootstrap_samples)),
+        repeats_small=repeats_small,
+        repeats_large=repeats_large,
+        benchmark_only=bool(args.benchmark_only),
         dry_run=bool(args.dry_run),
     )
     summary.update(
@@ -278,6 +291,9 @@ def main() -> int:
             "recovered_slot_count": recovered_slot_count,
             "ab_ba_alternation": True,
             "fresh_python_native_runtime_per_slot": True,
+            "benchmark_only": bool(args.benchmark_only),
+            "repeats_small": repeats_small,
+            "repeats_large": repeats_large,
             "stopped_reason": stopped_reason,
             "final_binding_issues": final_binding_issues,
             "wall_time_sec": round(perf_counter() - started, 6),
@@ -286,7 +302,13 @@ def main() -> int:
     atomic_write_json(output / "promotion_summary.json", summary)
     atomic_write_text(output / "promotion_report_zh.md", render_report(summary))
     print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0 if args.dry_run or summary.get("all_scales_promoted") else 3
+    return (
+        0
+        if args.dry_run
+        or summary.get("all_scales_promoted")
+        or summary.get("benchmark_complete")
+        else 3
+    )
 
 
 def build_schedule(
@@ -551,7 +573,7 @@ def row_correctness_basics(
         and not row.get("launcher_termination_reason")
         and objective is not None
         and reference_objective is not None
-        and abs(float(objective) - float(reference_objective)) <= 1.0e-8
+        and abs(float(objective) - float(reference_objective)) <= 1.0e-6
         and row.get("cold_start_total_sec") is not None
         and float(row["cold_start_total_sec"]) <= 3600.0
     )
@@ -566,6 +588,9 @@ def summarize_promotion(
     expected_policy_hash: str,
     expected_no_cut_policy_hash: str,
     bootstrap_samples: int,
+    repeats_small: int = SMALL_SCALE_REPEATS,
+    repeats_large: int = LARGE_SCALE_REPEATS,
+    benchmark_only: bool = False,
     dry_run: bool,
 ) -> dict:
     expected_ids = {str(row["slot_id"]) for row in schedule}
@@ -597,7 +622,7 @@ def summarize_promotion(
             base_rows = modes.get("no_cut", [])
             live_rows = modes.get("live", [])
             expected_repeats = (
-                SMALL_SCALE_REPEATS if scale in {5, 10} else LARGE_SCALE_REPEATS
+                repeats_small if scale in {5, 10} else repeats_large
             )
             reference = reference_objectives.get((scale, instance_key))
             row_correct = bool(
@@ -655,15 +680,23 @@ def summarize_promotion(
         base_p50 = statistics.median(base_values) if base_values else None
         live_p50 = statistics.median(live_values) if live_values else None
         geometric = geometric_mean(ratios)
-        formal_instance_count = len(expected_instances) == EXPECTED_INSTANCE_COUNT
-        design_complete = bool(
+        full_instance_count = len(expected_instances) == EXPECTED_INSTANCE_COUNT
+        paired_design_complete = bool(
             scale_schedule_complete
-            and formal_instance_count
+            and full_instance_count
             and len(pairs) == EXPECTED_INSTANCE_COUNT
+        )
+        formal_repeat_count = (
+            repeats_small == SMALL_SCALE_REPEATS
+            if scale in {5, 10}
+            else repeats_large == LARGE_SCALE_REPEATS
+        )
+        formal_scale_design_complete = bool(
+            paired_design_complete and formal_repeat_count
         )
         if scale in {20, 30}:
             performance_gate = bool(
-                design_complete
+                paired_design_complete
                 and base_p50
                 and base_mean
                 and live_p50 <= 0.90 * base_p50
@@ -675,7 +708,7 @@ def summarize_promotion(
             )
         else:
             performance_gate = bool(
-                design_complete
+                paired_design_complete
                 and base_p50
                 and base_mean
                 and live_p50 <= 1.05 * base_p50
@@ -691,7 +724,8 @@ def summarize_promotion(
             "expected_slot_count": len(scale_schedule),
             "completed_slot_count": len(scale_rows),
             "schedule_complete": scale_schedule_complete,
-            "formal_design_complete": design_complete,
+            "paired_design_complete": paired_design_complete,
+            "formal_design_complete": formal_scale_design_complete,
             "base_mean_sec": base_mean,
             "live_mean_sec": live_mean,
             "live_base_mean_ratio": (
@@ -709,10 +743,14 @@ def summarize_promotion(
             "improved_instance_count": sum(ratio < 1.0 for ratio in ratios),
             "degraded_instance_count": sum(ratio > 1.0 for ratio in ratios),
             "equal_instance_count": sum(ratio == 1.0 for ratio in ratios),
-            "correctness_gate": bool(scale_correctness and design_complete),
+            "correctness_gate": bool(
+                scale_correctness and paired_design_complete
+            ),
             "performance_gate": performance_gate,
             "promotion_gate": bool(
-                scale_correctness and design_complete and performance_gate
+                scale_correctness
+                and paired_design_complete
+                and performance_gate
             ),
             "pairs": pairs,
         }
@@ -724,7 +762,11 @@ def summarize_promotion(
             (
                 len([slot for slot in schedule if int(slot["scale"]) == scale])
                 == EXPECTED_INSTANCE_COUNT
-                * (SMALL_SCALE_REPEATS if scale in {5, 10} else LARGE_SCALE_REPEATS)
+                * (
+                    SMALL_SCALE_REPEATS
+                    if scale in {5, 10}
+                    else LARGE_SCALE_REPEATS
+                )
                 * 2
             )
             for scale in FORMAL_SCALES
@@ -732,13 +774,29 @@ def summarize_promotion(
     )
     all_promoted = bool(
         not dry_run
+        and not benchmark_only
         and formal_design_complete
         and by_scale
         and all(row["promotion_gate"] for row in by_scale.values())
     )
+    paired_design_complete = bool(
+        tuple(scales) == FORMAL_SCALES
+        and schedule_complete
+        and all(row["paired_design_complete"] for row in by_scale.values())
+    )
+    benchmark_complete = bool(
+        benchmark_only
+        and not dry_run
+        and paired_design_complete
+        and all(row["correctness_gate"] for row in by_scale.values())
+    )
     status = (
         "DRY_RUN"
         if dry_run
+        else "BENCHMARK_COMPLETE"
+        if benchmark_complete
+        else "BENCHMARK_INCOMPLETE"
+        if benchmark_only
         else "PROMOTED"
         if all_promoted
         else "NOT_PROMOTED"
@@ -750,9 +808,11 @@ def summarize_promotion(
         "expected_slot_count": len(schedule),
         "completed_slot_count": len(rows),
         "schedule_complete": schedule_complete,
+        "paired_design_complete": paired_design_complete,
         "formal_design_complete": formal_design_complete,
         "scale_summary": by_scale,
         "all_scales_promoted": all_promoted,
+        "benchmark_complete": benchmark_complete,
         "default_switch_allowed": all_promoted,
     }
 

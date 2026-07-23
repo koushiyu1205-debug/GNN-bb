@@ -157,3 +157,72 @@ def test_formal_summary_requires_every_slot_and_every_correctness_binding() -> N
     assert invalid["formal_design_complete"]
     assert not invalid["scale_summary"]["5"]["correctness_gate"]
     assert not invalid["default_switch_allowed"]
+
+
+def test_objective_audit_matches_six_decimal_frozen_references() -> None:
+    module = _module()
+    (
+        _schedule,
+        rows,
+        _references,
+        engine_hash,
+        policy_hash,
+        no_cut_policy_hash,
+    ) = _formal_fixture(module)
+    row = dict(rows[0])
+    row["objective"] = 1.636391
+
+    assert module.row_correctness_basics(
+        row,
+        expected_engine_hash=engine_hash,
+        expected_policy_hash=policy_hash,
+        expected_no_cut_policy_hash=no_cut_policy_hash,
+        reference_objective=1.636390,
+    )
+
+    row["objective"] = 1.6363911
+    assert not module.row_correctness_basics(
+        row,
+        expected_engine_hash=engine_hash,
+        expected_policy_hash=policy_hash,
+        expected_no_cut_policy_hash=no_cut_policy_hash,
+        reference_objective=1.636390,
+    )
+
+
+def test_single_repeat_benchmark_is_complete_but_cannot_promote() -> None:
+    module = _module()
+    (
+        formal_schedule,
+        formal_rows,
+        references,
+        engine_hash,
+        policy_hash,
+        no_cut_policy_hash,
+    ) = _formal_fixture(module)
+    schedule = [
+        row for row in formal_schedule if int(row["repetition"]) == 1
+    ]
+    slot_ids = {str(row["slot_id"]) for row in schedule}
+    rows = [row for row in formal_rows if str(row["slot_id"]) in slot_ids]
+
+    summary = module.summarize_promotion(
+        rows,
+        schedule=schedule,
+        reference_objectives=references,
+        expected_engine_hash=engine_hash,
+        expected_policy_hash=policy_hash,
+        expected_no_cut_policy_hash=no_cut_policy_hash,
+        bootstrap_samples=100,
+        repeats_small=1,
+        repeats_large=1,
+        benchmark_only=True,
+        dry_run=False,
+    )
+
+    assert summary["status"] == "BENCHMARK_COMPLETE"
+    assert summary["paired_design_complete"]
+    assert summary["benchmark_complete"]
+    assert not summary["formal_design_complete"]
+    assert not summary["all_scales_promoted"]
+    assert not summary["default_switch_allowed"]

@@ -183,6 +183,8 @@ def test_native_cut_state_sequence_and_0_1_8_16_17_boundaries() -> None:
         assert result.frontier_empty
         assert not result.labels_dropped
         assert result.telemetry["active_cut_count"] == count
+        assert result.telemetry["pricing_cut_count"] == count
+        assert result.telemetry["projected_zero_dual_cut_count"] == 0
         assert result.telemetry["cut_state_effective"] is (count > 0)
         assert result.telemetry["rc_mismatch_count"] == 0
         if count:
@@ -197,6 +199,22 @@ def test_native_cut_state_sequence_and_0_1_8_16_17_boundaries() -> None:
     )
     assert overflow.engine_status == "UNSUPPORTED_FEATURE"
     assert "active_cut_count_exceeds_native_capability" in overflow.certificate_blockers
+
+    zero_dual_sixteen = backend.solve(
+        BackendPricingRequest(
+            data=data,
+            true_duals=JourneyDuals(
+                cover={},
+                cuts={cut.cut_id: -0.0 for cut in all_cuts[:16]},
+            ),
+            cut_context=CutContext(cuts=all_cuts[:16]),
+        )
+    )
+    assert zero_dual_sixteen.engine_status == "COMPLETE"
+    assert zero_dual_sixteen.telemetry["active_cut_count"] == 16
+    assert zero_dual_sixteen.telemetry["pricing_cut_count"] == 0
+    assert zero_dual_sixteen.telemetry["projected_zero_dual_cut_count"] == 16
+    assert not zero_dual_sixteen.telemetry["cut_state_effective"]
 
     # Reuse the in-process graph cache through the requested transition order;
     # the final no-cut request must not retain B's overlap state.
@@ -217,17 +235,112 @@ def test_native_cut_state_sequence_and_0_1_8_16_17_boundaries() -> None:
                 cut_context_hash=context.active_cut_context_hash,
             )
         )
-        observed.append((result.engine_status, result.telemetry["active_cut_count"]))
+        observed.append(
+            (
+                result.engine_status,
+                result.telemetry["active_cut_count"],
+                result.telemetry["pricing_cut_count"],
+            )
+        )
     assert observed == [
-        ("COMPLETE", 0),
-        ("COMPLETE", 1),
-        ("COMPLETE", 2),
-        ("COMPLETE", 1),
-        ("COMPLETE", 0),
+        ("COMPLETE", 0, 0),
+        ("COMPLETE", 1, 0),
+        ("COMPLETE", 2, 0),
+        ("COMPLETE", 1, 0),
+        ("COMPLETE", 0, 0),
     ]
 
 
-def test_stale_native_certificate_binding_fails_closed_but_keeps_audited_columns() -> None:
+def test_native_cut_capability_and_request_bindings_fail_closed() -> None:
+    data = load_lunar_ice_data(generate_instance(5, seed=7202202, index=1))
+    valid_cut = canonical_subset_row_cut(data.task_ids[:3])
+    valid_context = CutContext(cuts=(valid_cut,))
+    backend = NativeRcsppInprocessBackend()
+
+    unsupported_divisor = canonical_subset_row_cut(data.task_ids[:3], divisor=3)
+    result = backend.solve(
+        BackendPricingRequest(
+            data=data,
+            true_duals=JourneyDuals(cover={}),
+            cut_context=CutContext(cuts=(unsupported_divisor,)),
+        )
+    )
+    assert result.engine_status == "UNSUPPORTED_FEATURE"
+    assert (
+        f"unsupported_live_sri_divisor:{unsupported_divisor.cut_id}"
+        in result.certificate_blockers
+    )
+    assert not result.can_enter_certificate_audit
+
+    stale_schema = backend.solve(
+        BackendPricingRequest(
+            data=data,
+            true_duals=JourneyDuals(cover={}),
+            cut_context=valid_context,
+            cut_state_schema_version="stale-cut-state-schema",
+        )
+    )
+    assert stale_schema.engine_status == "UNSUPPORTED_FEATURE"
+    assert "native_cut_state_schema_mismatch" in stale_schema.certificate_blockers
+    assert not stale_schema.can_enter_certificate_audit
+
+    binding_cases = (
+        (
+            BackendPricingRequest(
+                data=data,
+                true_duals=JourneyDuals(cover={}),
+                dual_binding_hash="stale-dual-binding",
+            ),
+            "native_dual_binding_hash_mismatch",
+        ),
+        (
+            BackendPricingRequest(
+                data=data,
+                true_duals=JourneyDuals(cover={}),
+                branch_context_hash="stale-branch-context",
+            ),
+            "native_branch_context_hash_mismatch",
+        ),
+        (
+            BackendPricingRequest(
+                data=data,
+                true_duals=JourneyDuals(cover={}),
+                cut_context=valid_context,
+                cut_context_hash="stale-cut-context",
+            ),
+            "native_cut_context_hash_mismatch",
+        ),
+    )
+    for request, expected_blocker in binding_cases:
+        mismatch = backend.solve(request)
+        assert mismatch.engine_status == "HASH_MISMATCH"
+        assert expected_blocker in mismatch.certificate_blockers
+        assert not mismatch.can_enter_certificate_audit
+
+    invalid_dual_cases = (
+        (
+            JourneyDuals(cover={}, cuts={"not-active": 0.1}),
+            "native_nonzero_cut_dual_without_active_cut:not-active",
+        ),
+        (
+            JourneyDuals(cover={}, cuts={valid_cut.cut_id: float("nan")}),
+            f"native_nonfinite_cut_dual:{valid_cut.cut_id}",
+        ),
+    )
+    for duals, expected_blocker in invalid_dual_cases:
+        invalid = backend.solve(
+            BackendPricingRequest(
+                data=data,
+                true_duals=duals,
+                cut_context=valid_context,
+            )
+        )
+        assert invalid.engine_status == "UNSUPPORTED_FEATURE"
+        assert expected_blocker in invalid.certificate_blockers
+        assert not invalid.can_enter_certificate_audit
+
+
+def test_every_stale_native_certificate_binding_fails_closed_but_keeps_audited_columns() -> None:
     native = pytest.importorskip("lunar_spprc_native")
     data = load_lunar_ice_data(generate_instance(5, seed=7202203, index=1))
     cut = canonical_subset_row_cut(data.task_ids[:3])
@@ -250,13 +363,50 @@ def test_stale_native_certificate_binding_fails_closed_but_keeps_audited_columns
         separator_policy_version=LIVE_SRI_SEPARATOR_VERSION,
     )
     raw = dict(native.solve(_native_request_payload(request)))
-    raw["request_bindings"] = dict(raw["request_bindings"])
-    raw["request_bindings"]["active_cut_context_hash"] = "stale-cut-context"
-    with patch("lunar_spprc_native.solve", return_value=raw):
-        result = NativeRcsppInprocessBackend().solve(request)
+    stale_values = {
+        "instance_hash": "stale-instance",
+        "config_hash": "stale-config",
+        "dual_binding_hash": "stale-dual",
+        "branch_context_hash": "stale-branch",
+        "objective_mode": "stale-objective-mode",
+        "rmp_iteration_id": "stale-rmp-iteration",
+        "active_cut_context_hash": "stale-cut-context",
+        "active_cut_count": 2,
+        "pricing_cut_context_hash": "stale-pricing-cut-context",
+        "pricing_cut_count": 2,
+        "cut_dual_projection_enabled": False,
+        "cut_dual_projection_schema_version": "stale-projection-schema",
+        "cut_lineage_hash": "stale-lineage",
+        "live_cut_policy_hash": "stale-policy",
+        "cut_state_schema_version": "stale-cut-state-schema",
+        "separator_policy_version": "stale-separator",
+        "negative_eps": request.negative_eps * 2.0,
+    }
+    for binding_name, stale_value in stale_values.items():
+        stale_raw = dict(raw)
+        stale_raw["request_bindings"] = dict(raw["request_bindings"])
+        stale_raw["request_bindings"][binding_name] = stale_value
+        with patch("lunar_spprc_native.solve", return_value=stale_raw):
+            result = NativeRcsppInprocessBackend().solve(request)
 
-    assert "native_result_binding_mismatch:active_cut_context_hash" in result.certificate_blockers
-    assert not result.can_enter_certificate_audit
-    assert result.columns
-    assert result.telemetry["request_bindings_match"] is False
-    assert result.telemetry["rc_mismatch_count"] == 0
+        assert (
+            f"native_result_binding_mismatch:{binding_name}"
+            in result.certificate_blockers
+        )
+        assert not result.can_enter_certificate_audit
+        assert result.columns
+        assert result.telemetry["request_bindings_match"] is False
+        assert result.telemetry["rc_mismatch_count"] == 0
+
+    stale_engine_raw = dict(raw)
+    stale_engine_raw["build_info"] = dict(raw["build_info"])
+    stale_engine_raw["build_info"]["cut_state_schema"] = "stale-native-schema"
+    with patch("lunar_spprc_native.solve", return_value=stale_engine_raw):
+        stale_engine = NativeRcsppInprocessBackend().solve(request)
+    assert (
+        "native_engine_cut_state_schema_mismatch"
+        in stale_engine.certificate_blockers
+    )
+    assert not stale_engine.can_enter_certificate_audit
+    assert stale_engine.columns
+    assert stale_engine.telemetry["rc_mismatch_count"] == 0

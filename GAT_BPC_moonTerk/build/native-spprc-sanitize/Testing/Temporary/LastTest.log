@@ -1,0 +1,37 @@
+Start testing: Jul 22 15:33 CST
+----------------------------------------------------------
+1/2 Testing: lunar_spprc_native_tests
+1/2 Test: lunar_spprc_native_tests
+Command: "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/lunar_spprc_native_tests"
+Directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize
+"lunar_spprc_native_tests" start time: Jul 22 15:33 CST
+Output:
+----------------------------------------------------------
+[32m[2026-07-22 15:33:19.993][INFO ] Memory pressure: 32 MB / 1024000000000 MB. Trimming label queues.
+[0m[32m[2026-07-22 15:33:19.993][INFO ] Memory pressure: 32 MB / 1024000000000 MB. Trimming label queues.
+[0mnative lunar SPPRC smoke passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"lunar_spprc_native_tests" end time: Jul 22 15:33 CST
+"lunar_spprc_native_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/2 Testing: lunar_spprc_patch_queue_check
+2/2 Test: lunar_spprc_patch_queue_check
+Command: "/home/kai/miniconda3/bin/python" "/home/kai/work/GAT_BPC_moonTerk/native/lunar_spprc/../../scripts/check_rcspp_patch_queue.py" "--source" "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize/_deps/rcspp-src"
+Directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-sanitize
+"lunar_spprc_patch_queue_check" start time: Jul 22 15:33 CST
+Output:
+----------------------------------------------------------
+rcspp patch queue valid: /home/kai/work/GAT_BPC_moonTerk/third_party/patches/rcspp/manifest.json
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"lunar_spprc_patch_queue_check" end time: Jul 22 15:33 CST
+"lunar_spprc_patch_queue_check" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Jul 22 15:33 CST

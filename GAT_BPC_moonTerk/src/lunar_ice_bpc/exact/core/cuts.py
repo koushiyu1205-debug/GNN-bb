@@ -19,7 +19,12 @@ LIVE_SRI_SUBSET_SIZES = frozenset({3, 5})
 MAX_NATIVE_ACTIVE_CUTS = 16
 CUT_CONTEXT_SCHEMA_VERSION = "lunar_ice_bpc.cut_context.v2"
 CUT_LINEAGE_SCHEMA_VERSION = "lunar_ice_bpc.cut_lineage.v1"
-CUT_STATE_SCHEMA_VERSION = "lunar_ice_bpc.native_cut_state.uint8x16.v1"
+CUT_STATE_SCHEMA_VERSION = (
+    "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2"
+)
+CUT_DUAL_PROJECTION_SCHEMA_VERSION = (
+    "lunar_ice_bpc.native_pricing_cut_projection.exact_nonzero_dual.v1"
+)
 
 
 @dataclass(frozen=True)
@@ -238,6 +243,31 @@ def true_dual_binding_hash(
             "fleet_limit": float(fleet_limit),
             "cuts": sorted((str(key), float(value)) for key, value in (cuts or {}).items()),
         }
+    )
+
+
+def pricing_cut_context_from_duals(
+    context: CutContext,
+    cut_duals: Mapping[str, float] | None,
+    *,
+    enabled: bool = True,
+) -> CutContext:
+    """Project only exact-zero cut duals out of a pricing context.
+
+    ``context`` remains the full RMP/certificate context.  No numerical
+    tolerance is allowed here: every nonzero floating-point value, however
+    small, remains in pricing.
+    """
+
+    if not bool(enabled):
+        return context
+    duals = cut_duals or {}
+    return CutContext(
+        cuts=tuple(
+            cut
+            for cut in context.cuts
+            if float(duals.get(cut.cut_id, 0.0)) != 0.0
+        )
     )
 
 
