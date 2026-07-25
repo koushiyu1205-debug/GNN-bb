@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import isfinite
+from math import isclose, isfinite
 import os
 from time import perf_counter
 
@@ -555,6 +555,8 @@ def run_true_dual_root_final_judge(
     labeling_final_judge_exact_harvest_target: int | None = None,
     labeling_final_judge_pass_strategy: str = LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
     labeling_final_judge_harvest_time_cap_sec: float | None = None,
+    harvest_discovery_duals: JourneyDuals | None = None,
+    harvest_discovery_metadata: dict | None = None,
 ) -> FinalJudgeResult:
     """Run exhaustive fixed-graph pricing with fail-closed proof semantics.
 
@@ -604,6 +606,8 @@ def run_true_dual_root_final_judge(
             active_task_sets=active_task_sets,
             pass_strategy=labeling_final_judge_pass_strategy,
             harvest_time_cap_sec=labeling_final_judge_harvest_time_cap_sec,
+            harvest_discovery_duals=harvest_discovery_duals,
+            harvest_discovery_metadata=harvest_discovery_metadata,
         )
         if labeling_mode == "auto":
             result.pricing_payload.update(
@@ -615,6 +619,11 @@ def run_true_dual_root_final_judge(
                 }
             )
         return result
+
+    if harvest_discovery_duals is not None:
+        raise ValueError(
+            "harvest discovery duals require the labeling final judge"
+        )
 
     labeling_auto_payload = {}
     if labeling_mode == "auto":
@@ -764,6 +773,8 @@ def _run_labeling_pricer_final_judge(
     active_task_sets: set[frozenset[str]] | None = None,
     pass_strategy: str = LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
     harvest_time_cap_sec: float | None = None,
+    harvest_discovery_duals: JourneyDuals | None = None,
+    harvest_discovery_metadata: dict | None = None,
 ) -> FinalJudgeResult:
     start = perf_counter()
     max_exact_tasks = (
@@ -790,6 +801,21 @@ def _run_labeling_pricer_final_judge(
             f"{pass_strategy!r}; expected one of {sorted(LABELING_FINAL_JUDGE_PASS_STRATEGIES)!r}"
         )
     proof_only = normalized_pass_strategy == LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+    discovery_duals = harvest_discovery_duals or duals
+    discovery_dual_differs = not _journey_duals_equal(
+        discovery_duals,
+        duals,
+    )
+    _validate_harvest_discovery_duals(
+        discovery_duals,
+        official_duals=duals,
+        task_ids=data.task_ids,
+    )
+    discovery_metadata = dict(harvest_discovery_metadata or {})
+    if discovery_dual_differs and proof_only:
+        raise ValueError(
+            "harvest discovery duals cannot be used with proof-only strategy"
+        )
     normalized_harvest_cap = None
     if harvest_time_cap_sec is not None:
         normalized_harvest_cap = float(harvest_time_cap_sec)
@@ -800,13 +826,14 @@ def _run_labeling_pricer_final_judge(
 
     def run_labeling_pass(
         *,
+        pass_duals: JourneyDuals,
         stop_at_first_negative: bool,
         pass_wall_time_limit_sec: float | None,
     ) -> tuple[dict, tuple[JourneyColumn, ...], float]:
         pass_start = perf_counter()
         pass_payload, pass_columns = run_bpc_labeling_pricer(
             data,
-            duals,
+            pass_duals,
             config=LabelingPricingConfig(
                 mode=EXACT_ELEMENTARY_MODE,
                 max_exact_tasks=max_exact_tasks,
@@ -889,6 +916,7 @@ def _run_labeling_pricer_final_judge(
     proof_pass_wall = 0.0
     if proof_only:
         payload, columns, proof_pass_wall = run_labeling_pass(
+            pass_duals=duals,
             stop_at_first_negative=False,
             pass_wall_time_limit_sec=wall_time_limit_sec,
         )
@@ -907,6 +935,7 @@ def _run_labeling_pricer_final_judge(
             normalized_harvest_cap,
         )
         payload, columns, harvest_pass_wall = run_labeling_pass(
+            pass_duals=discovery_duals,
             stop_at_first_negative=True,
             pass_wall_time_limit_sec=harvest_pass_limit,
         )
@@ -922,8 +951,11 @@ def _run_labeling_pricer_final_judge(
     if (
         not proof_only
         and not negative_columns
-        and _pricing_state_from_payload(payload.get("pricing_state"))
-        != PricingState.CERTIFIED_NO_NEGATIVE
+        and (
+            discovery_dual_differs
+            or _pricing_state_from_payload(payload.get("pricing_state"))
+            != PricingState.CERTIFIED_NO_NEGATIVE
+        )
     ):
         remaining_for_proof = (
             None
@@ -933,6 +965,7 @@ def _run_labeling_pricer_final_judge(
         if remaining_for_proof is None or remaining_for_proof > 0.0:
             proof_pass_attempted = True
             payload, columns, proof_pass_wall = run_labeling_pass(
+                pass_duals=duals,
                 stop_at_first_negative=False,
                 pass_wall_time_limit_sec=remaining_for_proof,
             )
@@ -1040,6 +1073,30 @@ def _run_labeling_pricer_final_judge(
                 or harvest_pass_payload.get("true_audited_column_count")
                 or 0
             ),
+            "labeling_final_judge_harvest_pass_true_best_reduced_cost": (
+                _first_float(
+                    harvest_pass_payload.get("true_best_reduced_cost")
+                )
+            ),
+            "harvest_discovery_dual_used": bool(
+                discovery_dual_differs and harvest_pass_attempted
+            ),
+            "harvest_discovery_dual_source": (
+                str(
+                    discovery_metadata.get("worker_dual_source")
+                    or discovery_metadata.get("dual_source")
+                    or "explicit_discovery_dual"
+                )
+                if discovery_dual_differs
+                else "current_true_rmp_dual"
+            ),
+            "harvest_discovery_dual_worker_only": bool(
+                discovery_dual_differs
+            ),
+            "harvest_discovery_dual_can_certify": False,
+            "harvest_discovery_columns_reaudited_under_true_dual": True,
+            "harvest_discovery_metadata": discovery_metadata,
+            "proof_pass_official_dual_source": "current_true_rmp_dual",
             "labeling_final_judge_proof_pass_attempted": bool(proof_pass_attempted),
             "labeling_final_judge_proof_pass_skip_reason": proof_pass_skip_reason,
             "labeling_final_judge_proof_pass_status": proof_pass_payload.get("status", ""),
@@ -1112,6 +1169,91 @@ def _smaller_optional_time_limit(
     if pass_cap_sec is None:
         return max(0.0, float(total_limit_sec))
     return max(0.0, min(float(total_limit_sec), float(pass_cap_sec)))
+
+
+def _validate_harvest_discovery_duals(
+    discovery_duals: JourneyDuals,
+    *,
+    official_duals: JourneyDuals,
+    task_ids: tuple[str, ...],
+) -> None:
+    expected_tasks = {str(task_id) for task_id in task_ids}
+    observed_tasks = {
+        str(task_id) for task_id in discovery_duals.cover
+    }
+    if observed_tasks != expected_tasks:
+        raise ValueError("harvest discovery dual task universe mismatch")
+    values = [
+        *(float(value) for value in discovery_duals.cover.values()),
+        float(discovery_duals.fleet_limit),
+        *(
+            float(value)
+            for value in (discovery_duals.cuts or {}).values()
+        ),
+    ]
+    if any(not isfinite(value) for value in values):
+        raise ValueError("harvest discovery dual contains NaN/Inf")
+    if not isclose(
+        float(discovery_duals.fleet_limit),
+        float(official_duals.fleet_limit),
+        rel_tol=0.0,
+        abs_tol=1.0e-12,
+    ):
+        raise ValueError(
+            "harvest discovery dual may change task-cover duals only"
+        )
+    discovery_cuts = {
+        str(key): float(value)
+        for key, value in (discovery_duals.cuts or {}).items()
+    }
+    official_cuts = {
+        str(key): float(value)
+        for key, value in (official_duals.cuts or {}).items()
+    }
+    if discovery_cuts != official_cuts:
+        raise ValueError(
+            "harvest discovery dual may not change cut duals"
+        )
+
+
+def _journey_duals_equal(
+    left: JourneyDuals,
+    right: JourneyDuals,
+) -> bool:
+    if not isclose(
+        float(left.fleet_limit),
+        float(right.fleet_limit),
+        rel_tol=0.0,
+        abs_tol=1.0e-12,
+    ):
+        return False
+    left_cover = {
+        str(key): float(value) for key, value in left.cover.items()
+    }
+    right_cover = {
+        str(key): float(value) for key, value in right.cover.items()
+    }
+    if left_cover.keys() != right_cover.keys():
+        return False
+    if any(
+        not isclose(
+            left_cover[key],
+            right_cover[key],
+            rel_tol=0.0,
+            abs_tol=1.0e-12,
+        )
+        for key in left_cover
+    ):
+        return False
+    left_cuts = {
+        str(key): float(value)
+        for key, value in (left.cuts or {}).items()
+    }
+    right_cuts = {
+        str(key): float(value)
+        for key, value in (right.cuts or {}).items()
+    }
+    return left_cuts == right_cuts
 
 
 def _labeling_final_judge_downgrade_reason(

@@ -59,7 +59,10 @@ from lunar_ice_bpc.exact.bpc.pricing.dual_stabilization import (
     build_tail_dual_center,
     build_worker_duals_with_tail_center,
 )
-from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_columns
+from lunar_ice_bpc.exact.bpc.pricing.harvest import (
+    DeferredHarvestBuffer,
+    harvest_addable_negative_columns,
+)
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
 from lunar_ice_bpc.exact.bpc.pricing import final_judge as final_judge_module
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import _run_compact_single_journey_pricing_final_judge
@@ -2424,6 +2427,69 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertAlmostEqual(payload["harvest_worst_selected_true_rc"], -5.0, delta=1.0e-9)
         self.assertGreaterEqual(payload["harvest_duplicate_signature_count"], 1)
         self.assertTrue(all(row["would_enter_master"] for row in payload["reports"] if row["task_set"] == sorted(fresh.task_set)))
+
+    def test_harvest_micro_batch_defers_and_true_dual_reprices_without_drop(
+        self,
+    ) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        data = load_lunar_ice_data(instance)
+        universe = enumerate_direct_journey_columns(
+            data, max_exact_tasks=5
+        )
+        columns = tuple(universe.columns[:3])
+        duals = JourneyDuals(
+            cover={
+                task_id: 1000.0 for task_id in data.task_ids
+            },
+            fleet_limit=0.0,
+        )
+        pool = ColumnPool()
+        view = MasterColumnView()
+        deferred = DeferredHarvestBuffer()
+
+        selected, first = harvest_addable_negative_columns(
+            tuple(
+                (-10.0 + index, column)
+                for index, column in enumerate(columns)
+            ),
+            pool=pool,
+            view=view,
+            negative_eps=1.0e-6,
+            max_selected=3,
+            guidance_duals=duals,
+            deferred_buffer=deferred,
+            micro_batch_size=1,
+        )
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(first["deferred_buffer_count_after"], 3)
+        self.assertEqual(first["deferred_permanent_drop_count"], 0)
+        selected_bpc = BpcColumn(
+            signature=column_signature_from_journey(selected[0]),
+            objective=selected[0].objective,
+            payload=selected[0],
+        )
+        self.assertTrue(pool.add(selected_bpc).added)
+        self.assertTrue(
+            view.add_from_pool(
+                selected_bpc, node_id="root", pool=pool
+            )
+        )
+
+        second_selected, second = harvest_addable_negative_columns(
+            tuple(),
+            pool=pool,
+            view=view,
+            negative_eps=1.0e-6,
+            max_selected=3,
+            guidance_duals=duals,
+            deferred_buffer=deferred,
+            micro_batch_size=1,
+        )
+        self.assertEqual(len(second_selected), 1)
+        self.assertEqual(second["deferred_repriced_count"], 3)
+        self.assertEqual(second["deferred_buffer_count_after"], 2)
+        self.assertNotEqual(second_selected[0], selected[0])
+        self.assertEqual(second["guidance_filter_count"], 0)
 
     def test_b2_worker_selected_entry_audit_requires_true_dual_branch_and_addability(self) -> None:
         instance = generate_instance(5, seed=629001, index=1)

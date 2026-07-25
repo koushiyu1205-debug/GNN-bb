@@ -1,0 +1,53 @@
+{
+  "schema_version": "lunar_ice_bpc.proof_tail_context_config.v1",
+  "selection_stream": "targeted_pilot",
+  "selection_salt": "p0v2-proof-tail-qc0-qd1-pilot-20260724",
+  "split_manifest": "data/gat_p0v2/p0v2_gat_split_manifest.json",
+  "allowed_partitions": ["development"],
+  "contexts": [
+    {
+      "context_id": "scale20_instance043_final_tail",
+      "scale": 20,
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_043_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_route_admission_sentinel_20260724/fresh_p0_scale20/snapshots/fabdf89b92bcde3b/8e93433dafe4c4394259f76328df719a34538db7aa75f9f644304cd276ee56b5.json",
+      "source_role": "mathematical_context",
+      "completion_bound": "off",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0,
+      "selection_reason": "targeted_final_judge_binding"
+    },
+    {
+      "context_id": "scale20_instance043_root16",
+      "scale": 20,
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_043_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_route_admission_sentinel_20260724/fresh_p0_scale20/snapshots/fabdf89b92bcde3b/d0dcbea706021433c899fe29af79caa1b6a015c737ab0cd263815b47adff9a2c.json",
+      "source_role": "mathematical_context",
+      "completion_bound": "off",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0,
+      "selection_reason": "targeted_mid_rmp_binding"
+    },
+    {
+      "context_id": "scale30_instance007_final_tail",
+      "scale": 30,
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_007_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_route_admission_sentinel_20260724/fresh_p0_scale30/snapshots/c1e4e704fd4a8e69/62ba357248af9c97ee4f3344b5a80eef19c21479a767a005590ae6070ad724df.json",
+      "source_role": "exact_control",
+      "completion_bound": "off",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0,
+      "selection_reason": "targeted_final_judge_binding"
+    },
+    {
+      "context_id": "scale30_instance007_root30",
+      "scale": 30,
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_007_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_route_admission_sentinel_20260724/fresh_p0_scale30/snapshots/c1e4e704fd4a8e69/dfc86c7a3f035c62449658ec41c4fdebab65f37cd549e0aedc24b4aae972cc47.json",
+      "source_role": "mathematical_context",
+      "completion_bound": "off",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0,
+      "selection_reason": "targeted_mid_rmp_binding"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "lunar_ice_bpc.proof_tail_e2e_pair_manifest.v1",
+  "selection_frozen_before_outcome": false,
+  "selection_frozen_before_scale30_outcome": true,
+  "manifest_materialized_after_scale20_pilot": true,
+  "selection_uses_qc0_qd1_outcomes": false,
+  "split_manifest": "data/gat_p0v2/p0v2_gat_split_manifest.json",
+  "allowed_partition": "development",
+  "control_config": "configs/benchmarks/p0v2_gat_binding_v2_b0_probe.yaml",
+  "candidate_config": "configs/benchmarks/p0v2_proof_tail_scale30_qd1_probe.yaml",
+  "candidate_rule": "scale30_qd1_else_q0",
+  "production_policy_changed": false,
+  "pairs": [
+    {
+      "scale": 20,
+      "index": 43,
+      "instance_content_hash": "fabdf89b92bcde3b",
+      "run_order": ["control", "candidate"]
+    },
+    {
+      "scale": 30,
+      "index": 17,
+      "instance_content_hash": "6d085f5edc474c17",
+      "run_order": ["control", "candidate"]
+    }
+  ]
+}

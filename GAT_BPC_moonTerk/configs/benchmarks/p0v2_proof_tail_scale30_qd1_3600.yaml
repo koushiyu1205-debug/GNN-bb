@@ -1,0 +1,28 @@
+model_id: "P0V2_PROOF_TAIL_SCALE30_QD1_CANDIDATE_3600_20260724"
+live_sri_policy: "P0"
+cold_start: true
+minimum_runtime_memory_gb: 1
+native_completion_bound_enabled: false
+native_subset_dominance_enabled: true
+native_cut_state_enabled: true
+native_proof_queue_experiment_policy: "scale30_qd1_else_q0"
+native_final_judge_pass_policy: "harvest_then_proof"
+native_final_judge_pass_policy_by_scale:
+  "30": "branch_adaptive_sparse_harvest_v1"
+native_adaptive_harvest_cap_sec_by_scale:
+  "30": 2.0
+profiles:
+  "30":
+    worker_max_tasks: 30
+    exact_max_tasks: 30
+    ng_sizes: [6, 10, 14, 30]
+    harvest_target: 64
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 180
+    memory_limit_gb: 10
+    backend_id: "native_rcspp_host"
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 255
+    tree_max_branch_depth: 12

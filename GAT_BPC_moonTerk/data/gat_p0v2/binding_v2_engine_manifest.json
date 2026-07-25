@@ -1,0 +1,24 @@
+{
+  "binding_schema_version": "lunar_ice_bpc.canonical_solve_binding.v2",
+  "engine_hash_by_scale": {
+    "5": "3281f119657f4569",
+    "10": "3281f119657f4569",
+    "20": "3281f119657f4569",
+    "30": "06decac1eeb5cfe4",
+    "50": "06decac1eeb5cfe4",
+    "100": "06decac1eeb5cfe4"
+  },
+  "engine_id_by_scale": {
+    "5": "native_rcspp_inprocess",
+    "10": "native_rcspp_inprocess",
+    "20": "native_rcspp_inprocess",
+    "30": "native_rcspp_host",
+    "50": "native_rcspp_host",
+    "100": "native_rcspp_host"
+  },
+  "experiment_control_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+  "gat_experiment_family_id": "P0V2_CROSS_SCALE_GAT_ORDERING_V1",
+  "generated_on": "2026-07-23",
+  "same_code_b0_control_id": "P0V2_BINDING_V2_SAME_CODE_B0_CONTROL_20260723",
+  "schema_version": "lunar_ice_bpc.p0v2_engine_manifest.v1"
+}

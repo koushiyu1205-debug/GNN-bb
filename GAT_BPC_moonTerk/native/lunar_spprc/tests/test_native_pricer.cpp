@@ -109,6 +109,7 @@ int main() {
     assert(negative.search_exhaustive);
     assert(!negative.labels_dropped);
     assert(!negative.routes.empty());
+    assert(negative.telemetry.best_reduced_cost_events.empty());
     assert(!negative.telemetry.graph_cache_hit);
     bool found_multi_sortie = false;
     for (const auto& route : negative.routes) {
@@ -119,6 +120,31 @@ int main() {
         }
     }
     assert(found_multi_sortie);
+
+    auto harvest_params = params;
+    harvest_params.exact_proof = false;
+    harvest_params.harvest_target = 2;
+    const auto harvest = lunar_spprc::solve(model(), harvest_params);
+    assert(!harvest.routes.empty());
+    assert(!harvest.telemetry.best_reduced_cost_events.empty());
+    assert(
+        harvest.telemetry.best_reduced_cost_event_count_total >=
+        harvest.telemetry.best_reduced_cost_events.size());
+    double previous_elapsed = -1.0;
+    double previous_best = std::numeric_limits<double>::infinity();
+    std::size_t previous_labels = 0;
+    std::size_t previous_solutions = 0;
+    for (const auto& event : harvest.telemetry.best_reduced_cost_events) {
+        assert(event.elapsed_seconds >= previous_elapsed);
+        assert(event.extended_labels >= previous_labels);
+        assert(event.solution_count > previous_solutions);
+        assert(event.discovered_reduced_cost == event.best_reduced_cost);
+        assert(event.best_reduced_cost < previous_best);
+        previous_elapsed = event.elapsed_seconds;
+        previous_labels = event.extended_labels;
+        previous_solutions = event.solution_count;
+        previous_best = event.best_reduced_cost;
+    }
 
     auto subset_cut_model = model();
     subset_cut_model.cuts.push_back({

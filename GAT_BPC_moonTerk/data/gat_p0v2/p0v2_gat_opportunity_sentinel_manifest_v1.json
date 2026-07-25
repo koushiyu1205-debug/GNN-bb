@@ -1,0 +1,1946 @@
+{
+  "calibration_used": false,
+  "candidate_instance_count": 192,
+  "instances": [
+    {
+      "instance_content_hash": "a0c148fcb2b68407",
+      "instance_id": "lunar_ice_005_001_seed85724001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_001_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "bade3f45019f14b90f28122c3dfc267dc919a12f540d018e30c6bcdd9504236c",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.729953722331285
+    },
+    {
+      "instance_content_hash": "cee2de3a069eb00f",
+      "instance_id": "lunar_ice_005_002_seed85725001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_002_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "dd7528711310f0b4de55e2f2d5070760363cd57f24840a45794d61a6d2999bcb",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8650689388333068
+    },
+    {
+      "instance_content_hash": "ee5b4fbccd980232",
+      "instance_id": "lunar_ice_005_003_seed85726001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_003_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "63200462730222954ea5a1792f15284c8aed5ef33b2bf891522d2e04b010e62b",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.3872072925905817
+    },
+    {
+      "instance_content_hash": "dbbb8721f8a6e216",
+      "instance_id": "lunar_ice_005_004_seed85727001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_004_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "b7349fed0bc85d90f72d5259578f4ad4bcaa5243aab164f8b3f505e4efc37eee",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.7156467393613481
+    },
+    {
+      "instance_content_hash": "db4045ca71d4542d",
+      "instance_id": "lunar_ice_005_005_seed85728001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_005_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "33a36db5b32153fb7e7d5cfe439d01abd00751c465fc037779f79c58a841488d",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.20171247182873248
+    },
+    {
+      "instance_content_hash": "ca93062b199a257f",
+      "instance_id": "lunar_ice_005_006_seed85729001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_006_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "38e68be52518d5b961bc47c96830dfb243c0b011e2db463809d30deacf1a7766",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.22226785988195571
+    },
+    {
+      "instance_content_hash": "f6ddcd39221f75ad",
+      "instance_id": "lunar_ice_005_007_seed85730001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_007_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "d5f945c50aef01e22c3ed4cd2f7bff6ea70ee688640e004ec59fa2f2aac7736f",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8358348470746328
+    },
+    {
+      "instance_content_hash": "df0062e48cc51679",
+      "instance_id": "lunar_ice_005_008_seed85731001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_008_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "ff7f851447b886134dfb73fb5b3a9572788faee578a7e2dc52e109dc0e693486",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9980395483505352
+    },
+    {
+      "instance_content_hash": "abbd8b8dca64f676",
+      "instance_id": "lunar_ice_005_009_seed85732001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_009_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "36eb0d6929ee6ed6c48f09b5cd68b8965e52375e750bfce442c882d363dc5c67",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.21452411477542352
+    },
+    {
+      "instance_content_hash": "c68bf0725cb461d6",
+      "instance_id": "lunar_ice_005_012_seed85735001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_012_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "a2e26182fbcd445477f3ec1454f0036cf496d40b94ae483b2c94a8c71bca344d",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6362667984756644
+    },
+    {
+      "instance_content_hash": "7dd8ecb30761a8dd",
+      "instance_id": "lunar_ice_005_014_seed85737001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_014_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "e51795334e657909451eddff18fba0eff87586988c9d18039293fdf5ef30cadc",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8948910951861729
+    },
+    {
+      "instance_content_hash": "9ccad4974b1df200",
+      "instance_id": "lunar_ice_005_015_seed85738001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_015_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "e9ba5cf79ad32d08eb4bf9e02086d522af0b8109dfc924adad63f48c056e44a1",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9129999260429258
+    },
+    {
+      "instance_content_hash": "5fbe4020283f85b1",
+      "instance_id": "lunar_ice_005_016_seed85739001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_016_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "3c6ee0981c9d64452bacd8fc56b8d10a145270d23467a066ee6c120ed5e49e2f",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.23606685365358754
+    },
+    {
+      "instance_content_hash": "362acd7ecbeecb8a",
+      "instance_id": "lunar_ice_005_017_seed85740001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_017_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "ef388a8f196dc594aec09b408125dc832e8738752737f29e33164e013040c1cf",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9344565009463884
+    },
+    {
+      "instance_content_hash": "ba596971797e6507",
+      "instance_id": "lunar_ice_005_020_seed85743001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_020_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "e83ab4a8ca7face6f9afb8d1c4cd15002a52990d3e8b74c8812992198dcadf6b",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9071457779014043
+    },
+    {
+      "instance_content_hash": "fb948df9a125df3f",
+      "instance_id": "lunar_ice_005_022_seed85745001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_022_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "dadc7a4f1deca7de1e9539fe9999553bcb7549b7bc64f0fd47dccf55deaf4827",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8549267237812496
+    },
+    {
+      "instance_content_hash": "16b4cc3290350e96",
+      "instance_id": "lunar_ice_005_023_seed85746001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_023_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "3ab50886a7b719b012b65b6f51607f1d7c290cc65c1a5cbca05dc3a44e0b8d8f",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.22932484900931308
+    },
+    {
+      "instance_content_hash": "29bd419cc6d185a3",
+      "instance_id": "lunar_ice_005_025_seed85748001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_025_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "70d007041a2f508f042175a7a8e15369867928df73322253913c501c0671b4f3",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.44067424631265095
+    },
+    {
+      "instance_content_hash": "8543a307bfa57b85",
+      "instance_id": "lunar_ice_005_026_seed85749001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_026_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "88a9604fb945da3b51cd472b1719e8d113f106eed44ccfb52ed9e34a2de7a6db",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5338344759595864
+    },
+    {
+      "instance_content_hash": "1b9f61bfdf104bb4",
+      "instance_id": "lunar_ice_005_027_seed85750001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_027_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "9f11cfd1a4191002b542ef2a07bc6a72768dd86afc1d452da1b89841849ceccb",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6213655363863817
+    },
+    {
+      "instance_content_hash": "4a28f6f4b18471df",
+      "instance_id": "lunar_ice_005_028_seed85751001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_028_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "7b9bee6cbcdcf70a8305ca8d9c1ef98f60f2dc0f9d6fd8fd0e077f83d41b7f85",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.4828480735276236
+    },
+    {
+      "instance_content_hash": "42cd443614a25bf5",
+      "instance_id": "lunar_ice_005_029_seed85752001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_029_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "d5cc5ccf643294f49f01791b00b827fab36e8b6e04cdf254f709415e1466819a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8351495748831418
+    },
+    {
+      "instance_content_hash": "2984e5418edd5c10",
+      "instance_id": "lunar_ice_005_031_seed85754001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_031_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "4da3c28fb60913d813a21ff9848f31a2e994623dbddbd3637b699f47154eedaf",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.30328002937861626
+    },
+    {
+      "instance_content_hash": "1bf9b7d393eb7615",
+      "instance_id": "lunar_ice_005_032_seed85755001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_032_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "c9dcab679ad50f1862fde627119b33d76a18c1aefdc7981de456f8f899425087",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.788523400110382
+    },
+    {
+      "instance_content_hash": "3ad3d1cac42a44ba",
+      "instance_id": "lunar_ice_005_033_seed85756001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_033_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "7f4a6f33d104fe3adfdd9fdbf19386d71e2f759e74ca0e963ed2334d8a31ddc1",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.49722952857066005
+    },
+    {
+      "instance_content_hash": "98a2f09b25b343b9",
+      "instance_id": "lunar_ice_005_034_seed85757001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_034_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "18f0ac956f56a123edb807bbc723f4d726c94328c5486a57153a75023a3b6202",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.09742239616692895
+    },
+    {
+      "instance_content_hash": "96bc1e900a67c929",
+      "instance_id": "lunar_ice_005_035_seed85758001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_035_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "2e63e91e41ee52dab768443ea61e9aaa4f0c4864d8c903210344a21641d92091",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.18121201504430332
+    },
+    {
+      "instance_content_hash": "c99f78d6daa613cb",
+      "instance_id": "lunar_ice_005_036_seed85759001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_036_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "1329946ae92928ea926d9acdda250e7649e754c68daf37f8d6f441f7d700956f",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.07485320673109598
+    },
+    {
+      "instance_content_hash": "649d8488c453e817",
+      "instance_id": "lunar_ice_005_037_seed85760001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_037_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "86b194f5b4518454fa5ae269e3716794f5951bf934416e61b3d8883ec3cfbcf5",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5261471843589957
+    },
+    {
+      "instance_content_hash": "00ff8d63c372ab8f",
+      "instance_id": "lunar_ice_005_038_seed85761001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_038_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "b5800e815c05a46cfc2d3b0e9df5d417841fbfb2fd9307eafffd6f7679e58cea",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.7089852395838735
+    },
+    {
+      "instance_content_hash": "3c509c0a6eee507f",
+      "instance_id": "lunar_ice_005_040_seed85763001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_040_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "69c51b07bb0b35c262313970f0c17693caeeef7d8e5bfb112f12993f2d92cee1",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.41316384257065125
+    },
+    {
+      "instance_content_hash": "2a5e62a52987ec36",
+      "instance_id": "lunar_ice_005_042_seed85765001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_042_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "ad3d4946b1ef067542a39ea4689c587edf8c29d5ce0cd099e8218bb5e3682bf7",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6767164037318559
+    },
+    {
+      "instance_content_hash": "100ce7f590925bc5",
+      "instance_id": "lunar_ice_005_043_seed85766001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_043_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "bc5b64d517c89ae715edd6c9610e2f3d66f0f43851b4e59f536bfa32151da5bc",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.7357695598837232
+    },
+    {
+      "instance_content_hash": "b51c68f8f0b77d47",
+      "instance_id": "lunar_ice_005_044_seed85767001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_044_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "2c7ba942d115dfa76b6788f349db19d729af13972f5896d5ceb743fb9d3bac67",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.17376191979663913
+    },
+    {
+      "instance_content_hash": "bcbe7e37ad8e95c8",
+      "instance_id": "lunar_ice_005_045_seed85768001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_045_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "8563f06dd6826abe5123dafbf0ab0cb641d9813377bffa911252497fcf8d5974",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5210562008055689
+    },
+    {
+      "instance_content_hash": "b98b406bd108b145",
+      "instance_id": "lunar_ice_005_046_seed85769001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_046_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "e2129c108b51aba0c319f04a0f715249fd6469bd0b2401da3c7558d483b01a31",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8830964603797101
+    },
+    {
+      "instance_content_hash": "472464cb360b0b5b",
+      "instance_id": "lunar_ice_005_047_seed85770001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_047_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "136fac7518d89562f87bc524763c0684000ade29d0c65908e33344997cd81f9f",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.0759227548486215
+    },
+    {
+      "instance_content_hash": "71ca3162887ffdcb",
+      "instance_id": "lunar_ice_005_048_seed85771001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_048_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "2ee3e17704c232c60991c763d15313858d6a6d841f973705eb48fe2c347e2aa6",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.18316468387343646
+    },
+    {
+      "instance_content_hash": "0a4081acd568b9c3",
+      "instance_id": "lunar_ice_005_049_seed85772001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_049_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "480e9112e4b83e16bbcdb304ffd27d35662f1ef161fe0554652ebbd3ba88a9ef",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.2814722701193384
+    },
+    {
+      "instance_content_hash": "0d50d6d62e1a95c5",
+      "instance_id": "lunar_ice_005_052_seed85775001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_052_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "e7e106b2b76df6a420b61b5dde4401ebfd79a3f3930dd5d91e465278f57e7d0c",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9057773767776139
+    },
+    {
+      "instance_content_hash": "3c7dff90673c2a84",
+      "instance_id": "lunar_ice_005_053_seed85776001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_053_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "6c1ae56981530db97fd73b02f0ec044a6e745a966eff73f3281e944b7936688f",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.422285402544116
+    },
+    {
+      "instance_content_hash": "fc4cc5ff77b92392",
+      "instance_id": "lunar_ice_005_054_seed85777001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_054_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "87231de6e73064b9aa93fd5644c2372fd138807b255d05f429e9cb249679a7d4",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5278795899131993
+    },
+    {
+      "instance_content_hash": "b6146fa90aa39d1c",
+      "instance_id": "lunar_ice_005_055_seed85778001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_055_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "df414260368962c5ea1256071272bc1c3868b0a2447df61abac6e81622e0553a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8720895275969602
+    },
+    {
+      "instance_content_hash": "a0c2be4b93eb0423",
+      "instance_id": "lunar_ice_005_056_seed85779001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_056_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "899b0638b0dfa7181f5c15d3510f5995a5ce2c81f8e6b7e659959543c36a3552",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5375217331319379
+    },
+    {
+      "instance_content_hash": "f160a430f5f5bfbb",
+      "instance_id": "lunar_ice_005_057_seed85780001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_057_logical_graph.json",
+      "scale": 5,
+      "selected": false,
+      "selection_key_hash": "bf05bf2ee4103d32264380fe12cf84d66b16523bff1d4568a8b3b76e9b87c268",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.7461814393500967
+    },
+    {
+      "instance_content_hash": "233d24855de3613d",
+      "instance_id": "lunar_ice_005_058_seed85781001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_058_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "539da5f50e218e2c5c2c919aa3c70d3b0b077e0cc1e077c8a256c2aeb3be282a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.3266242717055603
+    },
+    {
+      "instance_content_hash": "b9c7d0ead0834ed6",
+      "instance_id": "lunar_ice_005_059_seed85782001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_059_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "4d75336eb53aa7c6da3f694b51445b1a9abf220230288a4c121b3e57ad133a4a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.3025695939333938
+    },
+    {
+      "instance_content_hash": "0908432414699f95",
+      "instance_id": "lunar_ice_005_060_seed85783001",
+      "path": "data/gat_p0v2/development_instances/scale_005/instance_060_logical_graph.json",
+      "scale": 5,
+      "selected": true,
+      "selection_key_hash": "7cba3b1abefdddaf277530dec110a14c8c03675e2db0df03c5e2f4652847e1e4",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.48721665766696937
+    },
+    {
+      "instance_content_hash": "c8761c554eaf4a36",
+      "instance_id": "lunar_ice_010_001_seed90724001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_001_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "b230c496a6a1e64f25f2a0d0ea144739a4e8eb5acebee5ed9bc96fa22153691a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6960566394615239
+    },
+    {
+      "instance_content_hash": "a8f1bba507f5617f",
+      "instance_id": "lunar_ice_010_002_seed90725001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_002_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "a8102f89622de3e50ffef6d41af2948285002037c0199166e1b8e400b2d09ff7",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6564969740303961
+    },
+    {
+      "instance_content_hash": "2200f1ce7c47b817",
+      "instance_id": "lunar_ice_010_003_seed90726001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_003_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "ee6a471f1b6913ecc12aeb2b57e6d8259c489394c9f5c2e5478150b9f9ce61bd",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9313091708130836
+    },
+    {
+      "instance_content_hash": "865304df36562d6f",
+      "instance_id": "lunar_ice_010_005_seed90728001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_005_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "e83f53f39137f3cb58b0b0ccc25b7da8783d25595acbdbe19d0304d45d4fdcbd",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9072163076063757
+    },
+    {
+      "instance_content_hash": "9f4e7927e3f55b19",
+      "instance_id": "lunar_ice_010_006_seed90729001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_006_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "18ffaaf2008596ec03808bb20429f17fd778878bd411f0b793bdb530f921a737",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.09765118034603969
+    },
+    {
+      "instance_content_hash": "8ec5b9429a3702b7",
+      "instance_id": "lunar_ice_010_007_seed90730001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_007_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "35cb88430e4c4cb4b801f41775eea5c63753e2c2e5b484f248e4cfb6187db423",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.21013690602403406
+    },
+    {
+      "instance_content_hash": "7eaea9bbbbc70fcf",
+      "instance_id": "lunar_ice_010_008_seed90731001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_008_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "1eda17a8600a0640d36781d296fab70031906218580357a7dbe5c42fb06a9dfd",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.12051532612535007
+    },
+    {
+      "instance_content_hash": "9cf91463db87f16d",
+      "instance_id": "lunar_ice_010_009_seed90732001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_009_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "4b3cd8ce0ed672be944d58bb9bef00f2401a5efae461fb7224ed38d61c6b3c36",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.2938971999236289
+    },
+    {
+      "instance_content_hash": "c23dde0107502407",
+      "instance_id": "lunar_ice_010_010_seed90733001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_010_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "77b8f61ec98752383f0ddfb065a2059a99a0dcf7b53e951e73c21a3dc29f7d6b",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.4676660370983233
+    },
+    {
+      "instance_content_hash": "9dfd7996174d3044",
+      "instance_id": "lunar_ice_010_011_seed90734001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_011_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "003d26e55925967f312adbfcaeb122ab0b2a8fad2cc1732d677bfddbe23e22fd",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.000933104508609929
+    },
+    {
+      "instance_content_hash": "710dffd7a07b8bac",
+      "instance_id": "lunar_ice_010_012_seed90735001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_012_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "8e9e84f4f73a4bc91b0f05191bd5c526a6fcd57f54f40647df948891f412570d",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5571063135205147
+    },
+    {
+      "instance_content_hash": "ce0b4ec275eb9ed6",
+      "instance_id": "lunar_ice_010_013_seed90736001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_013_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "84fb8cc2a8c47187be0d2e766a722022981e18fbc028257a4455e1306a0d8370",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5194633460275939
+    },
+    {
+      "instance_content_hash": "155c29e87f863b38",
+      "instance_id": "lunar_ice_010_014_seed90737001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_014_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "cb1385b69a91ea6b79757b1895e167c3a49f745732b7410222c4e380203dc55b",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.7932666369257003
+    },
+    {
+      "instance_content_hash": "e18cfe5d3ae64eef",
+      "instance_id": "lunar_ice_010_015_seed90738001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_015_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "9c363b07e0310c5fec657d5ea0d170f9517032ab867c352732f36a04512801e8",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6102024931171324
+    },
+    {
+      "instance_content_hash": "5b776ca68a7bc7c7",
+      "instance_id": "lunar_ice_010_017_seed90740001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_017_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "801d27f7aa000b16381df1fef0c346e146a83cf32403a2777245659c9213d2c6",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5004448871277419
+    },
+    {
+      "instance_content_hash": "6594563ed00b99ab",
+      "instance_id": "lunar_ice_010_018_seed90741001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_018_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "0fcf903c0984db0481116ed40d61b4802da5202c7eba352c0a45a0faec528da6",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.061760916383281225
+    },
+    {
+      "instance_content_hash": "b7efea7e27ff27f1",
+      "instance_id": "lunar_ice_010_019_seed90742001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_019_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "0e0f9aab1485b6f72880853cf34a7f4377b123df00efca8a06ff696e0d445cd2",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.05492560078393792
+    },
+    {
+      "instance_content_hash": "7448afdc9296648a",
+      "instance_id": "lunar_ice_010_022_seed90745001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_022_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "437368121aaf066215c8802ad4de8a58ad562aadc470b4fe873f2ee1230820fd",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.2634797138404644
+    },
+    {
+      "instance_content_hash": "71a2e428d7b58cbd",
+      "instance_id": "lunar_ice_010_023_seed90746001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_023_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "d2a306590eaf94043957a082cd1632d35053587a5d9c4b66b137c293486bd390",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8228000609803402
+    },
+    {
+      "instance_content_hash": "1ac4b60dea9c9dac",
+      "instance_id": "lunar_ice_010_024_seed90747001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_024_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "08b404a8c6f0688834a2f0931b838179c1b73e9db49f7d8429300da9c669315f",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.03399685974631129
+    },
+    {
+      "instance_content_hash": "d622d746df5447e8",
+      "instance_id": "lunar_ice_010_025_seed90748001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_025_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "086dad16ae710dff381eb53cd123b15be28e9cf04c977f51c05fe7ec255e9746",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.03292352489228653
+    },
+    {
+      "instance_content_hash": "a575ad9b611faad0",
+      "instance_id": "lunar_ice_010_026_seed90749001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_026_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "5ab26bbecfd37f2faeafc7006f8d62a2e66669eca725511f7aff1c211248e572",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.35428498657695506
+    },
+    {
+      "instance_content_hash": "c8e38ed3b6f301c7",
+      "instance_id": "lunar_ice_010_030_seed90753001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_030_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "24fa3564982444f4ee5b44075d1650b7fb14224fe7bfc266597389c147599ae8",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.1444428797332345
+    },
+    {
+      "instance_content_hash": "d0f9080548675cc9",
+      "instance_id": "lunar_ice_010_031_seed90754001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_031_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "8364751319fc503edeb2fcca12183c7faab5d4eee83c682f6ba0745caf9d964c",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5132516070971047
+    },
+    {
+      "instance_content_hash": "b0948195f9a68f03",
+      "instance_id": "lunar_ice_010_032_seed90755001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_032_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "12311c290534f180b62e2568ed7a18abdd099c9423cb7665ca591ecfc35c7c04",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.07106185914490817
+    },
+    {
+      "instance_content_hash": "4f8b548451286215",
+      "instance_id": "lunar_ice_010_033_seed90756001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_033_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "df9bb278619b1567c87c1962b25a5ea569740aaaa96eaba4a36ceb6e15ab2af6",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8734694999599067
+    },
+    {
+      "instance_content_hash": "7ff4cf772a00ae97",
+      "instance_id": "lunar_ice_010_034_seed90757001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_034_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "6137ef5465746e39e0d3f437fd2fd8cce0b91e5ebfc6e1ec977ff06772fd4677",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.3797597485585855
+    },
+    {
+      "instance_content_hash": "2e1e0cfb0355ebf8",
+      "instance_id": "lunar_ice_010_035_seed90758001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_035_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "21067127dfb827ec94a0aac1a0fdbe7024ecbed2c82f3d4d93dcf2cd5484334e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.1290045473431013
+    },
+    {
+      "instance_content_hash": "6d52dcec097fc131",
+      "instance_id": "lunar_ice_010_036_seed90759001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_036_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "1ef1520b1bf7ef8fb6d8de5b041834dc68ccfe17da4a019bfa9420ef51e07b37",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.12086975833150837
+    },
+    {
+      "instance_content_hash": "49b3e2bc32d951d0",
+      "instance_id": "lunar_ice_010_037_seed90760001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_037_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "e543309838602f61a20dc90bee7f568203f302035dc715044fb9f54c19dc85ef",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.895556485331668
+    },
+    {
+      "instance_content_hash": "d8ce315277da6fbb",
+      "instance_id": "lunar_ice_010_038_seed90761001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_038_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "719034cb1aead78dafa9aea4459c23575e3ce1124aeadc9729f7e44a8c4c4dac",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.4436066623556302
+    },
+    {
+      "instance_content_hash": "aa2294abd17a9205",
+      "instance_id": "lunar_ice_010_040_seed90763001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_040_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "054d11f8661ec1619efafbb5b406700a335add8260e72595a21f0118e54c9c1d",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.020707247871651034
+    },
+    {
+      "instance_content_hash": "0c3a3ad5b61bbd7f",
+      "instance_id": "lunar_ice_010_044_seed90767001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_044_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "3776207d74086f6624abae27e93d25c14b9ebcc29246b11085430796a8303f0e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.21664622366736963
+    },
+    {
+      "instance_content_hash": "10cc277bdb3da7e7",
+      "instance_id": "lunar_ice_010_045_seed90768001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_045_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "9dc64e210fdfad2a7d5026405a48fe6bc643148dc09f2a4e6be3f37985038f85",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6163071470945158
+    },
+    {
+      "instance_content_hash": "924c8edd5735e144",
+      "instance_id": "lunar_ice_010_046_seed90769001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_046_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "fa93030d8198b6ab40ca69da05ac204606723a74ec8aaa83965384ff31589633",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9788057239507876
+    },
+    {
+      "instance_content_hash": "58b9f9fa90e2c30e",
+      "instance_id": "lunar_ice_010_047_seed90770001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_047_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "aeb5b60f00a4c965428bcfd60c17440aa8e1839bef2e8e8b0c23dc83659e5926",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6824601923587067
+    },
+    {
+      "instance_content_hash": "af1ad39b808cc66a",
+      "instance_id": "lunar_ice_010_048_seed90771001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_048_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "daa594575e6930c92d77cddc6f5f3e3054fa347a1618246accca200e0166e779",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8540890420248715
+    },
+    {
+      "instance_content_hash": "4b197d46fc8f3aae",
+      "instance_id": "lunar_ice_010_049_seed90772001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_049_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "36d32afd371da00cf93edf31905dd3f2043a8d93330c33856ef9b1d865f70f22",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.21415966684354837
+    },
+    {
+      "instance_content_hash": "63667c9393db701a",
+      "instance_id": "lunar_ice_010_050_seed90773001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_050_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "14a1a65499b4b92c76dad3b4ba4ff2aaf10c09cf01dd6f09951336cb6d7354ff",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.08059157910766403
+    },
+    {
+      "instance_content_hash": "f1ae7204c6dd6224",
+      "instance_id": "lunar_ice_010_051_seed90774001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_051_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "744d43d20ad9fd5c4108f5ac49679d28cc366c7909e508a3c56038ca0ec71196",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.454303969173317
+    },
+    {
+      "instance_content_hash": "2ed05ff1a66deb65",
+      "instance_id": "lunar_ice_010_052_seed90775001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_052_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "e5e6f5f3060ae304c18c8f83d2a7014e4d074e93cbe473f080afe5a6d27fbd45",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.898055431205687
+    },
+    {
+      "instance_content_hash": "819f354c1033d691",
+      "instance_id": "lunar_ice_010_053_seed90776001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_053_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "b073ecf53685839450602b41ab6bb0df8a314e04ae4f73f84f7b83e5395d1752",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6892688845314492
+    },
+    {
+      "instance_content_hash": "0fc829c029e08650",
+      "instance_id": "lunar_ice_010_054_seed90777001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_054_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "776bae356ae93a2e226c35b76a27fde52723e91a3038b17e99eaaf2f2954008a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.4664868240751376
+    },
+    {
+      "instance_content_hash": "a2a3da460ef7487a",
+      "instance_id": "lunar_ice_010_055_seed90778001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_055_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "5d9ba8fe0dc68572096a63d47174d98d4291f9ae550d1dff9b785943ea097345",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.36565643503652195
+    },
+    {
+      "instance_content_hash": "384a936e73cc102b",
+      "instance_id": "lunar_ice_010_056_seed90779001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_056_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "933a11859c83f46ad7ef6655d80396f36e9f216d5f7685a23b1bdacbbdcf8ab0",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5751048041534118
+    },
+    {
+      "instance_content_hash": "a0e8c1e839a4cefe",
+      "instance_id": "lunar_ice_010_058_seed90781001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_058_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "30c90394d75cf2fabfb60035efa2da1f72ff6e11a5c409504a9710df2942347c",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.19056723007030366
+    },
+    {
+      "instance_content_hash": "e31c6eeeaf86cee0",
+      "instance_id": "lunar_ice_010_059_seed90782001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_059_logical_graph.json",
+      "scale": 10,
+      "selected": false,
+      "selection_key_hash": "a52fa020d79575da0d97347f9450af0a89126705b10e7850f136884f06b8d68e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6452579574757545
+    },
+    {
+      "instance_content_hash": "c88f39240aef64cf",
+      "instance_id": "lunar_ice_010_060_seed90783001",
+      "path": "data/gat_p0v2/development_instances/scale_010/instance_060_logical_graph.json",
+      "scale": 10,
+      "selected": true,
+      "selection_key_hash": "180ef2a1453df651af46bbb954d290d97928be511db0f97b093a638837c6a340",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.09397808491961954
+    },
+    {
+      "instance_content_hash": "22eddeea96c51b85",
+      "instance_id": "lunar_ice_020_001_seed100724001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_001_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "4c76c8b72e64e274a6802c07a31c3c8b17a9aff0823c627f0af4ca995472fb79",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.29868750068853306
+    },
+    {
+      "instance_content_hash": "6c2dc37bf3ddcffe",
+      "instance_id": "lunar_ice_020_002_seed100725001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_002_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "4790bfd0d8093705f9e4241be22222bdf75055a9187bc7593072b1971a729913",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.2795524487374096
+    },
+    {
+      "instance_content_hash": "96064cd0b028041a",
+      "instance_id": "lunar_ice_020_003_seed100726001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_003_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "d3336d9b358937c17678766267c1246830c9dd420979ef00f1d5b2221457aaf6",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8250034812859085
+    },
+    {
+      "instance_content_hash": "431301ca95d545bc",
+      "instance_id": "lunar_ice_020_004_seed100727001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_004_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "3cc3314e38fbfee27fabb93c8cea93c10ad95da8eacb72129f9a15d3169c0593",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.23735340270739866
+    },
+    {
+      "instance_content_hash": "858281922ec35289",
+      "instance_id": "lunar_ice_020_005_seed100728001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_005_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "946d4158937ec15363d7b6c3bc3ee339d324fc705b813b1a7ddbb961f4c41f01",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5797921029329656
+    },
+    {
+      "instance_content_hash": "42ce6b2915009cd6",
+      "instance_id": "lunar_ice_020_006_seed100729001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_006_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "dbca6e6a67bc9e95f2ca99d1777f2f4141deb10632be42ecf030a113b20d14b3",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8585576066759466
+    },
+    {
+      "instance_content_hash": "dea174e257e2e224",
+      "instance_id": "lunar_ice_020_007_seed100730001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_007_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "3a89709690a8973624b43f84b88421459b02195bc30c2f6f29a6b3d7602eb9aa",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.2286596648779401
+    },
+    {
+      "instance_content_hash": "be51c0e2698d1f64",
+      "instance_id": "lunar_ice_020_008_seed100731001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_008_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "bdf392a374d561e9c9d458b32190e24acb2097c860477d0fb5b44d121066f8d7",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.7419978760779791
+    },
+    {
+      "instance_content_hash": "9f9f4487ce15b8c6",
+      "instance_id": "lunar_ice_020_009_seed100732001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_009_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "aedfbbc0ceebc6fd1bf587056abd71783e2cf52dfb5cb8bfe17053ec837ca7dc",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6831014009211877
+    },
+    {
+      "instance_content_hash": "ed0c30166a833874",
+      "instance_id": "lunar_ice_020_010_seed100733001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_010_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "69eac3fb99d500f7faadd673d0c28946db6dff1ae29a4bca1476bbe7713c4aa9",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.4137384881267572
+    },
+    {
+      "instance_content_hash": "2d57a13cda063027",
+      "instance_id": "lunar_ice_020_011_seed100734001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_011_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "c21bf0c37c4561823fef91f623aa843fe62a7cccd2a1138d6da84651c2fb0d74",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.7582388379344329
+    },
+    {
+      "instance_content_hash": "0dec54b9f285b9eb",
+      "instance_id": "lunar_ice_020_013_seed100736001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_013_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "1d9baf0036a4c7b1fdbd67121a8c403da0478ae0961dc9ed1578a61ed0a30cbb",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.11565679316722133
+    },
+    {
+      "instance_content_hash": "e21b68efacc33537",
+      "instance_id": "lunar_ice_020_014_seed100737001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_014_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "224b98f05f16b215f062985dd594d963a2158ba634e465dffbe1629b68c8178e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.13396602505153046
+    },
+    {
+      "instance_content_hash": "1b7dec0c407dce0c",
+      "instance_id": "lunar_ice_020_015_seed100738001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_015_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "de7777a34f9d81adf3f47a4ca60449ea957ea0d5786cd1e027c1483a75b2966c",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8690104268749703
+    },
+    {
+      "instance_content_hash": "e0b6d2d4849b93d0",
+      "instance_id": "lunar_ice_020_018_seed100741001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_018_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "e163159126edcc3a4340992246ef6cfc3423be9b0e7178318b6004723cbd489a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8804181556105768
+    },
+    {
+      "instance_content_hash": "1a9d8aab35f7c3ab",
+      "instance_id": "lunar_ice_020_019_seed100742001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_019_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "fea84c5ed312258a00e3b8e5d62582c5dffc7bc5caea117c5d9f2bd3d7916de0",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9947555285935513
+    },
+    {
+      "instance_content_hash": "9270f979e5929d1d",
+      "instance_id": "lunar_ice_020_020_seed100743001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_020_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "69fcf7ff34709b1ee8574e8e82fbba0763c2a9235cc0c5e4b105d3faaa71943e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.41401624661051745
+    },
+    {
+      "instance_content_hash": "d2a3aac10915c11e",
+      "instance_id": "lunar_ice_020_021_seed100744001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_021_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "ac980a6cc32055f8de103105792d7a118a79cb286b1ff829e1c4c1bd1dbf0563",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6741949573071236
+    },
+    {
+      "instance_content_hash": "a71927fe97989c6b",
+      "instance_id": "lunar_ice_020_022_seed100745001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_022_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "d4b068ebb0c86aacf5d69f296145dea07c9293f96f35d312859c5993bd392bc4",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.830816800634041
+    },
+    {
+      "instance_content_hash": "ba6518a9b1923642",
+      "instance_id": "lunar_ice_020_023_seed100746001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_023_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "aca03c0976c919dbdedca14c343a0ce609ea5df8009d0aa2946382db1349c178",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6743199847321971
+    },
+    {
+      "instance_content_hash": "0319c8d2575839d5",
+      "instance_id": "lunar_ice_020_024_seed100747001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_024_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "6197f86d44bcfa234cbd168d4b0fef783806211f85c82fabca8828050685a9fa",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.381225134541399
+    },
+    {
+      "instance_content_hash": "400b3195b9b735f7",
+      "instance_id": "lunar_ice_020_025_seed100748001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_025_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "ec4ff2bff20fae3119fb65d6f6fe78bccc728a43532230601c5a2db455d7a559",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9230949133507795
+    },
+    {
+      "instance_content_hash": "9fdf15ab760e72c8",
+      "instance_id": "lunar_ice_020_026_seed100749001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_026_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "a75577f5becc975a7983f828f47f48d000cb7c7e3018fc51e1e70371e0a1965c",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.6536478972400793
+    },
+    {
+      "instance_content_hash": "e1a5a0af9e0d6014",
+      "instance_id": "lunar_ice_020_028_seed100751001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_028_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "878a93a3f2d4e6afe4e61ad00dc7938d70c9d6510dd4abf3363f2e8d479c2519",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.529458262945656
+    },
+    {
+      "instance_content_hash": "27f50f40908a41d7",
+      "instance_id": "lunar_ice_020_030_seed100753001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_030_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "70570631f95cabd3515370a5e79291ea9155d3a56ba82d6e415db26337bc278a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.4388278839118011
+    },
+    {
+      "instance_content_hash": "07572c7f1a5aff77",
+      "instance_id": "lunar_ice_020_033_seed100756001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_033_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "08432609db4ac4b456b21e705b2171cedd508d07db86d428bdbdcdd8c2430e0e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.032274606138609725
+    },
+    {
+      "instance_content_hash": "412e9331a2fa5dbe",
+      "instance_id": "lunar_ice_020_034_seed100757001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_034_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "5fcb48b5606d5376d7f3beb77df9ff2ee5ac06264a4d7c07b98a2d2dd460708e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.37419561794415773
+    },
+    {
+      "instance_content_hash": "fac01e219f661ddc",
+      "instance_id": "lunar_ice_020_035_seed100758001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_035_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "80d35212d794e27d732f1ccc0516ab30302565dfda64f89213c17936bce1d6de",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5032244964600809
+    },
+    {
+      "instance_content_hash": "3fbfa3bbe7a2d983",
+      "instance_id": "lunar_ice_020_036_seed100759001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_036_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "52f65b587ea6e372fd8c85e0d1a1cc29173665773044defc6bdd456289bb7d4a",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.32407160673633545
+    },
+    {
+      "instance_content_hash": "5ad878ce25e3a40a",
+      "instance_id": "lunar_ice_020_037_seed100760001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_037_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "817e004a8e62ec467ed9c0f9a547528a1132cabc007285e912aafb52d02931da",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5058288747808424
+    },
+    {
+      "instance_content_hash": "02b53ea0ee27b184",
+      "instance_id": "lunar_ice_020_038_seed100761001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_038_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "5ee58d1c0fe7e12f24cb1f9e497e235c9a5ce633a7d05ef405d03ca27d1201e3",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.37069017348395006
+    },
+    {
+      "instance_content_hash": "2adcacc88c8b9977",
+      "instance_id": "lunar_ice_020_039_seed100762001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_039_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "da2fa7039a26cd71fb5db917af724d8e06f604e9c071f28483d101291a22904b",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.852289617900307
+    },
+    {
+      "instance_content_hash": "a6ca860e963c3623",
+      "instance_id": "lunar_ice_020_040_seed100763001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_040_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "1434d9e233f26837c9670bf5990aca55cacfd48430a28843c5c816f790d595b8",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.07893144390613716
+    },
+    {
+      "instance_content_hash": "f35e89ad2d060fb5",
+      "instance_id": "lunar_ice_020_041_seed100764001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_041_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "5c519d1d60b81c3e4d40519793d61c5601bc0c3c06f1584d2effedd2b52c7585",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.3606203266833465
+    },
+    {
+      "instance_content_hash": "fabdf89b92bcde3b",
+      "instance_id": "lunar_ice_020_043_seed100766001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_043_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "7a1e2ccd6c58d503bd16638199b8318246c6a3409e99a489382638e4d510877e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.4770229341050681
+    },
+    {
+      "instance_content_hash": "9286e70e80795d5c",
+      "instance_id": "lunar_ice_020_045_seed100768001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_045_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "02df0226562180ce89b15be81c81cd4a924f73d431c4fe575bb48027f0500f21",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.01121533809612708
+    },
+    {
+      "instance_content_hash": "62ceee84961695aa",
+      "instance_id": "lunar_ice_020_046_seed100769001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_046_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "8a9196d3ad47a4c722ddeb9d5c2ab1d218f3d717aa9cb3b600c63e1113836a37",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5412840143956418
+    },
+    {
+      "instance_content_hash": "b7b9fecef6e2acd3",
+      "instance_id": "lunar_ice_020_047_seed100770001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_047_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "781a4e3772fe818eff86d80695f4092cb063e168f902bc07f54ab5cc27f010e8",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.46915139058818944
+    },
+    {
+      "instance_content_hash": "26462b2d2b2599c3",
+      "instance_id": "lunar_ice_020_048_seed100771001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_048_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "20076c3d7f1769f5472a807a75501cb8a8c56572385a81ea5df4922295241a94",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.12511326314333152
+    },
+    {
+      "instance_content_hash": "769985bf30a88a9f",
+      "instance_id": "lunar_ice_020_049_seed100772001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_049_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "ccd253c0e9a973a3e2bbbf4f135ff9dbf7fb67cb8eb88163215f5427bc2e811b",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.8000843378046392
+    },
+    {
+      "instance_content_hash": "7676b4a89e9da564",
+      "instance_id": "lunar_ice_020_051_seed100774001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_051_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "f1825f025245a87b0129fbba2e9ff3a67cbe3a8fdc61e3bb8cf16c957aed493d",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.943395555559866
+    },
+    {
+      "instance_content_hash": "c73cfd4388e066a1",
+      "instance_id": "lunar_ice_020_052_seed100775001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_052_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "72d02bd50715bd733ed3152ca97fe1f263365a1a07e033a5edca98eaeb85f5a4",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.4484889407240961
+    },
+    {
+      "instance_content_hash": "34850d2ec50eff22",
+      "instance_id": "lunar_ice_020_053_seed100776001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_053_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "fcaa8758e8e47738d9f93847d9da382e5895c827837a04add26d563ed52eb2f5",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9869770614685808
+    },
+    {
+      "instance_content_hash": "2692e99b4d96a48f",
+      "instance_id": "lunar_ice_020_054_seed100777001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_054_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "1f4520869c2100214ba103cbd87e412e2ba707c04e236fd304b5c27ef91db526",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.12214854513524998
+    },
+    {
+      "instance_content_hash": "50d05cf46929bff0",
+      "instance_id": "lunar_ice_020_055_seed100778001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_055_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "49be66b719373b9a4ebad84b1c899987181bc8a91ae73a0b53361f84da4ce13d",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.2880615422265835
+    },
+    {
+      "instance_content_hash": "08636d1c73ef9caa",
+      "instance_id": "lunar_ice_020_056_seed100779001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_056_logical_graph.json",
+      "scale": 20,
+      "selected": true,
+      "selection_key_hash": "3b21edb29a90404ac9b5d4c12c99a549671796a7ff090df7bdb7ff3f8f9a0d3e",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.2309864579243035
+    },
+    {
+      "instance_content_hash": "430ec1998a429d8e",
+      "instance_id": "lunar_ice_020_057_seed100780001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_057_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "8d3eb29bfe9ecebcae7272b90a8218b49bc903c5346bd7606251f356d50a5ba8",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.5517379408689707
+    },
+    {
+      "instance_content_hash": "3b6ad5e8d8e18306",
+      "instance_id": "lunar_ice_020_059_seed100782001",
+      "path": "data/gat_p0v2/development_instances/scale_020/instance_059_logical_graph.json",
+      "scale": 20,
+      "selected": false,
+      "selection_key_hash": "fb72405ee839aac421325dc8cc1b6c9aa500ba3737ef0344054ed6b4e2cc36f1",
+      "selection_probability": 0.5,
+      "selection_uniform": 0.9822120887476787
+    },
+    {
+      "instance_content_hash": "9f32f66b6229d572",
+      "instance_id": "lunar_ice_030_002_seed110725001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_002_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "403033f28f6c8b2f93b99ee578937c39c26fa96606a9ae4978d3df00213588cd",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.2507355181873427
+    },
+    {
+      "instance_content_hash": "06acf344fe42c09c",
+      "instance_id": "lunar_ice_030_003_seed110726001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_003_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "6e8f222d12a13a8a4358e3b6382f19c050bb6cf67f5aad4798645e130ae79c4b",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.43187154388818255
+    },
+    {
+      "instance_content_hash": "8392e179ba315a10",
+      "instance_id": "lunar_ice_030_004_seed110727001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_004_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "d40b6c911bdb2bab0afa745649bf32be8cc5e5b8d93cbd0d1c70a4fff8425804",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.8282993177671015
+    },
+    {
+      "instance_content_hash": "035c88d3cf1bb7c5",
+      "instance_id": "lunar_ice_030_006_seed110729001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_006_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "bd0d8a81c4e171adfc88c0590415ab2967d4a54d5b258b301738c5de57dd3144",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.7384878699130064
+    },
+    {
+      "instance_content_hash": "c1e4e704fd4a8e69",
+      "instance_id": "lunar_ice_030_007_seed110730001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_007_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "73dec3effd128df355e477244926b69e17571e2b190fa1529b43b9550d006c74",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.4526178799542981
+    },
+    {
+      "instance_content_hash": "18e023321593ad18",
+      "instance_id": "lunar_ice_030_008_seed110731001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_008_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "571bd7e46715d7d9c3d099b6c878e457d033416ac6ad831fdc8b3e3dce111b76",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.3402686054824565
+    },
+    {
+      "instance_content_hash": "ff544b0fbf2f7357",
+      "instance_id": "lunar_ice_030_012_seed110735001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_012_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "dcf40cd1d9328a91205c3166140c1d232ad5d24f0cbff774970e099ad4b0b00c",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.8630989086461317
+    },
+    {
+      "instance_content_hash": "358de48cf5769c27",
+      "instance_id": "lunar_ice_030_013_seed110736001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_013_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "1161535fbda94f9e71da09939cae3d93b87ed7afbba269df2a36afd33f4b7099",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.06789132201598602
+    },
+    {
+      "instance_content_hash": "e95f514498293185",
+      "instance_id": "lunar_ice_030_014_seed110737001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_014_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "d06af3f3a97a4bc2e1360caefa84f398ce93d9d2b201fdbf7f7932e398cdc676",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.8141319723012909
+    },
+    {
+      "instance_content_hash": "ea4b20b0c14b8112",
+      "instance_id": "lunar_ice_030_015_seed110738001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_015_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "6bde3732623b0fdbeba27db034698d330b78ddc757548e734fbad5ecd025556d",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.42135949115821014
+    },
+    {
+      "instance_content_hash": "68d463cb7b0f3d8e",
+      "instance_id": "lunar_ice_030_016_seed110739001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_016_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "b057937b3df588ceddb8bbb4e017aede1051db84d46f81a76a615da4b42124e7",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.6888363052257401
+    },
+    {
+      "instance_content_hash": "6d085f5edc474c17",
+      "instance_id": "lunar_ice_030_017_seed110740001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_017_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "c3d667d39e55acff35b6d7a6d95d97d4efcca85895be6a1b4d793fd75ef708ff",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.7649903194090573
+    },
+    {
+      "instance_content_hash": "2498a712c0f570fa",
+      "instance_id": "lunar_ice_030_019_seed110742001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_019_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "39c8d7b43e93d4a70e1ecd685f4f7e09fd10edbc82a6ffa3d81002405753e47d",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.22572086477755643
+    },
+    {
+      "instance_content_hash": "e5a4f0ebefc3bdd0",
+      "instance_id": "lunar_ice_030_020_seed110743001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_020_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "b55f0d24be5d5b7f9ef2c416c7374b8d638c9a716f1a0f99174255823559d698",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.7084816183763584
+    },
+    {
+      "instance_content_hash": "deb540591f5d05be",
+      "instance_id": "lunar_ice_030_021_seed110744001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_021_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "752a08cd115bdb6120421949a5e89efd54c9a328a4a1a92aa7445d3288c22525",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.4576726437238529
+    },
+    {
+      "instance_content_hash": "53c66bb7bd1dc6ff",
+      "instance_id": "lunar_ice_030_023_seed110746001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_023_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "bd3e92ec36a74fd50bfc520c3a884409e542b8d341fcc1dc0d00ad348c9805eb",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.7392360521977512
+    },
+    {
+      "instance_content_hash": "8680d38c3eac5d50",
+      "instance_id": "lunar_ice_030_024_seed110747001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_024_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "febf6a1e2b1ed0cc6a013a5fc7806a1b4e3bb335441e3b5ad4fe9451f43331d8",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.9951082538274207
+    },
+    {
+      "instance_content_hash": "349b2386a36a56b1",
+      "instance_id": "lunar_ice_030_025_seed110748001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_025_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "8302704fca4de206e79f7e8aac8cebfc967d2ae924e959dc4a359c922abe871a",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.5117559618759553
+    },
+    {
+      "instance_content_hash": "cc8799f72cb6f160",
+      "instance_id": "lunar_ice_030_026_seed110749001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_026_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "de548e1dcd7d215dfe14ff9ace21b7514667f89290d83ff527f5646c33d1def4",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.8684777090797877
+    },
+    {
+      "instance_content_hash": "c5c2f0595a746895",
+      "instance_id": "lunar_ice_030_028_seed110751001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_028_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "b22ab6604733093cddb79f009fe202174963c028a1c2ba49cef20a75bb566d3c",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.6959642396024713
+    },
+    {
+      "instance_content_hash": "12179b68efe52175",
+      "instance_id": "lunar_ice_030_029_seed110752001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_029_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "f1078d50cc591b4818a89ad133030b63c1e48b7caef0d59aeab121eb08eb7f38",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.9415214845906558
+    },
+    {
+      "instance_content_hash": "51cf066f29b1d6c5",
+      "instance_id": "lunar_ice_030_030_seed110753001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_030_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "82145fe41884897c7272762a8dbc6f6091de2d94ce9fde178ae6cfdf401c2402",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.5081233913301891
+    },
+    {
+      "instance_content_hash": "76eaaa208eab13a5",
+      "instance_id": "lunar_ice_030_032_seed110755001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_032_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "5a4ce9657f78878103636c92998f5ddb1372404669954467bad5f6d81e4e6853",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.3527360794828117
+    },
+    {
+      "instance_content_hash": "db08c8583f39804b",
+      "instance_id": "lunar_ice_030_033_seed110756001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_033_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "a13ce0fa8eabd3bdcb2c7fdf3e7e9a0212f5649898f32bad576ba4345b0ab482",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.6298351871215992
+    },
+    {
+      "instance_content_hash": "f76f86581aec0991",
+      "instance_id": "lunar_ice_030_034_seed110757001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_034_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "8a280957c7af0993437b7b461719eb995f6b4dde4274ea910124e849cd61fef7",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.5396734084421803
+    },
+    {
+      "instance_content_hash": "2baf4401f7c188f5",
+      "instance_id": "lunar_ice_030_035_seed110758001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_035_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "1614ba53fd1eebe671f3611deaf92bb2ec7f654c2a217214a1e56f6f3312b4dc",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.08625378180033366
+    },
+    {
+      "instance_content_hash": "75e59da43c40104d",
+      "instance_id": "lunar_ice_030_036_seed110759001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_036_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "e4e567a2136928f332496d5dc7fe71753956738ac04e7483ab945678a2286fe8",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.8941254397099426
+    },
+    {
+      "instance_content_hash": "6930b19a2cf29e32",
+      "instance_id": "lunar_ice_030_038_seed110761001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_038_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "eeed0210869aed54cca8bd6f00970ae8af01447d7f8eabd9f1af23eb7b9acd6e",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.9333039560648151
+    },
+    {
+      "instance_content_hash": "57c57cf965fd5dc2",
+      "instance_id": "lunar_ice_030_039_seed110762001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_039_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "85e9f87d27a83898fedaf42f4674ef4cabcb09676e259a3c39377c37fdcf8eec",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.5231013589433652
+    },
+    {
+      "instance_content_hash": "502e6677b1770400",
+      "instance_id": "lunar_ice_030_040_seed110763001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_040_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "5bf64e26407be0d3d27ba23564d1d39137276428fbcfa89e1fa1d8663df7f44c",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.3592270701778797
+    },
+    {
+      "instance_content_hash": "7a0221ea049e4c68",
+      "instance_id": "lunar_ice_030_041_seed110764001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_041_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "fbc091f6bcce5f1fb8465340df871d1b9ef936fb71f1adeef70151cf2c0a2c23",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.983407137621549
+    },
+    {
+      "instance_content_hash": "825c3c5722551e80",
+      "instance_id": "lunar_ice_030_042_seed110765001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_042_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "ad663fc2af8d854b89f2596d6ecc139a6a963a6e7dcc148f84b90bd0010474a3",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.6773414469058051
+    },
+    {
+      "instance_content_hash": "87b14738bda6834f",
+      "instance_id": "lunar_ice_030_043_seed110766001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_043_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "0fb831a6faef3b414a7e58b586e53ed94e4fb966f2efa5126b510e2e39b2cf18",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.06140432669320444
+    },
+    {
+      "instance_content_hash": "be6312c4011c49c7",
+      "instance_id": "lunar_ice_030_044_seed110767001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_044_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "aa9a4974fbae5526bd198a6e18a0868fc3add5bd50a4fa6fbf5af25a6cc64670",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.6664167318919508
+    },
+    {
+      "instance_content_hash": "a825fb6fa624e28f",
+      "instance_id": "lunar_ice_030_045_seed110768001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_045_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "f47b5851e52b61f18a7b1c31f05953a023384d3c5e15ec99eb986630a7588c19",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.9550070953311383
+    },
+    {
+      "instance_content_hash": "624a3d5e32f18bc9",
+      "instance_id": "lunar_ice_030_046_seed110769001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_046_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "23097bbb37993066ea89db9e201e0e985baa312aae20aba49571ad795cd9572d",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.13686345406276668
+    },
+    {
+      "instance_content_hash": "93cce4cc39f07226",
+      "instance_id": "lunar_ice_030_047_seed110770001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_047_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "365895a3f446e37acfc18a9123a9b58f0499f92d9c2641924a91ba63386951d2",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.212289192703135
+    },
+    {
+      "instance_content_hash": "28ce6b1dd26e1585",
+      "instance_id": "lunar_ice_030_048_seed110771001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_048_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "3110216f3aceb78726b539469d21a8db62e84b73ad6a0731e2b3fc0a901784e3",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.19165238347596414
+    },
+    {
+      "instance_content_hash": "88a2134fbc2609c2",
+      "instance_id": "lunar_ice_030_049_seed110772001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_049_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "f63f6c39732a1d60184efaaa3407f36142e3cbe343630dc40af8c1a0a4567015",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.9619052543886615
+    },
+    {
+      "instance_content_hash": "2486b02e317823d0",
+      "instance_id": "lunar_ice_030_050_seed110773001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_050_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "8f94117bebcc396e1a300305ee837e1171779828d58e7fd605a639f228d5d5e2",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.5608530929128371
+    },
+    {
+      "instance_content_hash": "e21c370bb8ecb2a5",
+      "instance_id": "lunar_ice_030_051_seed110774001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_051_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "d988df0d5f60e2e6ee10fa2526b75284e96181f1f0dca2137f8f40d2e97689b9",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.8497447402618294
+    },
+    {
+      "instance_content_hash": "b7141a243afedcf0",
+      "instance_id": "lunar_ice_030_052_seed110775001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_052_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "d9670ffaee0e66a94ab81ea20588545dd59db924dc2702a9b40d3ad3b93016b1",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.849228857767281
+    },
+    {
+      "instance_content_hash": "d86b038e488f729b",
+      "instance_id": "lunar_ice_030_053_seed110776001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_053_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "1fde58393933604a0072e08869fa5450799f06a05e6a2606283deeba92386a86",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.12448645970398564
+    },
+    {
+      "instance_content_hash": "6f48942feae9701d",
+      "instance_id": "lunar_ice_030_056_seed110779001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_056_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "fc2b851a453d9f548539a1f15924c684174b4bf0ebb78f179756bd4efe0b08b7",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.9850390614640134
+    },
+    {
+      "instance_content_hash": "cf2ab7c27b51cd85",
+      "instance_id": "lunar_ice_030_057_seed110780001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_057_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "9dbcdad5fd3ef03b43f00879dfb56d5b81fba01ce7ea2b8c03f4207e8563a616",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.6161629459795639
+    },
+    {
+      "instance_content_hash": "652971e1b8f45f03",
+      "instance_id": "lunar_ice_030_058_seed110781001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_058_logical_graph.json",
+      "scale": 30,
+      "selected": false,
+      "selection_key_hash": "cd79f46825eda71e6b7724cab5f7d9a705fb47c659f6135a52002bb6e7d7b3a2",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.8026421312587703
+    },
+    {
+      "instance_content_hash": "c9f7c48fa335f598",
+      "instance_id": "lunar_ice_030_059_seed110782001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_059_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "a4dd8bf4564b1081d4cc3646fcd0242bdd3104f12cfaee6489a553adc9464ba7",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.6440055343175966
+    },
+    {
+      "instance_content_hash": "a42933e6c52916df",
+      "instance_id": "lunar_ice_030_060_seed110783001",
+      "path": "data/gat_p0v2/development_instances/scale_030/instance_060_logical_graph.json",
+      "scale": 30,
+      "selected": true,
+      "selection_key_hash": "a502847aa08aee2052acd1618a1b16e4873d2f91c75703d52aa21f9b07bf906f",
+      "selection_probability": 0.75,
+      "selection_uniform": 0.6445696639425866
+    }
+  ],
+  "manifest_hash": "f4dd9995abee0acb1694474d338f52463ffd453124b9d070ed14da5cfdb33ad0",
+  "probability_by_scale": {
+    "10": 0.5,
+    "20": 0.5,
+    "30": 0.75,
+    "5": 0.5
+  },
+  "protected_final_test_used": false,
+  "sampling_design": "pre_action_bernoulli_instance_cluster_all_contexts_v1",
+  "schema_version": "lunar_ice_bpc.gat_sentinel_manifest.v1",
+  "selected_count_by_scale": {
+    "10": 27,
+    "20": 24,
+    "30": 32,
+    "5": 22
+  },
+  "selected_instance_count": 105,
+  "selection_seed": 20260724,
+  "selection_uses_target_or_outcome": false,
+  "split_manifest_hash": "c05be9fea1828b64690050f51003d9879685db6af2d78ae7c4e343774b5b5c5f"
+}

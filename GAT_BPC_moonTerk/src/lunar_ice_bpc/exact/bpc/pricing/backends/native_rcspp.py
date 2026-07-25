@@ -15,7 +15,6 @@ from pathlib import Path
 import threading
 from time import monotonic, sleep
 from typing import Any
-import weakref
 
 from lunar_ice_bpc.domain.scenario import PATH_TYPES
 from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
@@ -23,6 +22,15 @@ from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
     BACKEND_OBJECTIVE_PHASE_ONE,
     BackendPricingRequest,
     BackendResult,
+)
+from lunar_ice_bpc.exact.bpc.guidance.contracts import (
+    CanonicalSolveBindingV2,
+    GUIDANCE_MODE_OFF,
+    GUIDANCE_MODE_TASK_ARC,
+    PricingOrderingHintsV2,
+    canonical_arc_candidate_id,
+    canonical_universe_hash,
+    validate_pricing_ordering_hints,
 )
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
 from lunar_ice_bpc.exact.core.branching import branch_context_from_payload
@@ -54,14 +62,24 @@ _NATIVE_CUT_STATE_BUILD_SCHEMA = (
     "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2"
 )
 _STATIC_PAYLOAD_CACHE_LOCK = threading.RLock()
-_STATIC_PAYLOAD_CACHE: OrderedDict[int, tuple[weakref.ReferenceType, dict]] = OrderedDict()
+_STATIC_PAYLOAD_CACHE: OrderedDict[str, dict] = OrderedDict()
 _STATIC_PAYLOAD_CACHE_MAX_ENTRIES = 16
+_SNAPSHOT_LOCK = threading.RLock()
+_SNAPSHOT_COUNT = 0
+_SNAPSHOT_COUNT_BY_INSTANCE: dict[str, int] = {}
+DEVELOPMENT_ORACLE_TASK_PRIORITY_ENV = (
+    "LUNAR_ICE_DEVELOPMENT_ORACLE_TASK_PRIORITY_JSON"
+)
+_DEVELOPMENT_ORACLE_PRIORITY_CACHE: dict[
+    tuple[str, int], dict[str, Any]
+] = {}
 
 
 class NativeRcsppInprocessBackend:
     backend_id = NATIVE_INPROCESS_BACKEND_ID
 
     def solve(self, request: BackendPricingRequest) -> BackendResult:
+        request = _maybe_attach_environment_guidance(request)
         capability_blockers = _capability_blockers(request)
         if capability_blockers:
             return _empty_result(
@@ -102,6 +120,7 @@ class NativeRcsppHostBackend:
     _lock = threading.RLock()
 
     def solve(self, request: BackendPricingRequest) -> BackendResult:
+        request = _maybe_attach_environment_guidance(request)
         capability_blockers = _capability_blockers(request)
         if capability_blockers:
             return _empty_result(
@@ -499,6 +518,279 @@ def _persistent_host_main(connection) -> None:
 atexit.register(NativeRcsppHostBackend.close)
 
 
+def _maybe_attach_environment_guidance(
+    request: BackendPricingRequest,
+) -> BackendPricingRequest:
+    """Run the optional task/arc predictor before Native imports/IPC."""
+
+    if request.exact_proof_mode:
+        return request
+    if (
+        request.guidance_mode != GUIDANCE_MODE_OFF
+        or request.guidance_hints is not None
+    ):
+        return request
+    oracle_path = str(
+        os.getenv(DEVELOPMENT_ORACLE_TASK_PRIORITY_ENV, "")
+    ).strip()
+    if oracle_path:
+        try:
+            return _attach_development_oracle_task_priorities(
+                request, oracle_path
+            )
+        except Exception as exc:
+            lifecycle = {
+                "guidance_import_sec": 0.0,
+                "guidance_checkpoint_load_sec": 0.0,
+                "guidance_tensorize_sec": 0.0,
+                "guidance_forward_total_sec": 0.0,
+                "guidance_call_count": 0,
+                "guidance_binding_validation_sec": 0.0,
+                "guidance_native_install_sec": 0.0,
+                "guidance_total_wall_sec": 0.0,
+                "guidance_total_wall_ratio": None,
+                "bypassed_before_import": True,
+                "bypass_reason": (
+                    "development_oracle_task_priority_rejected:"
+                    f"{exc!r}"
+                ),
+            }
+            return replace(
+                request,
+                guidance_mode=GUIDANCE_MODE_OFF,
+                guidance_hints=None,
+                guidance_lifecycle_telemetry=tuple(
+                    lifecycle.items()
+                ),
+            )
+    try:
+        from lunar_ice_bpc.guidance.runtime import (
+            prepare_guidance_request_from_environment,
+        )
+
+        prepared = prepare_guidance_request_from_environment(
+            request,
+            stage="task_arc",
+        )
+    except Exception as exc:
+        lifecycle = {
+            "guidance_import_sec": 0.0,
+            "guidance_checkpoint_load_sec": 0.0,
+            "guidance_tensorize_sec": 0.0,
+            "guidance_forward_total_sec": 0.0,
+            "guidance_call_count": 0,
+            "guidance_binding_validation_sec": 0.0,
+            "guidance_native_install_sec": 0.0,
+            "guidance_total_wall_sec": 0.0,
+            "guidance_total_wall_ratio": None,
+            "bypassed_before_import": True,
+            "bypass_reason": f"environment_guidance_hook_failed:{exc!r}",
+        }
+        return replace(
+            request,
+            guidance_mode="off",
+            guidance_hints=None,
+            guidance_lifecycle_telemetry=tuple(lifecycle.items()),
+        )
+    return request if prepared is None else prepared.request
+
+
+def _attach_development_oracle_task_priorities(
+    request: BackendPricingRequest,
+    path: str,
+) -> BackendPricingRequest:
+    """Bind one development-only static task-priority oracle to this request."""
+
+    resolved = Path(path).resolve()
+    stat = resolved.stat()
+    cache_key = (str(resolved), int(stat.st_mtime_ns))
+    payload = _DEVELOPMENT_ORACLE_PRIORITY_CACHE.get(cache_key)
+    if payload is None:
+        outer = json.loads(resolved.read_text(encoding="utf-8"))
+        candidate = (
+            outer.get("task_priority_oracle")
+            or outer.get("prefix_priority_oracle")
+        )
+        if not isinstance(candidate, dict):
+            candidate = outer
+        payload = dict(candidate)
+        _DEVELOPMENT_ORACLE_PRIORITY_CACHE.clear()
+        _DEVELOPMENT_ORACLE_PRIORITY_CACHE[cache_key] = payload
+    schema = str(payload.get("schema_version") or "")
+    supported_schemas = {
+        "lunar_ice_bpc.development_trajectory_task_priority_oracle.v1",
+        "lunar_ice_bpc.development_native_prefix_priority_oracle.v1",
+    }
+    if schema not in supported_schemas:
+        raise ValueError("development task-priority schema mismatch")
+    if str(payload.get("source_partition") or "") != "development":
+        raise ValueError("development task-priority partition mismatch")
+    if bool(payload.get("deployable")):
+        raise ValueError("development task-priority cannot be deployable")
+    if str(payload.get("instance_content_hash") or "") != (
+        request.data.instance_content_hash
+    ):
+        raise ValueError("development task-priority instance mismatch")
+    selected_context: dict[str, Any] = {}
+    if schema == (
+        "lunar_ice_bpc.development_native_prefix_priority_oracle.v1"
+    ):
+        selected_context = _select_development_prefix_context(
+            request, payload
+        )
+    raw_task_priorities = (
+        selected_context.get("task_priorities")
+        if selected_context
+        else payload.get("task_priorities")
+    )
+    raw_arc_priorities = (
+        selected_context.get("arc_priorities")
+        if selected_context
+        else payload.get("arc_priorities")
+    ) or {}
+    if not isinstance(raw_task_priorities, dict) or not isinstance(
+        raw_arc_priorities, dict
+    ):
+        raise ValueError("development task/arc priorities must be mappings")
+    task_priorities = {
+        str(task_id): float(value)
+        for task_id, value in raw_task_priorities.items()
+    }
+    expected_tasks = set(request.data.task_ids)
+    if not set(task_priorities).issubset(expected_tasks):
+        raise ValueError("development task-priority universe mismatch")
+    task_priorities = {
+        task_id: float(task_priorities.get(task_id, 0.0))
+        for task_id in request.data.task_ids
+    }
+    if any(not isfinite(value) for value in task_priorities.values()):
+        raise ValueError("development task priority contains NaN/Inf")
+    arc_priorities = {
+        str(arc_id): float(value)
+        for arc_id, value in raw_arc_priorities.items()
+    }
+    expected_arcs = {
+        canonical_arc_candidate_id(source, target, path_type)
+        for (source, target), by_type in request.data.arcs.items()
+        for path_type in by_type
+    }
+    if not set(arc_priorities).issubset(expected_arcs):
+        raise ValueError("development arc-priority universe mismatch")
+    if any(not isfinite(value) for value in arc_priorities.values()):
+        raise ValueError("development arc priority contains NaN/Inf")
+    enriched = replace(
+        request,
+        guidance_mode=GUIDANCE_MODE_TASK_ARC,
+        guidance_feature_schema_version=(
+            "development_trajectory_task_priority.v1"
+        ),
+        guidance_normalization_version=(
+            "development_oracle_centered_maxabs.v1"
+        ),
+        guidance_checkpoint_id=str(
+            payload.get("source_artifact_sha256") or ""
+        ),
+        guidance_ood_policy_version="development_exact_hash_only.v1",
+        guidance_lifecycle_telemetry=tuple(
+            {
+                "guidance_import_sec": 0.0,
+                "guidance_checkpoint_load_sec": 0.0,
+                "guidance_tensorize_sec": 0.0,
+                "guidance_forward_total_sec": 0.0,
+                "guidance_call_count": 0,
+                "guidance_binding_validation_sec": 0.0,
+                "guidance_native_install_sec": 0.0,
+                "guidance_total_wall_sec": 0.0,
+                "guidance_total_wall_ratio": None,
+                "bypassed_before_import": False,
+                "bypass_reason": "",
+                "development_oracle_task_priority": True,
+                "development_oracle_schema": schema,
+                "development_oracle_selected_context": str(
+                    selected_context.get("rmp_iteration_id") or ""
+                ),
+            }.items()
+        ),
+    )
+    binding = CanonicalSolveBindingV2.from_backend_request(enriched)
+    hints = PricingOrderingHintsV2(
+        binding_hash=binding.binding_hash,
+        task_priorities=tuple(sorted(task_priorities.items())),
+        arc_priorities=tuple(sorted(arc_priorities.items())),
+        source="development_trajectory_task_priority_oracle",
+        diagnostic_only=True,
+    )
+    return replace(enriched, guidance_hints=hints)
+
+
+def _select_development_prefix_context(
+    request: BackendPricingRequest,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    contexts = payload.get("contexts")
+    if not isinstance(contexts, list) or not contexts:
+        raise ValueError("development prefix contexts are missing")
+    current_hash = true_dual_binding_hash(
+        request.true_duals.cover,
+        fleet_limit=request.true_duals.fleet_limit,
+        cuts=request.true_duals.cuts,
+    )
+    for context in contexts:
+        if (
+            isinstance(context, dict)
+            and str(context.get("mathematical_dual_hash") or "")
+            == current_hash
+        ):
+            return dict(context)
+    if str(payload.get("context_selection") or "") == (
+        "exact_dual_hash_only"
+    ):
+        raise ValueError(
+            "development prefix oracle has no exact dual-hash context"
+        )
+    task_ids = tuple(request.data.task_ids)
+
+    def distance(context: object) -> tuple[float, int]:
+        if not isinstance(context, dict):
+            return float("inf"), 2**31 - 1
+        cover = context.get("task_duals")
+        if not isinstance(cover, dict) or set(cover) != set(task_ids):
+            return float("inf"), int(
+                context.get("round_index") or 2**31 - 1
+            )
+        scale = max(
+            1.0e-6,
+            max(
+                abs(float(value))
+                for value in (
+                    *cover.values(),
+                    *request.true_duals.cover.values(),
+                )
+            ),
+        )
+        squared = sum(
+            (
+                (
+                    float(request.true_duals.cover[task_id])
+                    - float(cover[task_id])
+                )
+                / scale
+            )
+            ** 2
+            for task_id in task_ids
+        )
+        return squared / max(1, len(task_ids)), int(
+            context.get("round_index") or 2**31 - 1
+        )
+
+    selected = min(contexts, key=distance)
+    if not isinstance(selected, dict) or not isfinite(
+        distance(selected)[0]
+    ):
+        raise ValueError("no compatible development prefix context")
+    return dict(selected)
+
+
 def _capability_blockers(request: BackendPricingRequest) -> tuple[str, ...]:
     blockers: list[str] = []
     if request.cut_state_required and not request.cut_state_enabled:
@@ -593,16 +885,70 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
     data = request.data
     static = _native_static_payload(data)
     pricing_cut_context = _pricing_cut_context(request)
+    install_started = monotonic()
+    accepted_guidance, guidance_validation = validate_pricing_ordering_hints(
+        request
+    )
+    canonical_binding = CanonicalSolveBindingV2.from_backend_request(request)
+    guidance_effective = bool(
+        accepted_guidance is not None
+        and request.guidance_mode == GUIDANCE_MODE_TASK_ARC
+        and not request.exact_proof_mode
+    )
+    task_priorities = (
+        accepted_guidance.priorities_for("task")
+        if guidance_effective
+        else {}
+    )
+    arc_priorities = (
+        accepted_guidance.priorities_for("arc")
+        if guidance_effective
+        else {}
+    )
     tasks = [
         {
             **row,
             "dual": float(request.true_duals.cover.get(row["id"], 0.0)),
+            "guidance_priority": float(task_priorities.get(row["id"], 0.0)),
         }
         for row in static["tasks"]
     ]
+    arcs = [
+        {
+            **row,
+            "guidance_priority": float(
+                arc_priorities.get(
+                    canonical_arc_candidate_id(
+                        row["source"],
+                        row["target"],
+                        row["path_type"],
+                    ),
+                    0.0,
+                )
+            ),
+        }
+        for row in static["arcs"]
+    ]
+    task_universe_hash = canonical_universe_hash(
+        (row["id"] for row in tasks),
+        universe_kind="task",
+    )
+    arc_universe_hash = canonical_universe_hash(
+        (
+            canonical_arc_candidate_id(
+                row["source"],
+                row["target"],
+                row["path_type"],
+            )
+            for row in arcs
+        ),
+        universe_kind="arc",
+    )
+    guidance_install_sec = monotonic() - install_started
     return {
         **static,
         "tasks": tasks,
+        "arcs": arcs,
         "branch_decisions": [
             decision.to_payload() for decision in request.branch_context.pair_decisions
         ],
@@ -652,7 +998,12 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
         "subset_dominance_enabled": bool(
             request.subset_dominance_enabled and request.exact_proof_mode
         ),
+        "proof_queue_policy_id": request.proof_queue_policy_id,
         "config_hash": request.config_hash,
+        "engine_hash": request.engine_hash,
+        "canonical_solve_binding_v2": canonical_binding.to_payload(),
+        "canonical_solve_binding_v2_schema": canonical_binding.schema_version,
+        "canonical_solve_binding_v2_hash": canonical_binding.binding_hash,
         "dual_binding_hash": request.dual_binding_hash,
         "branch_context_hash": request.branch_context_hash,
         "cut_state_schema_version": request.cut_state_schema_version,
@@ -666,18 +1017,34 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
         "live_cut_policy_hash": request.live_cut_policy_hash,
         "rmp_iteration_id": request.rmp_iteration_id,
         "separator_policy_version": request.separator_policy_version,
+        "guidance_mode": request.guidance_mode,
+        "guidance_effective_mode": (
+            GUIDANCE_MODE_TASK_ARC if guidance_effective else "off"
+        ),
+        "guidance_binding_hash": (
+            ""
+            if accepted_guidance is None
+            else accepted_guidance.binding_hash
+        ),
+        "guidance_task_arc_enabled": guidance_effective,
+        "legal_task_universe_hash_before_sort": task_universe_hash,
+        "legal_arc_universe_hash_before_sort": arc_universe_hash,
+        "guidance_native_install_sec": guidance_install_sec,
+        "guidance_validation_issues": guidance_validation[
+            "guidance_validation_issues"
+        ],
     }
 
 
 def _native_static_payload(data) -> dict:
     from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import spprc_instance_hash
 
-    cache_key = id(data)
+    cache_key = spprc_instance_hash(data)
     with _STATIC_PAYLOAD_CACHE_LOCK:
         cached = _STATIC_PAYLOAD_CACHE.get(cache_key)
-        if cached is not None and cached[0]() is data:
+        if cached is not None:
             _STATIC_PAYLOAD_CACHE.move_to_end(cache_key)
-            return cached[1]
+            return cached
     refs = objective_references(data)
     task_index = {task_id: index for index, task_id in enumerate(data.task_ids)}
     tasks = []
@@ -731,7 +1098,7 @@ def _native_static_payload(data) -> dict:
         "reference_completion": refs.reference_completion,
     }
     with _STATIC_PAYLOAD_CACHE_LOCK:
-        _STATIC_PAYLOAD_CACHE[cache_key] = (weakref.ref(data), value)
+        _STATIC_PAYLOAD_CACHE[cache_key] = value
         _STATIC_PAYLOAD_CACHE.move_to_end(cache_key)
         while len(_STATIC_PAYLOAD_CACHE) > _STATIC_PAYLOAD_CACHE_MAX_ENTRIES:
             _STATIC_PAYLOAD_CACHE.popitem(last=False)
@@ -747,9 +1114,34 @@ def _audit_native_result(
     blockers = [str(item) for item in raw.get("certificate_blockers", [])]
     raw_bindings = dict(raw.get("request_bindings") or {})
     pricing_cut_context = _pricing_cut_context(request)
+    accepted_guidance, guidance_validation = validate_pricing_ordering_hints(
+        request
+    )
+    canonical_binding = CanonicalSolveBindingV2.from_backend_request(request)
+    guidance_effective = bool(
+        accepted_guidance is not None
+        and request.guidance_mode == GUIDANCE_MODE_TASK_ARC
+        and not request.exact_proof_mode
+    )
+    legal_task_universe_hash = canonical_universe_hash(
+        request.data.task_ids,
+        universe_kind="task",
+    )
+    legal_arc_universe_hash = canonical_universe_hash(
+        (
+            canonical_arc_candidate_id(source, target, path_type)
+            for (source, target), by_type in sorted(request.data.arcs.items())
+            for path_type in sorted(by_type)
+        ),
+        universe_kind="arc",
+    )
     expected_bindings = {
         "instance_hash": request.instance_hash or _native_static_payload(request.data)["instance_hash"],
         "config_hash": request.config_hash,
+        "engine_hash": request.engine_hash,
+        "canonical_solve_binding_v2": canonical_binding.to_payload(),
+        "canonical_solve_binding_v2_schema": canonical_binding.schema_version,
+        "canonical_solve_binding_v2_hash": canonical_binding.binding_hash,
         "dual_binding_hash": request.dual_binding_hash,
         "branch_context_hash": request.branch_context_hash,
         "objective_mode": request.objective_mode,
@@ -765,6 +1157,18 @@ def _audit_native_result(
         "cut_state_schema_version": request.cut_state_schema_version,
         "separator_policy_version": request.separator_policy_version,
         "negative_eps": request.negative_eps,
+        "guidance_mode": request.guidance_mode,
+        "guidance_effective_mode": (
+            GUIDANCE_MODE_TASK_ARC if guidance_effective else "off"
+        ),
+        "guidance_binding_hash": (
+            ""
+            if accepted_guidance is None
+            else accepted_guidance.binding_hash
+        ),
+        "guidance_task_arc_enabled": guidance_effective,
+        "legal_task_universe_hash_before_sort": legal_task_universe_hash,
+        "legal_arc_universe_hash_before_sort": legal_arc_universe_hash,
     }
     binding_mismatches = []
     for key, expected in expected_bindings.items():
@@ -783,7 +1187,13 @@ def _audit_native_result(
     columns = []
     audited_rcs = []
     reconstruction_rows = []
-    for route in raw.get("routes", []) or []:
+    collect_native_training_routes = str(
+        os.getenv(
+            "LUNAR_ICE_DUAL_CENTER_TRAJECTORY_COLLECTION",
+            "0",
+        )
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    for route_index, route in enumerate(raw.get("routes", []) or []):
         try:
             column = _reconstruct_column(request, route)
             manual_rc = float(_manual_backend_reduced_cost(column, request))
@@ -802,6 +1212,7 @@ def _audit_native_result(
                 for cut_id, coefficient in cut_coefficients.items()
             )
             audit_row = {
+                "native_route_index": int(route_index),
                 "column_signature": signature_hash,
                 "task_set": sorted(str(task_id) for task_id in column.task_set),
                 "native_rc": native_rc,
@@ -817,6 +1228,22 @@ def _audit_native_result(
                 "cut_coefficients": dict(sorted(cut_coefficients.items())),
                 "absolute_delta": rc_delta,
             }
+            if collect_native_training_routes:
+                audit_row["native_route_sorties"] = [
+                    {
+                        "tasks": [
+                            str(task_id)
+                            for task_id in sortie.get("tasks", [])
+                        ],
+                        "path_types": [
+                            str(path_type)
+                            for path_type in sortie.get(
+                                "path_types", []
+                            )
+                        ],
+                    }
+                    for sortie in route.get("sorties", [])
+                ]
             if rc_delta > request.reconstruction_eps:
                 blockers.append("native_python_reduced_cost_mismatch")
                 reconstruction_rows.append({**audit_row, "accepted": False})
@@ -870,8 +1297,38 @@ def _audit_native_result(
         else None
     )
     telemetry = dict(raw.get("telemetry") or {})
+    native_event_audit = _validate_native_best_rc_events(
+        telemetry.get("best_reduced_cost_events"),
+        exact_proof_mode=request.exact_proof_mode,
+        wall_time_seconds=float(
+            telemetry.get("wall_time_seconds") or 0.0
+        ),
+        raw_route_reduced_costs=tuple(
+            float(row["native_rc"])
+            for row in reconstruction_rows
+            if bool(row.get("accepted"))
+            and _is_finite_number(row.get("native_rc"))
+        ),
+        trace_truncated=bool(
+            telemetry.get("best_reduced_cost_events_truncated")
+        ),
+    )
+    if blockers and native_event_audit[
+        "best_reduced_cost_event_trace_usable_for_training"
+    ]:
+        native_event_audit.update(
+            {
+                "best_reduced_cost_event_trace_usable_for_training": False,
+                "best_reduced_cost_event_trace_error": (
+                    "native_result_audit_has_blockers"
+                ),
+            }
+        )
+    telemetry.update(native_event_audit)
+    lifecycle = dict(request.guidance_lifecycle_telemetry)
     telemetry.update(
         {
+            **lifecycle,
             "native_raw_best_found_rc": raw.get("best_found_rc"),
             "native_build_info": raw.get("build_info") or {},
             "reconstruction_audit": reconstruction_rows,
@@ -891,6 +1348,7 @@ def _audit_native_result(
             "active_cut_context_hash": request.cut_context.active_cut_context_hash,
             "pricing_cut_count": len(pricing_cut_context.cuts),
             "pricing_cut_context_hash": pricing_cut_context.active_cut_context_hash,
+            "proof_queue_policy_id": request.proof_queue_policy_id,
             "projected_zero_dual_cut_count": (
                 len(request.cut_context.cuts) - len(pricing_cut_context.cuts)
             ),
@@ -916,9 +1374,51 @@ def _audit_native_result(
             "request_binding_mismatches": binding_mismatches,
             "request_bindings_match": not binding_mismatches,
             "native_engine_build_hash": native_engine_build_hash,
+            "guidance_validation": guidance_validation,
+            "guidance_mode": request.guidance_mode,
+            "guidance_effective_mode": (
+                GUIDANCE_MODE_TASK_ARC if guidance_effective else "off"
+            ),
+            "guidance_filter_count": 0,
+            "guidance_arc_drop_count": 0,
+            "guidance_label_drop_count": 0,
+            "guidance_branch_pair_drop_count": 0,
+            "legal_action_universe_hash_before_sort": legal_task_universe_hash,
+            "legal_arc_universe_hash_before_sort": legal_arc_universe_hash,
+            "guidance_binding_validation_sec": guidance_validation[
+                "guidance_binding_validation_sec"
+            ],
+            "guidance_native_install_sec": float(
+                raw_bindings.get("guidance_native_install_sec") or 0.0
+            ),
         }
     )
-    return BackendResult(
+    import_sec = float(telemetry.get("guidance_import_sec") or 0.0)
+    load_sec = float(telemetry.get("guidance_checkpoint_load_sec") or 0.0)
+    tensorize_sec = float(telemetry.get("guidance_tensorize_sec") or 0.0)
+    forward_sec = float(telemetry.get("guidance_forward_total_sec") or 0.0)
+    validation_sec = float(
+        telemetry.get("guidance_binding_validation_sec") or 0.0
+    )
+    native_install_sec = float(
+        telemetry.get("guidance_native_install_sec") or 0.0
+    )
+    guidance_total = (
+        import_sec
+        + load_sec
+        + tensorize_sec
+        + forward_sec
+        + validation_sec
+        + native_install_sec
+    )
+    telemetry["guidance_total_wall_sec"] = round(guidance_total, 9)
+    baseline_wall = float(telemetry.get("wall_time_seconds") or 0.0)
+    telemetry["guidance_total_wall_ratio"] = (
+        None
+        if baseline_wall <= 0.0
+        else round(guidance_total / baseline_wall, 9)
+    )
+    result = BackendResult(
         backend_id=backend_id,
         engine_status=engine_status,
         best_found_rc=best_found,
@@ -934,6 +1434,316 @@ def _audit_native_result(
         certificate_blockers=tuple(dict.fromkeys(blockers)),
         telemetry=telemetry,
     )
+    return _maybe_record_guidance_snapshot(request, result)
+
+
+def _validate_native_best_rc_events(
+    raw_events: Any,
+    *,
+    exact_proof_mode: bool,
+    wall_time_seconds: float,
+    raw_route_reduced_costs: tuple[float, ...],
+    trace_truncated: bool,
+) -> dict[str, Any]:
+    """Audit event-time telemetry without letting diagnostics affect proof.
+
+    Only harvest calls emit discovery events.  A malformed trace is made
+    unusable for training/replay, but never changes exact certificate fields.
+    """
+
+    schema = "lunar_spprc.best_reduced_cost_events.v1"
+    if raw_events is None:
+        return {
+            "best_reduced_cost_event_schema": schema,
+            "best_reduced_cost_event_trace_valid": False,
+            "best_reduced_cost_event_trace_usable_for_training": False,
+            "best_reduced_cost_event_trace_error": "trace_missing",
+            "best_reduced_cost_event_count": 0,
+            "best_reduced_cost_events_audited": [],
+        }
+    if not isinstance(raw_events, (list, tuple)):
+        return {
+            "best_reduced_cost_event_schema": schema,
+            "best_reduced_cost_event_trace_valid": False,
+            "best_reduced_cost_event_trace_usable_for_training": False,
+            "best_reduced_cost_event_trace_error": "trace_not_a_sequence",
+            "best_reduced_cost_event_count": 0,
+            "best_reduced_cost_events_audited": [],
+        }
+    normalized: list[dict[str, Any]] = []
+    previous_elapsed = -1.0
+    previous_labels = -1
+    previous_solutions = 0
+    previous_best = float("inf")
+    error = ""
+    for index, value in enumerate(raw_events):
+        try:
+            row = dict(value)
+            elapsed = float(row["elapsed_seconds"])
+            extended_labels = int(row["extended_labels"])
+            solution_count = int(row["solution_count"])
+            discovered_rc = float(row["discovered_reduced_cost"])
+            best_rc = float(row["best_reduced_cost"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            error = f"invalid_event:{index}"
+            break
+        if (
+            not isfinite(elapsed)
+            or elapsed < previous_elapsed
+            or elapsed < 0.0
+            or (
+                wall_time_seconds > 0.0
+                and elapsed > wall_time_seconds + 1.0e-6
+            )
+        ):
+            error = f"invalid_elapsed:{index}"
+            break
+        if (
+            extended_labels < previous_labels
+            or solution_count <= previous_solutions
+        ):
+            error = f"nonmonotone_counters:{index}"
+            break
+        if (
+            not isfinite(discovered_rc)
+            or not isfinite(best_rc)
+            or discovered_rc >= 0.0
+            or best_rc >= previous_best - 1.0e-12
+            or abs(discovered_rc - best_rc) > 1.0e-9
+        ):
+            error = f"invalid_best_rc:{index}"
+            break
+        normalized.append(
+            {
+                "event_index": index,
+                "elapsed_sec": elapsed,
+                "extended_labels": extended_labels,
+                "solution_count": solution_count,
+                "discovered_true_rc": discovered_rc,
+                "best_true_rc": best_rc,
+            }
+        )
+        previous_elapsed = elapsed
+        previous_labels = extended_labels
+        previous_solutions = solution_count
+        previous_best = best_rc
+    if not error and exact_proof_mode and normalized:
+        error = "exact_proof_trace_must_be_empty"
+    if (
+        not error
+        and normalized
+        and raw_route_reduced_costs
+        and not trace_truncated
+        and abs(normalized[-1]["best_true_rc"] - min(raw_route_reduced_costs))
+        > 1.0e-9
+    ):
+        error = "trace_final_best_mismatch"
+    valid = not bool(error)
+    return {
+        "best_reduced_cost_event_schema": schema,
+        "best_reduced_cost_event_trace_valid": valid,
+        "best_reduced_cost_event_trace_usable_for_training": bool(
+            valid and not exact_proof_mode and not trace_truncated
+        ),
+        "best_reduced_cost_event_trace_error": error,
+        "best_reduced_cost_event_count": len(normalized),
+        "best_reduced_cost_events_audited": normalized if valid else [],
+    }
+
+
+def _is_finite_number(value: Any) -> bool:
+    try:
+        return isfinite(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _maybe_record_guidance_snapshot(
+    request: BackendPricingRequest,
+    result: BackendResult,
+) -> BackendResult:
+    """Persist an opt-in request-bound replay snapshot without changing solve state."""
+
+    root_value = str(os.getenv("LUNAR_ICE_GAT_SNAPSHOT_DIR", "")).strip()
+    if not root_value:
+        return result
+    try:
+        maximum = max(
+            0,
+            int(os.getenv("LUNAR_ICE_GAT_SNAPSHOT_MAX_PER_PROCESS", "512")),
+        )
+        maximum_per_instance = max(
+            0,
+            int(os.getenv("LUNAR_ICE_GAT_SNAPSHOT_MAX_PER_INSTANCE", "8")),
+        )
+        global _SNAPSHOT_COUNT, _SNAPSHOT_COUNT_BY_INSTANCE
+        instance_key = request.data.instance_content_hash
+        with _SNAPSHOT_LOCK:
+            if maximum <= 0 or _SNAPSHOT_COUNT >= maximum:
+                telemetry = dict(result.telemetry)
+                telemetry["guidance_snapshot_skipped"] = "per_process_cap"
+                return replace(result, telemetry=telemetry)
+            if (
+                maximum_per_instance <= 0
+                or _SNAPSHOT_COUNT_BY_INSTANCE.get(instance_key, 0)
+                >= maximum_per_instance
+            ):
+                telemetry = dict(result.telemetry)
+                telemetry["guidance_snapshot_skipped"] = "per_instance_cap"
+                return replace(result, telemetry=telemetry)
+            _SNAPSHOT_COUNT += 1
+            _SNAPSHOT_COUNT_BY_INSTANCE[instance_key] = (
+                _SNAPSHOT_COUNT_BY_INSTANCE.get(instance_key, 0) + 1
+            )
+        from lunar_ice_bpc.exact.bpc.guidance.replay import (
+            build_pricing_snapshot,
+            save_pricing_snapshot,
+        )
+
+        candidates = [
+            {
+                "candidate_id": str(task_id),
+                "candidate_kind": "task",
+                "p0_position": index,
+            }
+            for index, task_id in enumerate(request.data.task_ids)
+        ]
+        arc_position_offset = len(candidates)
+        candidates.extend(
+            {
+                "candidate_id": canonical_arc_candidate_id(
+                    source, target, path_type
+                ),
+                "candidate_kind": "arc",
+                "p0_position": arc_position_offset + index,
+            }
+            for index, ((source, target), by_type, path_type) in enumerate(
+                (
+                    ((source, target), by_type, path_type)
+                    for (source, target), by_type in sorted(
+                        request.data.arcs.items()
+                    )
+                    for path_type in sorted(by_type)
+                )
+            )
+        )
+        _attach_snapshot_training_observations(
+            candidates,
+            request=request,
+            result=result,
+        )
+        snapshot = build_pricing_snapshot(
+            request,
+            candidates=candidates,
+            result=result,
+            queue_policy_id="Q0",
+            engine_hash=request.engine_hash,
+            feature_schema_version=request.guidance_feature_schema_version,
+            normalization_version=request.guidance_normalization_version,
+            checkpoint_id=request.guidance_checkpoint_id,
+            ood_policy_version=request.guidance_ood_policy_version,
+        )
+        target = (
+            Path(root_value)
+            / request.data.instance_content_hash
+            / f"{snapshot.snapshot_hash}.json"
+        )
+        save_pricing_snapshot(snapshot, target)
+        telemetry = dict(result.telemetry)
+        telemetry.update(
+            {
+                "guidance_snapshot_written": True,
+                "guidance_snapshot_path": str(target.resolve()),
+                "guidance_snapshot_hash": snapshot.snapshot_hash,
+                "guidance_snapshot_candidate_count": len(candidates),
+                "guidance_snapshot_can_certify": False,
+            }
+        )
+        return replace(result, telemetry=telemetry)
+    except Exception as exc:
+        telemetry = dict(result.telemetry)
+        telemetry.update(
+            {
+                "guidance_snapshot_written": False,
+                "guidance_snapshot_error": repr(exc),
+            }
+        )
+        return replace(result, telemetry=telemetry)
+
+
+def _attach_snapshot_training_observations(
+    candidates: list[dict],
+    *,
+    request: BackendPricingRequest,
+    result: BackendResult,
+) -> None:
+    """Attach observed labels without treating unvisited work as negative."""
+
+    from lunar_ice_bpc.exact.master.journey_rmp import (
+        manual_journey_reduced_cost,
+        manual_phase_one_journey_reduced_cost,
+    )
+
+    observations: dict[str, list[float]] = {}
+    for column in result.columns:
+        if request.objective_mode == BACKEND_OBJECTIVE_PHASE_ONE:
+            true_rc = manual_phase_one_journey_reduced_cost(
+                column, request.true_duals
+            )
+        else:
+            true_rc = manual_journey_reduced_cost(
+                column, request.true_duals
+            )
+        if float(true_rc) >= -abs(float(request.negative_eps)):
+            continue
+        candidate_ids = set(str(value) for value in column.task_set)
+        candidate_ids.update(
+            canonical_arc_candidate_id(
+                leg.source, leg.target, leg.path_type
+            )
+            for sortie in column.sorties
+            for leg in sortie.legs
+        )
+        for candidate_id in candidate_ids:
+            observations.setdefault(candidate_id, []).append(float(true_rc))
+    exhaustive_no_negative = bool(
+        result.search_exhaustive
+        and result.frontier_empty
+        and not result.labels_dropped
+        and not observations
+    )
+    for row in candidates:
+        values = observations.get(str(row["candidate_id"]), [])
+        if values:
+            row.update(
+                {
+                    "training_observed": True,
+                    "training_label": "negative_route_member",
+                    "training_grade": 3.0,
+                    "observed_negative_column_count": len(values),
+                    "best_observed_true_rc": min(values),
+                }
+            )
+        elif exhaustive_no_negative:
+            row.update(
+                {
+                    "training_observed": True,
+                    "training_label": "exact_nonnegative",
+                    "training_grade": 0.0,
+                    "observed_negative_column_count": 0,
+                    "best_observed_true_rc": None,
+                }
+            )
+        else:
+            row.update(
+                {
+                    "training_observed": False,
+                    "training_label": "unexplored_not_a_negative",
+                    "training_grade": None,
+                    "observed_negative_column_count": 0,
+                    "best_observed_true_rc": None,
+                }
+            )
 
 
 def _reconstruct_column(request: BackendPricingRequest, route: dict):

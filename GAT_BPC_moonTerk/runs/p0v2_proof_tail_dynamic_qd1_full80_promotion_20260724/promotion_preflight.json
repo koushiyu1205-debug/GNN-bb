@@ -1,0 +1,17 @@
+{
+  "calibration_used_in_formal_rows": false,
+  "development_used_in_formal_rows": false,
+  "frozen_config_hashes": {
+    "candidate": "5fb9b80793ce2129a8e9eaa579da3cc6c83ae4519381e135c594db4c19dc1e81",
+    "control": "f51ce19431354f6e5ff6f4ff8622973e17a45dfe70f2d85c684425775ef7096e"
+  },
+  "instance_count": 80,
+  "manifest_sha256": "1d3be882696e8e8926c03cd2c95f2255d51f21e877b95d7716b90f598ef481c1",
+  "passed": true,
+  "protected_final_test_used": true,
+  "runtime_source_bundle_file_count": 136,
+  "runtime_source_bundle_sha256": "de8330fda2538340eed2301ba3226a2dff5ae56835a684d1928913c4d67dfd47",
+  "schedule_sha256": "40e1ec55ebeedb25254c76acc7b64dd4cadb056d9e7fb13d93ec48bd95b4c109",
+  "schema_version": "lunar_ice_bpc.proof_tail_full80_preflight.v1",
+  "slot_count": 160
+}

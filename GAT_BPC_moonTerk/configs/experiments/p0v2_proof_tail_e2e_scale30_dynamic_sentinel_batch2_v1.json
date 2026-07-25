@@ -1,0 +1,100 @@
+{
+  "schema_version": "lunar_ice_bpc.proof_tail_e2e_pair_manifest.v2",
+  "experiment_id": "P0V2_PROOF_TAIL_SCALE30_DYNAMIC_SENTINEL_BATCH2_20260724",
+  "selection_frozen_before_this_batch_outcomes": true,
+  "selection_uses_qc0_qd1_outcomes": false,
+  "selection_source_manifest": "data/gat_p0v2/p0v2_gat_opportunity_sentinel_manifest_v1.json",
+  "selection_source_manifest_hash": "f4dd9995abee0acb1694474d338f52463ffd453124b9d070ed14da5cfdb33ad0",
+  "selection_rule": "within each frozen P0 difficulty stratum, take the next two smallest pre-action selection_uniform values after excluding every previously inspected end-to-end instance",
+  "excluded_prior_e2e_indices": [2, 13, 15, 17, 21, 35, 43, 53, 58],
+  "evidence_scope": "held_out_development_request_dynamic_qd1_gate",
+  "split_manifest": "data/gat_p0v2/p0v2_gat_split_manifest.json",
+  "split_manifest_hash": "c05be9fea1828b64690050f51003d9879685db6af2d78ae7c4e343774b5b5c5f",
+  "allowed_partition": "development",
+  "calibration_used": false,
+  "protected_final_test_used": false,
+  "control_config": "configs/benchmarks/p0v2_proof_tail_scale30_q0_3600.yaml",
+  "candidate_config": "configs/benchmarks/p0v2_proof_tail_scale30_dynamic_qd1_3600.yaml",
+  "candidate_rule": "scale30_branch_or_cut_qd1_else_q0",
+  "production_policy_changed": false,
+  "row_time_limit_sec": 3600,
+  "outer_time_limit_sec": 3720,
+  "workers": 1,
+  "run_order_policy": "balanced_alternating_by_pair",
+  "primary_gate": {
+    "exact_objective_and_certificate_equal": true,
+    "extra_incomplete_allowed": 0,
+    "paired_geometric_mean_wall_ratio_max": 0.95,
+    "paired_median_wall_ratio_max": 1.005,
+    "paired_log_ratio_bootstrap_ucb95_max": 0.0,
+    "worst_instance_wall_ratio_max": 1.02,
+    "stratum_geometric_mean_wall_ratio_max": {
+      "tail_censored": 0.95
+    },
+    "candidate_peak_rss_ratio_p90_max": 1.15,
+    "candidate_peak_rss_absolute_max_bytes": 8589934592,
+    "safety_redline_count_max": 0
+  },
+  "pairs": [
+    {
+      "pair_id": "easy_01",
+      "p0_difficulty_bin": "easy",
+      "scale": 30,
+      "index": 32,
+      "instance_id": "lunar_ice_030_032_seed110755001",
+      "instance_content_hash": "76eaaa208eab13a5",
+      "selection_uniform": 0.352736079,
+      "run_order": ["control", "candidate"]
+    },
+    {
+      "pair_id": "easy_02",
+      "p0_difficulty_bin": "easy",
+      "scale": 30,
+      "index": 40,
+      "instance_id": "lunar_ice_030_040_seed110763001",
+      "instance_content_hash": "502e6677b1770400",
+      "selection_uniform": 0.359227070,
+      "run_order": ["candidate", "control"]
+    },
+    {
+      "pair_id": "medium_01",
+      "p0_difficulty_bin": "medium",
+      "scale": 30,
+      "index": 33,
+      "instance_id": "lunar_ice_030_033_seed110756001",
+      "instance_content_hash": "db08c8583f39804b",
+      "selection_uniform": 0.629835187,
+      "run_order": ["control", "candidate"]
+    },
+    {
+      "pair_id": "medium_02",
+      "p0_difficulty_bin": "medium",
+      "scale": 30,
+      "index": 28,
+      "instance_id": "lunar_ice_030_028_seed110751001",
+      "instance_content_hash": "c5c2f0595a746895",
+      "selection_uniform": 0.695964240,
+      "run_order": ["candidate", "control"]
+    },
+    {
+      "pair_id": "tail_censored_01",
+      "p0_difficulty_bin": "tail_censored",
+      "scale": 30,
+      "index": 46,
+      "instance_id": "lunar_ice_030_046_seed110769001",
+      "instance_content_hash": "624a3d5e32f18bc9",
+      "selection_uniform": 0.136863454,
+      "run_order": ["control", "candidate"]
+    },
+    {
+      "pair_id": "tail_censored_02",
+      "p0_difficulty_bin": "tail_censored",
+      "scale": 30,
+      "index": 48,
+      "instance_id": "lunar_ice_030_048_seed110771001",
+      "instance_content_hash": "28ce6b1dd26e1585",
+      "selection_uniform": 0.191652383,
+      "run_order": ["candidate", "control"]
+    }
+  ]
+}

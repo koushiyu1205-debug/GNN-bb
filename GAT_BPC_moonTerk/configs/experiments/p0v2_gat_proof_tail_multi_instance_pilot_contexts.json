@@ -1,0 +1,75 @@
+{
+  "schema_version": "lunar_ice_bpc.proof_tail_context_config.v1",
+  "selection_stream": "targeted_multi_instance_pilot",
+  "selection_salt": "p0v2-proof-tail-qc0-qd1-multi-instance-pilot-20260724",
+  "split_manifest": "data/gat_p0v2/p0v2_gat_split_manifest.json",
+  "allowed_partitions": ["development"],
+  "contexts": [
+    {
+      "context_id": "scale20_hash02b53_root6",
+      "scale": 20,
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_038_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/02b53ea0ee27b184/023e5b607208bd2cbcdd649f1be24307fe9f91ea5e0ad1efd449a7240878167b.json",
+      "source_role": "mathematical_context",
+      "completion_bound": "off",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0,
+      "selection_reason": "stable_content_hash_targeted_pilot"
+    },
+    {
+      "context_id": "scale20_hash0319c_root3",
+      "scale": 20,
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_024_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/0319c8d2575839d5/3b3f0c8dfc0621fcec8c5fcf64edc8523879a044bc04ebe9af92a67c067b6410.json",
+      "source_role": "mathematical_context",
+      "completion_bound": "off",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0,
+      "selection_reason": "stable_content_hash_targeted_pilot"
+    },
+    {
+      "context_id": "scale20_hash07572_root8",
+      "scale": 20,
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_033_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/07572c7f1a5aff77/20cb1e5fa7ff7b034ccb134629fab04f30e907d4777e93d5cae32a8113b7b4c8.json",
+      "source_role": "mathematical_context",
+      "completion_bound": "off",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0,
+      "selection_reason": "stable_content_hash_targeted_pilot"
+    },
+    {
+      "context_id": "scale30_hash035c8_exact",
+      "scale": 30,
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_006_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/035c88d3cf1bb7c5/4494a5718ef11a24f78c2c45296312616e298ff94a771d2278ab2c1b849e9ce8.json",
+      "source_role": "exact_control",
+      "completion_bound": "off",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0,
+      "selection_reason": "stable_content_hash_targeted_pilot"
+    },
+    {
+      "context_id": "scale30_hash06acf_exact",
+      "scale": 30,
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_003_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/06acf344fe42c09c/a0b04ef78e273abc640a406b56585b4bb4051f166219d363d50bb54d5a804cae.json",
+      "source_role": "exact_control",
+      "completion_bound": "off",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0,
+      "selection_reason": "stable_content_hash_targeted_pilot"
+    },
+    {
+      "context_id": "scale30_hash12179_exact",
+      "scale": 30,
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_029_logical_graph.json",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/12179b68efe52175/1158a851c90137add2e6b6e408eddfe97a333528730a997e30e8e13c487715b5.json",
+      "source_role": "exact_control",
+      "completion_bound": "off",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0,
+      "selection_reason": "stable_content_hash_targeted_pilot"
+    }
+  ]
+}

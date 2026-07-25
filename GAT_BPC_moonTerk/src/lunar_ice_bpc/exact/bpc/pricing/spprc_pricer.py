@@ -10,14 +10,11 @@ surface for a future bucket-graph sidecar.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
-from collections import OrderedDict
 import hashlib
 import json
 from pathlib import Path
-import threading
 from time import perf_counter
 from typing import Iterable
-import weakref
 
 from lunar_ice_bpc.exact.bpc.pricing.backends import (
     BACKEND_MODE_EXACT_PROOF,
@@ -33,7 +30,7 @@ from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
     run_bpc_labeling_pricer,
 )
 from lunar_ice_bpc.exact.core.branching import BranchContext
-from lunar_ice_bpc.exact.core.cuts import CutContext
+from lunar_ice_bpc.exact.core.cuts import CutContext, true_dual_binding_hash
 from lunar_ice_bpc.exact.core.data import LunarIceData
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals
@@ -46,9 +43,6 @@ SPPRC_OBJECTIVE_VERSION = "normalized_cost_risk_weighted_completion_v1"
 SPPRC_WORKER_MODE = "RELAXED_NG_WORKER"
 SPPRC_EXACT_MODE = "EXACT_ELEMENTARY_PROOF"
 SPPRC_ENGINE_SOURCE = "internal_resource_label_core"
-_INSTANCE_HASH_CACHE_LOCK = threading.RLock()
-_INSTANCE_HASH_CACHE: OrderedDict[int, tuple[weakref.ReferenceType, str]] = OrderedDict()
-_INSTANCE_HASH_CACHE_MAX_ENTRIES = 64
 SPPRC_ENGINE_LICENSE = "project_internal"
 
 
@@ -235,6 +229,7 @@ def run_spprc_pricer(
                 reconstruction_eps=request.reconstruction_eps,
                 instance_hash=request.instance_hash,
                 config_hash=request.config_hash,
+                engine_hash=spprc_engine_build_hash(request.backend_id),
                 dual_binding_hash=_dual_binding_hash(true_duals),
                 branch_context_hash=request.branch_context_hash,
                 cut_context_hash=request.cut_context_hash,
@@ -374,42 +369,7 @@ def build_spprc_request(
 
 
 def spprc_instance_hash(data: LunarIceData) -> str:
-    cache_key = id(data)
-    with _INSTANCE_HASH_CACHE_LOCK:
-        cached = _INSTANCE_HASH_CACHE.get(cache_key)
-        if cached is not None and cached[0]() is data:
-            _INSTANCE_HASH_CACHE.move_to_end(cache_key)
-            return cached[1]
-    payload = {
-        "instance_id": data.instance_id,
-        "scale": data.scale,
-        "tasks": [asdict(data.tasks[task_id]) for task_id in data.task_ids],
-        "arcs": [
-            {
-                "source": source,
-                "target": target,
-                "options": [asdict(by_type[path_type]) for path_type in sorted(by_type)],
-            }
-            for (source, target), by_type in sorted(data.arcs.items())
-        ],
-        "fleet_size": data.fleet_size,
-        "max_tasks_per_trip": data.max_tasks_per_trip,
-        "capacity": data.capacity,
-        "energy_limit": data.energy_limit,
-        "horizon": data.horizon,
-        "path_option_policy_id": data.path_option_policy_id,
-        "dock_overhead_min": data.dock_overhead_min,
-        "recharge_power_proxy_per_min": data.recharge_power_proxy_per_min,
-        "max_shadow_exposure_per_sortie": data.max_shadow_exposure_per_sortie,
-        "objective": asdict(data.objective),
-    }
-    value = _stable_hash(payload)
-    with _INSTANCE_HASH_CACHE_LOCK:
-        _INSTANCE_HASH_CACHE[cache_key] = (weakref.ref(data), value)
-        _INSTANCE_HASH_CACHE.move_to_end(cache_key)
-        while len(_INSTANCE_HASH_CACHE) > _INSTANCE_HASH_CACHE_MAX_ENTRIES:
-            _INSTANCE_HASH_CACHE.popitem(last=False)
-    return value
+    return str(data.instance_content_hash)
 
 
 def spprc_request_hash(request: SpprcPricingRequest) -> str:
@@ -533,12 +493,10 @@ def _spprc_result_from_backend(request: SpprcPricingRequest, result, elapsed: fl
 
 
 def _dual_binding_hash(duals: JourneyDuals) -> str:
-    return _stable_hash(
-        {
-            "cover": sorted((str(key), float(value)) for key, value in duals.cover.items()),
-            "fleet_limit": float(duals.fleet_limit),
-            "cuts": sorted((str(key), float(value)) for key, value in (duals.cuts or {}).items()),
-        }
+    return true_dual_binding_hash(
+        duals.cover,
+        fleet_limit=duals.fleet_limit,
+        cuts=duals.cuts,
     )
 
 

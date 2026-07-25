@@ -2,3 +2,6 @@
 /build/native-spprc-asan/
 /.venv-native-spprc/
 /src/*.egg-info/
+/data/gat_p0v2/development_instances/scale_*/instance_*_logical_graph.json
+/data/gat_p0v2/large_development_instances/scale_*/instance_*_logical_graph.json
+/runs/p0v2_gat_*/

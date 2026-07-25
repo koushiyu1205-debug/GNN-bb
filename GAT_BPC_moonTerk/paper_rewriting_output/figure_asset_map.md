@@ -1,5 +1,13 @@
 # Figure Asset Map
 
+## Manuscript-Wide Objective Guard
+
+Any objective label, axis, legend, table column, or caption must use only the
+normalized operating cost + normalized risk + `0.4 ×` normalized
+science-weighted completion-time objective. Makespan may appear only as a
+separately labeled reporting metric. No legacy or alternative objective
+formula may appear in a manuscript-facing visual.
+
 ## Readiness Vocabulary
 
 | Status | Meaning |

@@ -1,6 +1,57 @@
 # Exemplar Learning Dossier
 
-This dossier uses only indexed metadata and structural reasons. Uninspected full texts are not evidence for formats, wording, or performance.
+This dossier initially used indexed metadata and structural reasons. The
+formatting update below records the one exemplar manuscript that was later
+inspected directly. Uninspected full texts remain ineligible as evidence for
+formats, wording, or performance.
+
+## Verified Component-Algorithm Format Update
+
+The open manuscript of Cabrera, Cordeau, and Mendoza's TRC branch-price-and-cut
+paper was inspected on 2026-07-24:
+<https://chairelogistique.hec.ca/wp-content/uploads/2023/02/Parkandloop.pdf>.
+Its pricing section presents small component procedures as separately numbered
+algorithms with `Require` and `Ensure` declarations, numbered pseudocode lines,
+and a following paragraph that explains the roles of line ranges. This
+presentation pattern, rather than any problem-specific algorithm content, is
+transferred to Section 4 of the working manuscript. Algorithms 1--3 now expose
+the node loop, guidance-ordered pricing with exact completion, and
+exact-valid branch ranking in that format.
+
+## Verified Formulation-Placement Update
+
+Three TRC route-based exact papers were checked specifically for the placement
+of compact constraints, route definitions, master rows, and pricing logic.
+
+- Cabrera, Cordeau, and Mendoza place route feasibility and the route master in
+  Section 2, then place column generation, pricing, valid inequalities, and
+  branching in Section 3. Their pricing subsection defines the elementary
+  resource-constrained path construction rather than repeating the formulation.
+  Source:
+  <https://chairelogistique.hec.ca/wp-content/uploads/2023/02/Parkandloop.pdf>.
+- Bezzi, Ceselli, and Righini introduce the feasible route set and route master
+  in Section 3, “Mathematical formulation,” before developing the pricing
+  algorithms. Internal energy and recharge feasibility is encoded by the
+  feasible-route definition and recovered through dynamic programming rather
+  than restated as master rows. Sources:
+  <https://doi.org/10.1016/j.trc.2023.104374> and
+  <https://air.unimi.it/bitstream/2434/1049821/2/53%20-%202023%20TRC%20-%20EVRP%20route%20based.pdf>.
+- Sakarya et al. first give the original arc-based formulation, including
+  route flow, service, capacity, inventory, synchronization, and variable
+  domains, in Section 4. Section 5 then derives the route master and pricing
+  problems by decomposition. Sources:
+  <https://doi.org/10.1016/j.trc.2024.104987> and
+  <https://pure.tue.nl/ws/portalfiles/portal/349454819/1-s2.0-S0968090X24005084-main.pdf>.
+
+The transferable placement rule is therefore: define the full semantics of a
+feasible route or column in the problem/formulation section; state the compact
+original formulation there when it is needed for clarity; place the
+set-partitioning or set-covering master at the formulation/decomposition
+boundary; and use the pricing section to explain the constructive enforcement
+of route-local constraints through states, transitions, dominance, and
+completion. The working manuscript follows this pattern by placing the core
+route-local families in Section 3.2 and a constraint-to-label correspondence in
+Section 4.3.
 
 ## Exemplar Inventory
 

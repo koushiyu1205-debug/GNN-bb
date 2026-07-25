@@ -1361,6 +1361,10 @@ def _run_tree_closure(
         and str(certificate_scope) == "BPC_TREE_OPTIMAL"
         and str(pricing_state) == "CERTIFIED_NO_NEGATIVE"
     )
+    certifying_scope = str(certificate_scope) in {
+        "BPC_NODE_LP_CERTIFIED",
+        "BPC_TREE_OPTIMAL",
+    }
     return {
         "algorithm_status": algorithm_status,
         "certificate_scope": certificate_scope,
@@ -1396,11 +1400,17 @@ def _run_tree_closure(
         "global_remaining_rc_lb": final_judge.get("global_remaining_rc_lb"),
         "manual_rc_fail": max(
             b41_manual_rc_fail,
-            0 if bool(final_judge.get("pricing_rc_audit_pass", True)) else 1,
+            int(
+                certifying_scope
+                and final_judge.get("manual_rc_audit_pass") is False
+            ),
         ),
         "pricing_rc_fail": max(
             b41_pricing_rc_fail,
-            0 if bool(final_judge.get("pricing_rc_audit_pass", True)) else 1,
+            int(
+                certifying_scope
+                and final_judge.get("pricing_rc_audit_pass") is False
+            ),
         ),
         "certificate_leak": max(
             b41_certificate_leak,

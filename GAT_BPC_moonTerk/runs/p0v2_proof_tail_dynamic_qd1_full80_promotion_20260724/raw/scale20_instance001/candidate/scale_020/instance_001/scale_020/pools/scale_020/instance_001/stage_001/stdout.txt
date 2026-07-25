@@ -1,0 +1,2 @@
+{"elapsed_sec": 4.526338, "algorithm_status": "BPC_GAP_AVAILABLE", "certificate_scope": "BPC_NODE_LP_CERTIFIED", "pricing_state": "CERTIFIED_NO_NEGATIVE", "pricing_round_count": 23, "added_column_count": 671, "active_column_count": 689}
+report /home/kai/work/GAT_BPC_moonTerk/runs/p0v2_proof_tail_dynamic_qd1_full80_promotion_20260724/raw/scale20_instance001/candidate/scale_020/instance_001/scale_020/pools/scale_020/instance_001/stage_001/probe_report_zh.md

@@ -366,7 +366,10 @@ def _run_native_exact_backend(
         BackendPricingRequest,
         BackendRegistry,
     )
-    from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import spprc_instance_hash
+    from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import (
+        spprc_engine_build_hash,
+        spprc_instance_hash,
+    )
 
     try:
         memory_limit_gb = max(0.0, float(os.getenv(NATIVE_MEMORY_LIMIT_GB_ENV, "0") or 0.0))
@@ -396,6 +399,7 @@ def _run_native_exact_backend(
             in {"1", "true", "yes", "on"},
             instance_hash=spprc_instance_hash(data),
             config_hash=stable_payload_hash(cfg.__dict__),
+            engine_hash=spprc_engine_build_hash(backend_id),
             dual_binding_hash=true_dual_binding_hash(
                 true_duals.cover,
                 fleet_limit=true_duals.fleet_limit,

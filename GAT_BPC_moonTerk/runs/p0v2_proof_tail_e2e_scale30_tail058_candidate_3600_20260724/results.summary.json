@@ -1,0 +1,35 @@
+{
+  "deployment_manifest": "",
+  "deployment_manifest_hash": "",
+  "deployment_scope": "p0_control",
+  "exact_count": 1,
+  "experiment_variant": "SCALE30_QD1_ELSE_Q0_3600",
+  "fold": null,
+  "guidance_checkpoint_id": "",
+  "guidance_mode": "off",
+  "guidance_model_kind": "",
+  "legal_incomplete_count": 0,
+  "partition": "development",
+  "protected_instance_count_run": 0,
+  "redline_failure_count": 0,
+  "resource_snapshot_before": {
+    "cpu_count": 20,
+    "disk_available_bytes": 867150962688,
+    "load_1m": 1.01220703125,
+    "memory_available_bytes": 12941705216
+  },
+  "results_jsonl": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v2_proof_tail_e2e_scale30_tail058_candidate_3600_20260724/results.jsonl",
+  "run_count": 1,
+  "schema_version": "lunar_ice_bpc.p0v2_b0_development_run.v1",
+  "selected_scales": [
+    30
+  ],
+  "source_baseline_id": "P0V2_BINDING_V2_SAME_CODE_B0_CONTROL_20260723",
+  "source_role": "new_development",
+  "split_manifest": "data/gat_p0v2/p0v2_gat_split_manifest.json",
+  "split_manifest_hash": "c05be9fea1828b64690050f51003d9879685db6af2d78ae7c4e343774b5b5c5f",
+  "total_record_count": 1,
+  "training_instrumentation_enabled": false,
+  "wall_sec": 1977.959035603999,
+  "workers": 1
+}

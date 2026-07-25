@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0v2_proof_tail_dynamic_qd1_full80_promotion_20260724/raw/scale05_instance017/candidate/scale_005/instance_017/scale_005/proofs/scale_005/instance_017/b4_1_report_zh.md

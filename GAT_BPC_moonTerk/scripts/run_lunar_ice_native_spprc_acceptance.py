@@ -23,6 +23,12 @@ def main() -> int:
         choices=("python_reference", "native_rcspp_inprocess", "native_rcspp_host"),
     )
     parser.add_argument("--instance", action="append", default=[])
+    parser.add_argument(
+        "--instance-dir",
+        action="append",
+        default=[],
+        help="Add every instance_*_logical_graph.json in this directory.",
+    )
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--output-dir", default="runs/native_spprc_acceptance")
     parser.add_argument("--resume", action="store_true", default=False)
@@ -32,12 +38,23 @@ def main() -> int:
     config_path = Path(args.config)
     if not config_path.is_absolute():
         config_path = ROOT / config_path
+    instances = list(args.instance)
+    for raw_directory in args.instance_dir:
+        directory = Path(raw_directory)
+        if not directory.is_absolute():
+            directory = ROOT / directory
+        instances.extend(
+            str(path)
+            for path in sorted(
+                directory.glob("instance_*_logical_graph.json")
+            )
+        )
     summary = run_native_spprc_acceptance(
         project_root=ROOT,
         config=load_config(config_path),
         scales=tuple(args.scales),
         backend_override=args.backend,
-        instances=tuple(args.instance),
+        instances=tuple(instances),
         limit=args.limit,
         output_dir=args.output_dir,
         resume=args.resume,

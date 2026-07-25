@@ -61,6 +61,7 @@ void set_cut_overlap(CutState* state, const CutDefinition& cut,
 struct Action {
     ActionKind kind = ActionKind::Terminate;
     std::size_t task_index = 0;
+    std::size_t model_arc_index = std::numeric_limits<std::size_t>::max();
     std::string path_type;
     double travel_time = 0.0;
     double energy = 0.0;
@@ -88,6 +89,7 @@ struct State {
     double task_dual_reward = 0.0;
     double positive_task_dual_reward = 0.0;
     double cut_dual_reward = 0.0;
+    double guidance_score = 0.0;
     CutState cut_state;
 };
 
@@ -251,6 +253,13 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         state->raw_weighted_completion += task.science_weight * completion;
         state->task_dual_reward += task.dual;
         state->positive_task_dual_reward += std::max(0.0, task.dual);
+        if (model_->guidance_task_arc_enabled) {
+            state->guidance_score += task.guidance_priority;
+            if (action.model_arc_index < model_->arcs.size()) {
+                state->guidance_score +=
+                    model_->arcs[action.model_arc_index].guidance_priority;
+            }
+        }
         for (std::size_t cut_index = 0; cut_index < model_->cuts.size(); ++cut_index) {
             const auto& cut = model_->cuts[cut_index];
             if (cut.kind == CutKind::FleetLowerBound) {
@@ -321,6 +330,11 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         state->global_time = end_time;
         state->raw_operating_cost += action.distance + action.energy;
         state->raw_risk += action.risk;
+        if (model_->guidance_task_arc_enabled &&
+            action.model_arc_index < model_->arcs.size()) {
+            state->guidance_score +=
+                model_->arcs[action.model_arc_index].guidance_priority;
+        }
         state->at_depot = true;
         state->sortie_demand = 0.0;
         state->sortie_energy = 0.0;
@@ -782,11 +796,17 @@ class AuditedBestFirstDominance final
     : public rcspp::DominanceAlgorithm<Composition, LabelList> {
   public:
     using Base = rcspp::DominanceAlgorithm<Composition, LabelList>;
+    using Label = rcspp::Label<Composition>;
     using Pair = rcspp::LabelIteratorPair<Composition>;
+    using Clock = std::chrono::steady_clock;
 
     AuditedBestFirstDominance(rcspp::ResourceFactory<Composition>* factory,
-                              rcspp::AlgorithmParams<LabelList> params)
-        : Base(factory, std::move(params)) {}
+                              rcspp::AlgorithmParams<LabelList> params,
+                              std::shared_ptr<const Model> model,
+                              ProofQueuePolicy proof_queue_policy)
+        : Base(factory, std::move(params)),
+          model_(std::move(model)),
+          proof_queue_policy_(proof_queue_policy) {}
 
     [[nodiscard]] std::size_t extended_labels() const { return this->num_extended_labels_; }
     [[nodiscard]] std::size_t dominated_labels() const { return this->nb_dominated_labels_; }
@@ -848,9 +868,52 @@ class AuditedBestFirstDominance final
     [[nodiscard]] double dominance_wall_time_seconds() const {
         return this->total_update_non_dom_time_.elapsed_seconds();
     }
+    void begin_best_reduced_cost_trace(Clock::time_point started, bool enabled) {
+        trace_started_ = started;
+        trace_enabled_ = enabled;
+        best_reduced_cost_ = std::numeric_limits<double>::infinity();
+        best_reduced_cost_event_count_total_ = 0;
+        best_reduced_cost_events_.clear();
+    }
+    [[nodiscard]] const std::vector<BestReducedCostEvent>& best_reduced_cost_events() const {
+        return best_reduced_cost_events_;
+    }
+    [[nodiscard]] std::size_t best_reduced_cost_event_count_total() const {
+        return best_reduced_cost_event_count_total_;
+    }
+    [[nodiscard]] bool best_reduced_cost_events_truncated() const {
+        return best_reduced_cost_event_count_total_ > best_reduced_cost_events_.size();
+    }
     void release_request_memory() { release_label_memory(); }
 
   private:
+    void extract_solution(const Label& end_label) override {
+        const auto size_before = this->solutions_.size();
+        Base::extract_solution(end_label);
+        if (!trace_enabled_ || this->solutions_.size() == size_before) {
+            return;
+        }
+        const double reduced_cost = end_label.get_cost();
+        constexpr double improvement_epsilon = 1.0e-12;
+        if (!(reduced_cost < best_reduced_cost_ - improvement_epsilon)) {
+            return;
+        }
+        best_reduced_cost_ = reduced_cost;
+        ++best_reduced_cost_event_count_total_;
+        if (best_reduced_cost_events_.size() >= max_best_reduced_cost_events_) {
+            return;
+        }
+        const auto elapsed =
+            std::chrono::duration<double>(Clock::now() - trace_started_).count();
+        best_reduced_cost_events_.push_back(BestReducedCostEvent{
+            .elapsed_seconds = std::max(0.0, elapsed),
+            .extended_labels = this->num_extended_labels_,
+            .solution_count = this->solutions_.size(),
+            .discovered_reduced_cost = reduced_cost,
+            .best_reduced_cost = best_reduced_cost_,
+        });
+    }
+
     struct GreaterCost {
         bool operator()(const Pair& lhs, const Pair& rhs) const {
             const auto& lhs_state = lhs.first->get_resource()
@@ -868,24 +931,133 @@ class AuditedBestFirstDominance final
             if (lhs_can_terminate != rhs_can_terminate) {
                 return !lhs_can_terminate;
             }
+            constexpr double guidance_epsilon = 1.0e-12;
+            if (std::abs(lhs_state.guidance_score - rhs_state.guidance_score) >
+                guidance_epsilon) {
+                // Larger guidance score is expanded first.  With guidance off
+                // all scores remain exactly zero and the historical P0
+                // comparator is unchanged.
+                return lhs_state.guidance_score < rhs_state.guidance_score;
+            }
             return lhs.first->get_cost() > rhs.first->get_cost();
         }
     };
 
+    struct CachedQueueEntry {
+        Pair value;
+        bool can_terminate = false;
+        double primary_key = 0.0;
+        double guidance_score = 0.0;
+        double partial_cost = 0.0;
+        std::uint64_t creation_sequence_id = 0;
+    };
+
+    struct GreaterCachedKey {
+        bool operator()(
+            const CachedQueueEntry& lhs,
+            const CachedQueueEntry& rhs
+        ) const {
+            if (lhs.can_terminate != rhs.can_terminate) {
+                return !lhs.can_terminate;
+            }
+            constexpr double key_epsilon = 1.0e-12;
+            if (
+                std::abs(lhs.primary_key - rhs.primary_key) >
+                key_epsilon
+            ) {
+                return lhs.primary_key > rhs.primary_key;
+            }
+            if (
+                std::abs(lhs.guidance_score - rhs.guidance_score) >
+                key_epsilon
+            ) {
+                return lhs.guidance_score < rhs.guidance_score;
+            }
+            if (
+                std::abs(lhs.partial_cost - rhs.partial_cost) >
+                key_epsilon
+            ) {
+                return lhs.partial_cost > rhs.partial_cost;
+            }
+            return (
+                lhs.creation_sequence_id >
+                rhs.creation_sequence_id
+            );
+        }
+    };
+
     Pair next_label_iterator() override {
-        if (unprocessed_.empty()) {
+        if (
+            proof_queue_policy_ ==
+            ProofQueuePolicy::Q0PartialCost
+        ) {
+            if (unprocessed_q0_.empty()) {
+                return Pair{};
+            }
+            auto value = unprocessed_q0_.top();
+            unprocessed_q0_.pop();
+            return value;
+        }
+        if (unprocessed_experimental_.empty()) {
             return Pair{};
         }
-        auto value = unprocessed_.top();
-        unprocessed_.pop();
-        return value;
+        auto entry = unprocessed_experimental_.top();
+        unprocessed_experimental_.pop();
+        return entry.value;
     }
 
     [[nodiscard]] std::size_t number_of_labels() const override {
-        return unprocessed_.size();
+        return (
+            proof_queue_policy_ ==
+                ProofQueuePolicy::Q0PartialCost
+            ? unprocessed_q0_.size()
+            : unprocessed_experimental_.size()
+        );
     }
 
-    void add_new_unprocessed_label(const Pair& value) override { unprocessed_.push(value); }
+    void add_new_unprocessed_label(const Pair& value) override {
+        if (
+            proof_queue_policy_ ==
+            ProofQueuePolicy::Q0PartialCost
+        ) {
+            // Keep the production Q0 container and comparator byte-for-byte
+            // equivalent to the historical path.
+            unprocessed_q0_.push(value);
+            return;
+        }
+        const auto& state = value.first->get_resource()
+                                .template get_component<JourneyResource>(0)
+                                .get_value()
+                                .get_value()
+                                .state;
+        const double partial_cost = value.first->get_cost();
+        double primary_key = 0.0;
+        if (
+            proof_queue_policy_ ==
+            ProofQueuePolicy::QD1DeeperFirst
+        ) {
+            primary_key = -static_cast<double>(state.visited_count);
+        } else if (
+            proof_queue_policy_ ==
+            ProofQueuePolicy::QB1OptimisticCompletion
+        ) {
+            const double remaining_positive_dual = std::max(
+                0.0,
+                model_->positive_task_dual_sum -
+                    state.positive_task_dual_reward);
+            primary_key = partial_cost - remaining_positive_dual;
+        }
+        unprocessed_experimental_.push(CachedQueueEntry{
+            .value = value,
+            .can_terminate = (
+                state.at_depot && state.visited_count > 0
+            ),
+            .primary_key = primary_key,
+            .guidance_score = state.guidance_score,
+            .partial_cost = partial_cost,
+            .creation_sequence_id = next_creation_sequence_id_++,
+        });
+    }
 
     void prepareNextPhase() override {}
 
@@ -897,11 +1069,29 @@ class AuditedBestFirstDominance final
     }
 
     void release_label_memory() override {
-        unprocessed_ = decltype(unprocessed_){};
+        unprocessed_q0_ = decltype(unprocessed_q0_){};
+        unprocessed_experimental_ =
+            decltype(unprocessed_experimental_){};
         Base::release_label_memory();
     }
 
-    std::priority_queue<Pair, std::vector<Pair>, GreaterCost> unprocessed_;
+    std::priority_queue<Pair, std::vector<Pair>, GreaterCost>
+        unprocessed_q0_;
+    std::priority_queue<
+        CachedQueueEntry,
+        std::vector<CachedQueueEntry>,
+        GreaterCachedKey
+    > unprocessed_experimental_;
+    std::shared_ptr<const Model> model_;
+    ProofQueuePolicy proof_queue_policy_ =
+        ProofQueuePolicy::Q0PartialCost;
+    std::uint64_t next_creation_sequence_id_ = 0;
+    static constexpr std::size_t max_best_reduced_cost_events_ = 512;
+    Clock::time_point trace_started_{};
+    bool trace_enabled_ = false;
+    double best_reduced_cost_ = std::numeric_limits<double>::infinity();
+    std::size_t best_reduced_cost_event_count_total_ = 0;
+    std::vector<BestReducedCostEvent> best_reduced_cost_events_;
 };
 
 struct BuiltGraph {
@@ -953,6 +1143,20 @@ void refresh_dynamic_model(const Model& source, Model* target) {
             throw std::invalid_argument("native graph cache task mapping mismatch");
         }
         target->tasks[index].dual = source.tasks[index].dual;
+        target->tasks[index].guidance_priority =
+            source.tasks[index].guidance_priority;
+    }
+    if (source.arcs.size() != target->arcs.size()) {
+        throw std::invalid_argument("native graph cache arc-count mismatch");
+    }
+    for (std::size_t index = 0; index < source.arcs.size(); ++index) {
+        if (source.arcs[index].source != target->arcs[index].source ||
+            source.arcs[index].target != target->arcs[index].target ||
+            source.arcs[index].path_type != target->arcs[index].path_type) {
+            throw std::invalid_argument("native graph cache arc mapping mismatch");
+        }
+        target->arcs[index].guidance_priority =
+            source.arcs[index].guidance_priority;
     }
     target->cost_coefficient = source.cost_coefficient;
     target->risk_coefficient = source.risk_coefficient;
@@ -960,6 +1164,7 @@ void refresh_dynamic_model(const Model& source, Model* target) {
     target->fleet_dual = source.fleet_dual;
     target->branch_decisions = source.branch_decisions;
     target->cuts = source.cuts;
+    target->guidance_task_arc_enabled = source.guidance_task_arc_enabled;
 }
 
 BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& params) {
@@ -1028,7 +1233,10 @@ BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& pa
         });
     };
 
-    for (const auto& arc : model->arcs) {
+    for (std::size_t model_arc_index = 0;
+         model_arc_index < model->arcs.size();
+         ++model_arc_index) {
+        const auto& arc = model->arcs[model_arc_index];
         if (arc.source == "depot" && arc.target == "depot") {
             continue;
         }
@@ -1044,6 +1252,7 @@ BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& pa
             continue;
         }
         Action action;
+        action.model_arc_index = model_arc_index;
         action.path_type = arc.path_type;
         action.travel_time = arc.travel_time;
         action.energy = arc.energy;
@@ -1106,6 +1315,16 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     }
     if (input_model.cuts.size() > kMaxActiveCuts) {
         throw std::invalid_argument("native v1 supports at most 16 active cuts");
+    }
+    for (const auto& task : input_model.tasks) {
+        if (!std::isfinite(task.guidance_priority)) {
+            throw std::invalid_argument("native task guidance priority must be finite");
+        }
+    }
+    for (const auto& arc : input_model.arcs) {
+        if (!std::isfinite(arc.guidance_priority)) {
+            throw std::invalid_argument("native arc guidance priority must be finite");
+        }
     }
     std::size_t expected_state_bit_offset = 0;
     for (const auto& cut : input_model.cuts) {
@@ -1238,8 +1457,11 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     rcspp::AlgorithmParams<LabelList> algorithm_params(
         base, LabelList{model, 10, params.dominance_epsilon, params.resource_epsilon});
     AuditedBestFirstDominance algorithm(&built.graph->get_resource_factory(),
-                                        std::move(algorithm_params));
+                                        std::move(algorithm_params),
+                                        model,
+                                        params.proof_queue_policy);
     const auto started = std::chrono::steady_clock::now();
+    algorithm.begin_best_reduced_cost_trace(started, !params.exact_proof);
     auto result = built.graph->solve<AuditedBestFirstDominance, rcspp::RealResource>(
         &algorithm, -params.negative_epsilon, false, 0);
     const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - started);
@@ -1276,6 +1498,11 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     output.telemetry.extension_wall_time_seconds = algorithm.extension_wall_time_seconds();
     output.telemetry.dominance_wall_time_seconds = algorithm.dominance_wall_time_seconds();
     output.telemetry.wall_time_seconds = elapsed.count();
+    output.telemetry.best_reduced_cost_events = algorithm.best_reduced_cost_events();
+    output.telemetry.best_reduced_cost_event_count_total =
+        algorithm.best_reduced_cost_event_count_total();
+    output.telemetry.best_reduced_cost_events_truncated =
+        algorithm.best_reduced_cost_events_truncated();
     output.routes.reserve(result.solutions.size());
     for (const auto& solution : result.solutions) {
         output.routes.push_back(reconstruct_route(solution, *model, built.actions_by_arc_id));
@@ -1299,6 +1526,8 @@ std::unordered_map<std::string, std::string> build_info() {
         {"cut_state_max_bits", "48"},
         {"max_active_cuts", "16"},
         {"completion_bound", "positive_cover_dual_threshold_pruning_v1"},
+        {"guidance_ordering", "negative_harvest_task_arc_priority_v1"},
+        {"best_reduced_cost_event_trace", "harvest_improvements_v1"},
     };
 }
 

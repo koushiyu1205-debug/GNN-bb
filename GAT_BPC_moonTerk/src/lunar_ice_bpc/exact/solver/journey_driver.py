@@ -14,7 +14,7 @@ import heapq
 from itertools import permutations, product
 from math import ceil, floor, isfinite
 from time import perf_counter
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from lunar_ice_bpc.domain.scenario import PATH_OPTION_POLICY_ID, PATH_TYPES
 from lunar_ice_bpc.exact.bpc.core.task_index import TaskIndexMap
@@ -1687,7 +1687,7 @@ def _build_cover_dual_vector(
 
 def _reference_solution_upper_bound(data: LunarIceData) -> _ReferenceSolutionUpperBound | None:
     payload = data.reference_solution
-    if not isinstance(payload, dict):
+    if not isinstance(payload, Mapping):
         return None
     journeys_payload = list(payload.get("journeys") or [])
     if not journeys_payload or len(journeys_payload) > int(data.fleet_size):

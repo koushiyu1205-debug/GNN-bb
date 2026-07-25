@@ -1,0 +1,16 @@
+# Rewrite Matrix
+
+## Targeted Pass
+
+This matrix controls the 2026-07-24 replacement of Section 1. The target is
+six prose paragraphs in English.
+
+| Section | Unit ID | Current Function | Motivation Link | Operation | Intended Move | Evidence Source | Model Pattern | Target Length | Logic Change | Decision |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Introduction | I1 | Broad lunar-water background and candidate-site gap | Establish why route planning is required | REWRITE | Importance → remote/sample evidence → unresolved site properties → preidentified in-situ prospecting → finite-horizon planning need | C054, C061, C062; CL038; LS11 | Evidence-led funnel | 150--190 words | Make the in-situ evidence gap, rather than a generic resource claim, the paragraph endpoint | Use no benchmark-site abundance inference |
+| Introduction | I2 | Lunar environment and path/resource trade-offs | Explain what makes the setting genuinely lunar | REWRITE | PSR/rim/transition contrast → operational burden → static task-window interpretation → cumulative shadow exposure → alternative-path trade-off | C042, C054, C055; EV029; LS01, LS02, LS07 | Causal chain | 170--220 words | Separate shadow exposure, energy and exogenous communication availability; remove departure-time-dependent path semantics | Use task timing and time-window wording |
+| Introduction | I3 | Formal transportation decision and benchmark | Narrow the scene to the exact model | REWRITE | Heterogeneous CVRPTW structure → assignment/trip/path decisions → feasibility families → objective interpretation → real-map inputs and forward-looking parameters | EV002, EV003, EV009--EV011, EV032 | Definition followed by scope boundary | 180--230 words | Resolve `xxxxx` through verified LOLA-derived raster roles and qualify 50 km by 50 km and 30 km/h | No current-rover capability claim |
+| Introduction | I4 | Representation and exact-solution challenge | Establish why BPC pricing is the bottleneck | REWRITE | Single-path information loss → exponential route-column space → resource-rich pricing → exact/learned precedents → proof boundary | C001, C002, C009, C021, C028--C030, C059; EV004, EV007 | Contrast then causal narrowing | 160--210 words | Replace the repeated long problem name with two concrete technical difficulties | No learned-performance claim |
+| Introduction | I5 | Proposed framework and proof scope | Present the direct response | REWRITE | Pricing-led guidance → secondary branch ranking → deterministic exact responsibilities → mandatory fallback → independent mission epochs → fixed-instance exactness | EV001, EV004--EV009, EV031, EV033; CL039 | Responsibility split | 160--210 words | Express exactness in formal manuscript language rather than implementation-status vocabulary | No learned cuts or cross-phase robustness claim |
+| Introduction | I6 | Contributions and roadmap | State checkable promises | REWRITE | Four inline contributions in dependency order → explicit open empirical questions → section organization | EV001--EV011, EV027--EV033 | Contribution closure | 190--240 words | Keep exactly six prose paragraphs while distinguishing benchmark availability from the planned seasonal package | Seasonal ranking remains open |
+

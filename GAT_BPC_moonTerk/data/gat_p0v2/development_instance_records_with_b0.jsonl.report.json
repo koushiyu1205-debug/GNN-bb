@@ -1,0 +1,45 @@
+{
+  "censored_policy": "tail_censored_no_fixed_penalty",
+  "config_hash_by_scale": {
+    "10": "4dd4b0d920101fb1",
+    "20": "b18732982dd77da7",
+    "30": "84518dd570f44ed3",
+    "5": "14afd8235b032f9b"
+  },
+  "output_records_jsonl": "/home/kai/work/GAT_BPC_moonTerk/data/gat_p0v2/development_instance_records_with_b0.jsonl",
+  "protected_performance_used": false,
+  "record_count": 240,
+  "schema_version": "lunar_ice_bpc.p0v2_difficulty_bins.v1",
+  "source_baseline_id": "P0V2_BINDING_V2_SAME_CODE_B0_CONTROL_20260723",
+  "source_role": "new_development",
+  "thresholds_by_scale": {
+    "10": {
+      "censored_count": 0,
+      "exact_count": 60,
+      "p50_exact_sec": 0.874585,
+      "p80_exact_sec": 0.977374,
+      "p95_exact_sec": 1.137775
+    },
+    "20": {
+      "censored_count": 0,
+      "exact_count": 60,
+      "p50_exact_sec": 14.226183,
+      "p80_exact_sec": 29.792016,
+      "p95_exact_sec": 52.360159
+    },
+    "30": {
+      "censored_count": 29,
+      "exact_count": 31,
+      "p50_exact_sec": 188.794242,
+      "p80_exact_sec": 238.966842,
+      "p95_exact_sec": 275.774515
+    },
+    "5": {
+      "censored_count": 0,
+      "exact_count": 60,
+      "p50_exact_sec": 0.475939,
+      "p80_exact_sec": 0.523465,
+      "p95_exact_sec": 0.547627
+    }
+  }
+}

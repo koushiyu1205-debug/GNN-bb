@@ -2,7 +2,7 @@
 
 ## Inventory Policy
 
-- Snapshot date: 2026-07-23 (Asia/Shanghai)
+- Evidence cutoff: 2026-07-23 (Asia/Shanghai)
 - Materials root: `/home/kai/work/GAT_BPC_moonTerk`
 - Method: curated emulation of PaperSpine's recursive material inventory.
 - Machine inventory companion:
@@ -73,6 +73,25 @@
 | S037 | `参考文献/` | PDF/Bib/document group | User-local reference collection | B/C | local-first input | Literature verification; not project-result evidence |
 | S038 | `paper_rewriting_output/reference_materials/` | document group | PaperSpine reference cache/index | B | complete/current | Traceable research sources and exemplar routing |
 | S039 | `paper_rewriting_output/terminology_policy.md` | Markdown | Mandatory paper-facing terminology and restricted `certify` use | A | active | Proof, solution-space/state-space and framework wording boundary |
+| S040 | `paper_rewriting_output/phase_3_pre_draft_freeze.md` | Markdown | Phase 3 completion and manuscript lock | A | frozen | Mainline, objective, exactness, evidence-class, and drafting gates |
+| S041 | `paper_rewriting_output/model_notation_and_equation_register.md` | Markdown | Model and equation contract | A/B | frozen | Authoritative notation, normalized objective, master, reduced cost, and internal schema audit |
+| S042 | `paper_rewriting_output/section_writing_input_packets.md` | Markdown | Section-by-section drafting input | A | frozen | Allowed claims, evidence, citations, visuals, `TBD` gates, and exit checks |
+| S043 | `paper_rewriting_output/citation_lock.md` | Markdown | Twenty-two-reference core citation lock | B | manually verified | Stable locators, allowed support, prohibited use, and insertion gate |
+| S044 | `paper_rewriting_output/result_placeholder_schema.md` | Markdown | Learning experiment and result activation schema | A | frozen, results TBD | M001–M005, L0/L1/L2/G rows, safety gates, metrics, and empty tables |
+| S045 | `paper_rewriting_output/phase_3_readiness_audit.md` | Markdown | Phase 3 closeout audit | A | complete | Readiness result, expected deferrals, and body-text lock |
+| S046 | `paper_rewriting_output/phase_4_drafting_contract.md` | Markdown | Phase 4 authorization and drafting rules | A | active | Working-draft completion definition, objective lock, placeholder syntax, and output boundary |
+| S047 | `paper_rewriting_output/manuscript_draft.md` | Markdown | Active English journal working draft | A/B | Phase 4 complete with explicit TBD blocks | Eight-section manuscript, appendices, and draft reference-key map |
+| S048 | `paper_rewriting_output/section_3_pre_phase4_scratch.md` | Markdown | Archived pre-Phase-4 consistency check | D | inactive archive | Traceability only; not manuscript evidence |
+| S049 | `paper_rewriting_output/phase_4_placeholder_ledger.md` | Markdown | Missing-evidence activation ledger | A | active | M001--M005, experiment, figure, abstract, and discussion placeholders |
+| S050 | `paper_rewriting_output/phase_4_reverse_outline.md` | Markdown | Paragraph-level argument/evidence map | A/B | complete | Continuity and evidence-maturity audit |
+| S051 | `paper_rewriting_output/phase_4_claim_evidence_audit.md` | Markdown | Major-claim support audit | A | complete | Unsupported-claim and overclaim prevention |
+| S052 | `paper_rewriting_output/phase_4_completion_audit.md` | Markdown | Phase 4 closeout record | A | complete | Stage verdict, scope checks, and deferred production outputs |
+| S053 | `paper_rewriting_output/logic_transfer_audit.md` | Markdown | Source-to-draft logic transfer audit | A/B | complete | Confirms that project materials survive in the manuscript with correct maturity |
+| S054 | `paper_rewriting_output/structured_review.md` | Markdown | Single-agent Phase 4 structured review | B | complete; independent multi-review deferred | Reviewer-facing strengths, major issues, and later activation gates |
+| S055 | `src/lunar_ice_bpc/domain/real_maps.py`; `src/lunar_ice_bpc/exact/core/columns.py`; `src/lunar_ice_bpc/exact/core/journey.py`; `src/lunar_ice_bpc/exact/core/objective.py` | Python group | Detailed lunar path, sortie, journey, normalization and objective mathematics | B | implemented | Source anchors for manuscript equations (1)--(11) |
+| S056 | `src/lunar_ice_bpc/exact/bpc/pricing/harvest.py`; `src/lunar_ice_bpc/exact/bpc/pricing/completion_bounds.py`; `src/lunar_ice_bpc/exact/solver/branch_probe.py`; `src/lunar_ice_bpc/exact/bpc/certificates/proof_debt_queue.py`; `src/lunar_ice_bpc/exact/certificates/node_bound.py` | Python group | Harvest, pruning, branch fractionality, proof-debt and node-bound predicates | B | implemented with stated context limits | Source anchors for manuscript equations (14)--(18) and (22)--(23) |
+| S057 | `CODEX_lunar_gat_bpc_exact_algorithm_design.md`; `src/lunar_ice_bpc/exact/master/journey_rmp.py`; `src/lunar_ice_bpc/exact/bpc/solver/branch_tree_solver.py`; `src/lunar_ice_bpc/exact/core/branching.py`; `src/lunar_ice_bpc/exact/core/cuts.py`; `native/lunar_spprc/src/native_pricer.cpp` | Design and source group | Overall conditional exactness proof chain and fail-closed terminal semantics | B | implemented proof contract with explicit no-pair incompleteness | Source anchors for manuscript Lemmas 1--5, Theorem 1 and equations (24)--(27) |
+| S058 | `paper_rewriting_output/introduction_revision_audit.md` | Markdown | Introduction reverse outline and claim-transfer audit | A/B | complete | Records paragraph roles, user-input adoption boundaries, claim support, and self-review |
 
 ## Explicitly Missing Evidence
 

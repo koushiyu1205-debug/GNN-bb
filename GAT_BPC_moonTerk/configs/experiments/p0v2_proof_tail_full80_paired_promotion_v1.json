@@ -1,0 +1,65 @@
+{
+  "schema_version": "lunar_ice_bpc.proof_tail_full80_promotion_manifest.v1",
+  "experiment_id": "P0V2_PROOF_TAIL_DYNAMIC_QD1_FULL80_PROMOTION_20260724",
+  "candidate_frozen_before_protected_test": true,
+  "candidate_selection_evidence": "runs/p0v2_proof_tail_e2e_scale30_dynamic_sentinel_batch2_20260724/paired_gate_audit.json",
+  "candidate_selection_evidence_sha256": "07cec00100c2f61e82ed8e29322e9f266a4e233c90ea97cb5467a49139aebc4c",
+  "candidate_rule": "scale30_branch_or_cut_qd1_else_q0",
+  "control_baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+  "evidence_scope": "protected_full80_single_repeat_active_experiment_baseline_promotion",
+  "development_used_in_formal_rows": false,
+  "calibration_used_in_formal_rows": false,
+  "protected_final_test_used": true,
+  "production_default_switch_authorized": false,
+  "control_config": "configs/benchmarks/p0v2_proof_tail_full80_q0_3600.yaml",
+  "candidate_config": "configs/benchmarks/p0v2_proof_tail_full80_dynamic_qd1_3600.yaml",
+  "split_manifest": "data/gat_p0v2/p0v2_gat_split_manifest.json",
+  "split_manifest_hash": "c05be9fea1828b64690050f51003d9879685db6af2d78ae7c4e343774b5b5c5f",
+  "instance_hash_manifest": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+  "instance_hash_manifest_sha256": "f374070b0e6b65eafd628ce4e60958e9112eb12b166aabc9bd12cdf0c18fe720",
+  "scales": [5, 10, 20, 30],
+  "instances_per_scale": 20,
+  "instance_count": 80,
+  "repeats_per_instance_per_mode": 1,
+  "slot_count": 160,
+  "workers": 1,
+  "strict_cold_start": true,
+  "fresh_python_native_runtime_per_slot": true,
+  "solver_resume": false,
+  "run_order_policy": "balanced_ab_ba_alternating_by_scale_and_instance",
+  "outer_time_limit_sec": 3720,
+  "primary_gate": {
+    "all_arms_complete": true,
+    "exact_objective_and_certificate_equal": true,
+    "extra_incomplete_allowed": 0,
+    "safety_redline_count_max": 0,
+    "candidate_peak_rss_ratio_p90_max": 1.15,
+    "candidate_peak_rss_absolute_max_bytes": 8589934592,
+    "candidate_qd1_count_non_scale30_max": 0,
+    "candidate_qd1_count_scale30_min": 1,
+    "per_scale": {
+      "5": {
+        "paired_geometric_mean_wall_ratio_max": 1.02,
+        "paired_median_wall_ratio_max": 1.02,
+        "arithmetic_mean_wall_ratio_max": 1.03
+      },
+      "10": {
+        "paired_geometric_mean_wall_ratio_max": 1.02,
+        "paired_median_wall_ratio_max": 1.02,
+        "arithmetic_mean_wall_ratio_max": 1.03
+      },
+      "20": {
+        "paired_geometric_mean_wall_ratio_max": 1.02,
+        "paired_median_wall_ratio_max": 1.02,
+        "arithmetic_mean_wall_ratio_max": 1.03
+      },
+      "30": {
+        "paired_geometric_mean_wall_ratio_max": 0.95,
+        "paired_median_wall_ratio_max": 1.005,
+        "arithmetic_mean_wall_ratio_max": 1.0,
+        "paired_log_ratio_bootstrap_ucb95_max": 0.0,
+        "worst_instance_wall_ratio_max": 1.02
+      }
+    }
+  }
+}

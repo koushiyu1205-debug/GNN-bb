@@ -1,0 +1,31 @@
+{
+  "deployment_manifest": "",
+  "deployment_scope": "p0_control",
+  "exact_count": 211,
+  "experiment_variant": "P0_INSTRUMENTED_COLLECTION",
+  "fold": null,
+  "guidance_mode": "off",
+  "legal_incomplete_count": 29,
+  "partition": "development",
+  "protected_instance_count_run": 0,
+  "redline_failure_count": 0,
+  "resource_snapshot_before": {
+    "cpu_count": 20,
+    "disk_available_bytes": 872243335168,
+    "load_1m": 1.55810546875,
+    "memory_available_bytes": 13021384704
+  },
+  "results_jsonl": "/home/kai/work/GAT_BPC_moonTerk/data/gat_p0v2/training_collection_results.jsonl",
+  "run_count": 60,
+  "schema_version": "lunar_ice_bpc.p0v2_b0_development_run.v1",
+  "selected_scales": [
+    30
+  ],
+  "source_baseline_id": "P0V2_BINDING_V2_SAME_CODE_B0_CONTROL_20260723",
+  "source_role": "new_development",
+  "split_manifest": "",
+  "total_record_count": 240,
+  "training_instrumentation_enabled": true,
+  "wall_sec": 5016.802768129004,
+  "workers": 3
+}

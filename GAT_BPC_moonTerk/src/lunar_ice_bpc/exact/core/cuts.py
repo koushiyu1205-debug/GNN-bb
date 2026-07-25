@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 from math import floor
+import struct
 from typing import Iterable, Mapping
 
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
@@ -237,13 +238,59 @@ def true_dual_binding_hash(
     fleet_limit: float = 0.0,
     cuts: Mapping[str, float] | None = None,
 ) -> str:
+    """Return the V2 mathematical dual binding.
+
+    Signed zero has no mathematical reduced-cost effect.  Bit-level transport
+    diagnostics remain available separately through ``raw_ieee_dual_hash``.
+    """
+
     return stable_payload_hash(
         {
-            "cover": sorted((str(key), float(value)) for key, value in cover.items()),
-            "fleet_limit": float(fleet_limit),
-            "cuts": sorted((str(key), float(value)) for key, value in (cuts or {}).items()),
+            "schema_version": "lunar_ice_bpc.true_dual_binding.v2",
+            "cover": sorted(
+                (str(key), _canonical_mathematical_float(value))
+                for key, value in cover.items()
+            ),
+            "fleet_limit": _canonical_mathematical_float(fleet_limit),
+            "cuts": sorted(
+                (str(key), _canonical_mathematical_float(value))
+                for key, value in (cuts or {}).items()
+            ),
         }
     )
+
+
+def raw_ieee_dual_hash(
+    cover: Mapping[str, float],
+    *,
+    fleet_limit: float = 0.0,
+    cuts: Mapping[str, float] | None = None,
+) -> str:
+    """Return a diagnostic-only dual hash that preserves every IEEE bit."""
+
+    return stable_payload_hash(
+        {
+            "schema_version": "lunar_ice_bpc.raw_ieee_dual.v1",
+            "cover": sorted(
+                (str(key), _float64_hex(value))
+                for key, value in cover.items()
+            ),
+            "fleet_limit": _float64_hex(fleet_limit),
+            "cuts": sorted(
+                (str(key), _float64_hex(value))
+                for key, value in (cuts or {}).items()
+            ),
+        }
+    )
+
+
+def _canonical_mathematical_float(value: float) -> float:
+    parsed = float(value)
+    return 0.0 if parsed == 0.0 else parsed
+
+
+def _float64_hex(value: float) -> str:
+    return struct.pack(">d", float(value)).hex()
 
 
 def pricing_cut_context_from_duals(

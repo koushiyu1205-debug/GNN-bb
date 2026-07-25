@@ -22,6 +22,8 @@ lunar_spprc::Model parse_model(const py::dict& payload) {
     lunar_spprc::Model model;
     model.instance_id = py::cast<std::string>(payload["instance_id"]);
     model.structure_hash = py::cast<std::string>(payload["instance_hash"]);
+    model.guidance_task_arc_enabled =
+        py::cast<bool>(payload["guidance_task_arc_enabled"]);
     for (const auto item : py::cast<py::list>(payload["tasks"])) {
         const auto row = py::cast<py::dict>(item);
         model.tasks.push_back({
@@ -37,6 +39,10 @@ lunar_spprc::Model parse_model(const py::dict& payload) {
             .local_shadow_score = py::cast<double>(row["local_shadow_score"]),
             .local_thermal_risk = py::cast<double>(row["local_thermal_risk"]),
             .dual = py::cast<double>(row["dual"]),
+            .guidance_priority =
+                model.guidance_task_arc_enabled
+                    ? py::cast<double>(row["guidance_priority"])
+                    : 0.0,
         });
     }
     for (const auto item : py::cast<py::list>(payload["arcs"])) {
@@ -50,6 +56,10 @@ lunar_spprc::Model parse_model(const py::dict& payload) {
             .risk = py::cast<double>(row["risk"]),
             .distance = py::cast<double>(row["distance"]),
             .shadow = py::cast<double>(row["shadow"]),
+            .guidance_priority =
+                model.guidance_task_arc_enabled
+                    ? py::cast<double>(row["guidance_priority"])
+                    : 0.0,
         });
     }
     std::unordered_map<std::string, std::size_t> task_index_by_id;
@@ -156,6 +166,24 @@ lunar_spprc::SolveParams parse_params(const py::dict& payload) {
     params.graph_cache_entries = py::cast<std::size_t>(payload["graph_cache_entries"]);
     params.completion_bound_enabled = py::cast<bool>(payload["completion_bound_enabled"]);
     params.subset_dominance_enabled = py::cast<bool>(payload["subset_dominance_enabled"]);
+    const auto proof_queue_policy =
+        py::cast<std::string>(payload["proof_queue_policy_id"]);
+    if (proof_queue_policy == "Q0") {
+        params.proof_queue_policy =
+            lunar_spprc::ProofQueuePolicy::Q0PartialCost;
+    } else if (proof_queue_policy == "QC0") {
+        params.proof_queue_policy =
+            lunar_spprc::ProofQueuePolicy::QC0CachedPartialCost;
+    } else if (proof_queue_policy == "QD1") {
+        params.proof_queue_policy =
+            lunar_spprc::ProofQueuePolicy::QD1DeeperFirst;
+    } else if (proof_queue_policy == "QB1") {
+        params.proof_queue_policy =
+            lunar_spprc::ProofQueuePolicy::QB1OptimisticCompletion;
+    } else {
+        throw py::value_error(
+            "unsupported proof_queue_policy_id: " + proof_queue_policy);
+    }
     return params;
 }
 
@@ -210,6 +238,26 @@ py::dict solve_payload(const py::dict& payload) {
     telemetry["extension_wall_time_seconds"] = output.telemetry.extension_wall_time_seconds;
     telemetry["dominance_wall_time_seconds"] = output.telemetry.dominance_wall_time_seconds;
     telemetry["wall_time_seconds"] = output.telemetry.wall_time_seconds;
+    telemetry["proof_queue_policy_id"] =
+        py::cast<std::string>(payload["proof_queue_policy_id"]);
+    py::list best_reduced_cost_events;
+    for (const auto& event : output.telemetry.best_reduced_cost_events) {
+        py::dict row;
+        row["elapsed_seconds"] = event.elapsed_seconds;
+        row["extended_labels"] = event.extended_labels;
+        row["solution_count"] = event.solution_count;
+        row["discovered_reduced_cost"] = event.discovered_reduced_cost;
+        row["best_reduced_cost"] = event.best_reduced_cost;
+        best_reduced_cost_events.append(std::move(row));
+    }
+    telemetry["best_reduced_cost_event_schema"] =
+        "lunar_spprc.best_reduced_cost_events.v1";
+    telemetry["best_reduced_cost_events"] =
+        std::move(best_reduced_cost_events);
+    telemetry["best_reduced_cost_event_count_total"] =
+        output.telemetry.best_reduced_cost_event_count_total;
+    telemetry["best_reduced_cost_events_truncated"] =
+        output.telemetry.best_reduced_cost_events_truncated;
 
     py::dict result;
     result["status"] = output.status;
@@ -228,6 +276,10 @@ py::dict solve_payload(const py::dict& payload) {
     for (const auto* key : {
              "instance_hash",
              "config_hash",
+             "engine_hash",
+             "canonical_solve_binding_v2",
+             "canonical_solve_binding_v2_schema",
+             "canonical_solve_binding_v2_hash",
              "dual_binding_hash",
              "branch_context_hash",
              "objective_mode",
@@ -243,6 +295,13 @@ py::dict solve_payload(const py::dict& payload) {
              "cut_state_schema_version",
              "separator_policy_version",
              "negative_eps",
+             "guidance_mode",
+             "guidance_effective_mode",
+             "guidance_binding_hash",
+             "guidance_task_arc_enabled",
+             "legal_task_universe_hash_before_sort",
+             "legal_arc_universe_hash_before_sort",
+             "guidance_native_install_sec",
          }) {
         bindings[py::str(key)] = payload[py::str(key)];
     }

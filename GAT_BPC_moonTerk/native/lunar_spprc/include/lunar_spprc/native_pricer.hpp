@@ -15,6 +15,13 @@ enum class BranchSense { SameJourney, DifferentJourney };
 
 enum class CutKind { SubsetRow, FleetLowerBound };
 
+enum class ProofQueuePolicy {
+    Q0PartialCost,
+    QC0CachedPartialCost,
+    QD1DeeperFirst,
+    QB1OptimisticCompletion,
+};
+
 struct PairBranchDecision {
     std::size_t task_a = 0;
     std::size_t task_b = 0;
@@ -47,6 +54,7 @@ struct Task {
     double local_shadow_score = 0.0;
     double local_thermal_risk = 0.0;
     double dual = 0.0;
+    double guidance_priority = 0.0;
 };
 
 struct ArcData {
@@ -58,6 +66,7 @@ struct ArcData {
     double risk = 0.0;
     double distance = 0.0;
     double shadow = 0.0;
+    double guidance_priority = 0.0;
 };
 
 struct Model {
@@ -84,6 +93,7 @@ struct Model {
     mutable std::size_t completion_bound_evaluated_labels = 0;
     mutable std::size_t completion_bound_pruned_labels = 0;
     bool subset_dominance_enabled = false;
+    bool guidance_task_arc_enabled = false;
 };
 
 struct SolveParams {
@@ -97,6 +107,7 @@ struct SolveParams {
     std::size_t graph_cache_entries = 1;
     bool completion_bound_enabled = false;
     bool subset_dominance_enabled = false;
+    ProofQueuePolicy proof_queue_policy = ProofQueuePolicy::Q0PartialCost;
 };
 
 struct SortiePath {
@@ -108,6 +119,14 @@ struct Route {
     double reduced_cost = std::numeric_limits<double>::infinity();
     std::vector<std::size_t> arc_ids;
     std::vector<SortiePath> sorties;
+};
+
+struct BestReducedCostEvent {
+    double elapsed_seconds = 0.0;
+    std::size_t extended_labels = 0;
+    std::size_t solution_count = 0;
+    double discovered_reduced_cost = std::numeric_limits<double>::infinity();
+    double best_reduced_cost = std::numeric_limits<double>::infinity();
 };
 
 struct Telemetry {
@@ -131,6 +150,9 @@ struct Telemetry {
     double extension_wall_time_seconds = 0.0;
     double dominance_wall_time_seconds = 0.0;
     double wall_time_seconds = 0.0;
+    std::vector<BestReducedCostEvent> best_reduced_cost_events;
+    std::size_t best_reduced_cost_event_count_total = 0;
+    bool best_reduced_cost_events_truncated = false;
 };
 
 struct SolveOutput {

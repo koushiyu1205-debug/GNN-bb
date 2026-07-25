@@ -7,6 +7,7 @@ one exact-safe place for task-cover and fleet-limit dual arithmetic.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 import os
 from typing import Iterable, Mapping
 
@@ -59,6 +60,26 @@ class _SimplexResult:
     solution: tuple[float, ...]
     row_duals: tuple[float, ...]
     iterations: int
+
+
+@dataclass(frozen=True)
+class StabilizedJourneyDualResult:
+    """Worker-only dual from an L1-penalized restricted master sidecar.
+
+    The ordinary RMP is still solved separately and remains the only source of
+    the official bound and true-dual certificate.  This result is suitable
+    only for discovery ordering/pricing followed by a true-dual RC audit.
+    """
+
+    status: str
+    duals: JourneyDuals
+    penalty: float
+    center_l1_distance: float | None
+    iteration_count: int
+    active_column_count: int
+    worker_dual_only: bool = True
+    can_certify_no_negative: bool = False
+    official_bound_safe: bool = False
 
 
 @dataclass(frozen=True)
@@ -337,6 +358,98 @@ def solve_restricted_journey_rmp(
     )
 
 
+def solve_stabilized_journey_dual_sidecar(
+    task_ids: Iterable[str],
+    columns: Iterable[JourneyColumn],
+    *,
+    fleet_size: int,
+    task_dual_center: Mapping[str, float],
+    penalty: float,
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+) -> StabilizedJourneyDualResult:
+    """Solve the ASCG-style L1-penalized dual without replacing the true RMP.
+
+    For cover dual ``pi`` and predicted center ``hat_pi``, the sidecar
+    maximizes the ordinary restricted-master dual objective minus
+    ``penalty * sum_i |pi_i - hat_pi_i|``.  Fleet and cut components are
+    solved by the sidecar as usual, but callers must keep the ordinary RMP
+    values for exact accounting and use only this cover vector for discovery.
+    """
+
+    ordered_tasks = tuple(str(task_id) for task_id in task_ids)
+    active_columns = filter_journey_columns_by_branch_context(
+        tuple(columns), branch_context
+    )
+    normalized_penalty = float(penalty)
+    if (
+        not isfinite(normalized_penalty)
+        or normalized_penalty < 0.0
+    ):
+        raise ValueError("stabilization penalty must be finite and nonnegative")
+    expected = set(ordered_tasks)
+    observed = {str(task_id) for task_id in task_dual_center}
+    if observed != expected:
+        raise ValueError("stabilized dual center task universe mismatch")
+    center = {
+        task_id: float(task_dual_center[task_id])
+        for task_id in ordered_tasks
+    }
+    if any(not isfinite(value) for value in center.values()):
+        raise ValueError("stabilized dual center contains NaN/Inf")
+    if not ordered_tasks or not active_columns:
+        return StabilizedJourneyDualResult(
+            status="NO_ACTIVE_RMP",
+            duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+            penalty=normalized_penalty,
+            center_l1_distance=None,
+            iteration_count=0,
+            active_column_count=len(active_columns),
+        )
+    simplex = _solve_stabilized_dual_lp(
+        ordered_tasks,
+        active_columns,
+        fleet_size=int(fleet_size),
+        task_dual_center=center,
+        penalty=normalized_penalty,
+        cut_context=cut_context,
+    )
+    if (
+        simplex is None
+        or simplex.status != "OPTIMAL"
+        or simplex.objective is None
+    ):
+        return StabilizedJourneyDualResult(
+            status=(
+                "HIGHS_UNAVAILABLE"
+                if simplex is None
+                else f"RMP_{simplex.status}"
+            ),
+            duals=JourneyDuals(cover={}, fleet_limit=0.0, cuts={}),
+            penalty=normalized_penalty,
+            center_l1_distance=None,
+            iteration_count=(
+                0 if simplex is None else int(simplex.iterations)
+            ),
+            active_column_count=len(active_columns),
+        )
+    duals = _solution_to_duals(
+        ordered_tasks, simplex.solution, cut_context
+    )
+    l1_distance = sum(
+        abs(float(duals.cover[task_id]) - center[task_id])
+        for task_id in ordered_tasks
+    )
+    return StabilizedJourneyDualResult(
+        status="STABILIZED_RMP_OPTIMAL",
+        duals=duals,
+        penalty=normalized_penalty,
+        center_l1_distance=round(float(l1_distance), 9),
+        iteration_count=int(simplex.iterations),
+        active_column_count=len(active_columns),
+    )
+
+
 def solve_phase_one_journey_rmp(
     task_ids: Iterable[str],
     columns: Iterable[JourneyColumn],
@@ -609,12 +722,92 @@ def _solve_dual_lp(
     return _simplex_max_leq(objective, rows, rhs)
 
 
+def _solve_stabilized_dual_lp(
+    task_ids: tuple[str, ...],
+    columns: Iterable[JourneyColumn],
+    *,
+    fleet_size: int,
+    task_dual_center: Mapping[str, float],
+    penalty: float,
+    cut_context: CutContext | None = None,
+) -> _SimplexResult | None:
+    """Build the L1 sidecar LP; arbitrary row RHS requires HiGHS."""
+
+    n = len(task_ids)
+    context = cut_context or CutContext()
+    task_index = {task_id: index for index, task_id in enumerate(task_ids)}
+    cut_start = 2 * n + 1
+    base_variable_count = cut_start + len(context.cuts)
+    positive_deviation_start = base_variable_count
+    negative_deviation_start = base_variable_count + n
+    objective = [0.0 for _ in range(base_variable_count + 2 * n)]
+    for index in range(n):
+        objective[index] = 1.0
+        objective[n + index] = -1.0
+        objective[positive_deviation_start + index] = -float(penalty)
+        objective[negative_deviation_start + index] = -float(penalty)
+    objective[2 * n] = -float(fleet_size)
+    for offset, cut in enumerate(context.cuts):
+        variable_index = cut_start + offset
+        if cut.cut_type == SUBSET_ROW_CUT:
+            objective[variable_index] = -float(cut.rhs)
+        elif cut.cut_type == FLEET_LOWER_BOUND_CUT:
+            objective[variable_index] = float(cut.rhs)
+        else:
+            raise ValueError(f"unsupported cut_type {cut.cut_type!r}")
+
+    rows: list[list[float]] = []
+    rhs: list[float] = []
+    for column in columns:
+        row = [0.0 for _ in range(len(objective))]
+        for task_id in column.task_set:
+            index = task_index[str(task_id)]
+            row[index] += 1.0
+            row[n + index] -= 1.0
+        row[2 * n] -= 1.0
+        for offset, cut in enumerate(context.cuts):
+            variable_index = cut_start + offset
+            coefficient = cut.coefficient(column)
+            if cut.cut_type == SUBSET_ROW_CUT:
+                row[variable_index] -= float(coefficient)
+            elif cut.cut_type == FLEET_LOWER_BOUND_CUT:
+                row[variable_index] += float(coefficient)
+            else:
+                raise ValueError(f"unsupported cut_type {cut.cut_type!r}")
+        rows.append(row)
+        rhs.append(float(column.objective))
+
+    for index, task_id in enumerate(task_ids):
+        center = float(task_dual_center[task_id])
+        positive_row = [0.0 for _ in range(len(objective))]
+        positive_row[index] = 1.0
+        positive_row[n + index] = -1.0
+        positive_row[positive_deviation_start + index] = -1.0
+        rows.append(positive_row)
+        rhs.append(center)
+
+        negative_row = [0.0 for _ in range(len(objective))]
+        negative_row[index] = -1.0
+        negative_row[n + index] = 1.0
+        negative_row[negative_deviation_start + index] = -1.0
+        rows.append(negative_row)
+        rhs.append(-center)
+
+    return _highs_max_leq(
+        objective,
+        rows,
+        rhs,
+        allow_negative_rhs=True,
+    )
+
+
 def _highs_max_leq(
     objective: list[float],
     rows: list[list[float]],
     rhs: list[float],
     *,
     eps: float = 1.0e-9,
+    allow_negative_rhs: bool = False,
 ) -> _SimplexResult | None:
     """Solve max c'x s.t. Ax <= b, x >= 0 through HiGHS.
 
@@ -631,15 +824,16 @@ def _highs_max_leq(
             row_duals=tuple(),
             iterations=0,
         )
-    for bound in rhs:
-        if float(bound) < -eps:
-            return _SimplexResult(
-                status="NEGATIVE_RHS",
-                objective=None,
-                solution=tuple(),
-                row_duals=tuple(),
-                iterations=0,
-            )
+    if not allow_negative_rhs:
+        for bound in rhs:
+            if float(bound) < -eps:
+                return _SimplexResult(
+                    status="NEGATIVE_RHS",
+                    objective=None,
+                    solution=tuple(),
+                    row_duals=tuple(),
+                    iterations=0,
+                )
     try:
         import highspy  # type: ignore[import-not-found]
     except Exception:

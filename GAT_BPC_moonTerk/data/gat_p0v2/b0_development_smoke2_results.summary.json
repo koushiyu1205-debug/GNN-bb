@@ -1,0 +1,22 @@
+{
+  "exact_count": 1,
+  "legal_incomplete_count": 0,
+  "protected_instance_count_run": 0,
+  "redline_failure_count": 0,
+  "resource_snapshot_before": {
+    "cpu_count": 20,
+    "disk_available_bytes": 874607697920,
+    "load_1m": 0.7626953125,
+    "memory_available_bytes": 13068132352
+  },
+  "results_jsonl": "/home/kai/work/GAT_BPC_moonTerk/data/gat_p0v2/b0_development_smoke2_results.jsonl",
+  "run_count": 1,
+  "schema_version": "lunar_ice_bpc.p0v2_b0_development_run.v1",
+  "selected_scales": [
+    5
+  ],
+  "source_role": "new_development",
+  "total_record_count": 1,
+  "wall_sec": 0.6893738310027402,
+  "workers": 1
+}

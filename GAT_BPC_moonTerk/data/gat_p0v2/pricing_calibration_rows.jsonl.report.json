@@ -1,0 +1,14 @@
+{
+  "compact_static_tensor_cache": true,
+  "output_jsonl": "/home/kai/work/GAT_BPC_moonTerk/data/gat_p0v2/pricing_calibration_rows.jsonl",
+  "partition": "calibration",
+  "schema_version": "lunar_ice_bpc.gat_snapshot_materialization.v1",
+  "skipped_non_development_count": 1733,
+  "skipped_unobserved_context_count": 0,
+  "snapshot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v2_gat_binding_v2_training_collection/snapshots",
+  "split_manifest_hash": "c05be9fea1828b64690050f51003d9879685db6af2d78ae7c4e343774b5b5c5f",
+  "static_tensor_cache_dir": "/home/kai/work/GAT_BPC_moonTerk/data/gat_p0v2/static_tensor_cache",
+  "static_tensor_cache_entry_count": 48,
+  "unexplored_candidates_used_as_negative": false,
+  "written_context_count": 446
+}

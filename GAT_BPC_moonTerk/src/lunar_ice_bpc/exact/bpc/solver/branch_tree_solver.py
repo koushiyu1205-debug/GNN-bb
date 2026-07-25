@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 from time import perf_counter
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from lunar_ice_bpc.exact.bpc.certificates.certificate_ledger import CertificateLedger
 from lunar_ice_bpc.exact.bpc.certificates.proof_debt_queue import ProofDebtQueue
@@ -14,6 +14,9 @@ from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.core.task_index import TaskIndexMap
 from lunar_ice_bpc.exact.bpc.cuts.live_sri import LiveSriPolicy
+from lunar_ice_bpc.exact.bpc.guidance.contracts import (
+    canonical_universe_hash,
+)
 from lunar_ice_bpc.exact.bpc.master.journey_master import solve_root_journey_master
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final_judge
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
@@ -97,6 +100,10 @@ def solve_b3_branch_price_tree_baseline(
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
     live_sri_policy: LiveSriPolicy | str | None = None,
+    development_branch_rank_index: int = 0,
+    development_branch_rank_by_path: (
+        Mapping[tuple[str, ...], int] | None
+    ) = None,
 ) -> dict:
     """Run B3 = B2 plus a proof-gated branch-and-price tree.
 
@@ -111,6 +118,17 @@ def solve_b3_branch_price_tree_baseline(
     """
 
     tree_started_at = perf_counter()
+    default_branch_rank = _validate_development_branch_rank(
+        development_branch_rank_index
+    )
+    branch_rank_by_path = {
+        tuple(str(value) for value in path): (
+            _validate_development_branch_rank(rank)
+        )
+        for path, rank in (
+            development_branch_rank_by_path or {}
+        ).items()
+    }
     active_live_policy = (
         live_sri_policy
         if isinstance(live_sri_policy, LiveSriPolicy)
@@ -409,7 +427,52 @@ def solve_b3_branch_price_tree_baseline(
                 status = "INCOMPLETE"
                 node["incomplete_reason"] = "BRANCH_DEPTH_LIMIT"
             else:
-                candidate = _selected_fractional_candidate(node)
+                branch_path_signature = _branch_signature(queued.context)
+                branch_shortlist = tuple(
+                    (node.get("fractional_branch_probe") or {}).get(
+                        "candidates"
+                    )
+                    or ()
+                )
+                branch_shortlist_ids = tuple(
+                    _branch_candidate_id(candidate)
+                    for candidate in branch_shortlist
+                )
+                branch_universe_hash = canonical_universe_hash(
+                    branch_shortlist_ids,
+                    universe_kind="p0_branch_shortlist",
+                )
+                requested_branch_rank = branch_rank_by_path.get(
+                    branch_path_signature,
+                    default_branch_rank,
+                )
+                (
+                    candidate,
+                    selected_branch_rank,
+                    branch_rank_fallback,
+                ) = _selected_fractional_candidate(
+                    node,
+                    requested_rank_index=requested_branch_rank,
+                )
+                node["development_branch_path_signature"] = list(
+                    branch_path_signature
+                )
+                node["development_branch_requested_rank_index"] = int(
+                    requested_branch_rank
+                )
+                node["development_branch_selected_rank_index"] = (
+                    selected_branch_rank
+                )
+                node["development_branch_rank_fallback_to_p0"] = bool(
+                    branch_rank_fallback
+                )
+                node[
+                    "legal_branch_shortlist_hash_before_sort"
+                ] = branch_universe_hash
+                node[
+                    "legal_branch_shortlist_hash_after_sort"
+                ] = branch_universe_hash
+                node["guidance_branch_pair_drop_count"] = 0
                 if candidate is None:
                     status = "INCOMPLETE"
                     node["incomplete_reason"] = "NO_FRACTIONAL_RF_PAIR"
@@ -440,7 +503,11 @@ def solve_b3_branch_price_tree_baseline(
                             )
                         )
                         node["child_node_ids"].append(child_id)
-                    node["selected_branch_candidate_source"] = "ryan_foster_fractional_mass"
+                    node["selected_branch_candidate_source"] = (
+                        "development_fixed_shortlist_rank"
+                        if selected_branch_rank not in {None, 0}
+                        else "ryan_foster_fractional_mass"
+                    )
         # The pricing-tail engine uses NODE_INCOMPLETE while the tree payload
         # uses INCOMPLETE.  Normalize it here so incomplete-node accounting and
         # certificate telemetry cannot silently omit a timed-out leaf.
@@ -494,6 +561,24 @@ def solve_b3_branch_price_tree_baseline(
     payload["tree_global_final_column_count"] = len(global_columns_by_signature)
     payload["tree_globally_shared_new_column_count"] = int(globally_shared_column_count)
     payload["tree_node_selection"] = "best_bound_depth_tiebreak"
+    payload["development_branch_rank_guidance_active"] = bool(
+        default_branch_rank != 0 or branch_rank_by_path
+    )
+    payload["development_branch_rank_index"] = int(default_branch_rank)
+    payload["development_branch_rank_by_path"] = [
+        {
+            "path_signature": list(path),
+            "rank_index": int(rank),
+        }
+        for path, rank in sorted(branch_rank_by_path.items())
+    ]
+    payload["development_branch_rank_only"] = True
+    payload["development_branch_rank_deployable"] = False
+    payload["development_branch_rank_filter_count"] = 0
+    payload["development_branch_rank_fallback_count"] = sum(
+        bool(node.get("development_branch_rank_fallback_to_p0"))
+        for node in nodes
+    )
     payload["restricted_column_mip"] = {
         key: value for key, value in restricted_mip.items() if key != "_columns"
     }
@@ -1810,9 +1895,41 @@ def _primal_lambdas_integral(primal_columns: tuple[dict, ...], *, eps: float = 1
     return True
 
 
-def _selected_fractional_candidate(node: dict) -> dict | None:
+def _selected_fractional_candidate(
+    node: dict,
+    *,
+    requested_rank_index: int = 0,
+) -> tuple[dict | None, int | None, bool]:
     candidates = list((node.get("fractional_branch_probe") or {}).get("candidates") or [])
-    return candidates[0] if candidates else None
+    if not candidates:
+        return None, None, False
+    requested = _validate_development_branch_rank(
+        requested_rank_index
+    )
+    if requested >= len(candidates):
+        return candidates[0], 0, True
+    return candidates[requested], requested, False
+
+
+def _validate_development_branch_rank(value: int) -> int:
+    rank = int(value)
+    if rank not in {0, 1, 2}:
+        raise ValueError(
+            "development branch rank must be one of 0, 1, or 2"
+        )
+    return rank
+
+
+def _branch_candidate_id(candidate: Mapping[str, object]) -> str:
+    left, right = sorted(
+        (
+            str(candidate.get("task_a") or ""),
+            str(candidate.get("task_b") or ""),
+        )
+    )
+    if not left or not right or left == right:
+        raise ValueError("branch shortlist contains an invalid task pair")
+    return f"branch_pair:{left}|{right}"
 
 
 def _child_contexts(root: BranchContext, candidate: dict) -> tuple[tuple[BranchContext, str], ...]:

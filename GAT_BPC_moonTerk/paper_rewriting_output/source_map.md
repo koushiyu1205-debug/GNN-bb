@@ -1,16 +1,19 @@
 # Source Map
 
-## Scope and Snapshot Boundary
+## Scope and Evidence Cutoff
 
 - Project root: `/home/kai/work/GAT_BPC_moonTerk`
 - PaperSpine workflow: `build_from_materials`
-- Research snapshot date: 2026-07-23 (Asia/Shanghai)
+- Research evidence cutoff: 2026-07-23 (Asia/Shanghai)
 - Target journal: *Transportation Research Part C: Emerging Technologies*
-- Drafting state: motivation confirmed; Phase 1 evidence preparation and Phase
-  2 section/paragraph blueprints completed; manuscript prose remains disabled.
-- Post-snapshot run boundary:
+- Drafting state: motivation confirmed; Phase 1 evidence preparation, Phase 2
+  section/paragraph blueprints, Phase 3 pre-draft freeze, and the Phase 4
+  English working draft are complete. Missing learning artifacts and results
+  remain explicit `TBD` blocks. Final LaTeX, Word, translation, and submission
+  formatting are not part of Phase 4.
+- Later-run boundary:
   `runs/native_live_sri_v1_optimized_full80_paired_20260723/paired_run/`
-  completed all 160 benchmark slots after the initial research snapshot. Its
+  completed all 160 benchmark slots after the initial research cutoff. Its
   summary is admissible only as completed single-repeat, `benchmark_only`
   evidence. It is not a formal promotion experiment and does not authorize a
   production default switch.
@@ -32,16 +35,21 @@
 | E11 | A — data provenance | `data/manifests/lunar_ice_sp50_real_benchmark_manifest.json` and `data/manifests/lunar_real_map_source_catalog.json` | Instance generation, map inputs, accepted cases and hashes | Dataset description and provenance | Fixed logical-graph results do not prove optimality over every continuous lunar path |
 | E12 | B — figure assets | `runs/figures/basemaps/`, `runs/figures/task_sites/`, and scale-specific logical-graph figures | Existing map, terrain, resource, risk and task-site visuals | Candidate paper figures after provenance/caption audit | A visualization is not independent experimental evidence |
 | E13 | C — completed benchmark-only evidence | `runs/native_live_sri_v1_optimized_full80_paired_20260723/paired_run/promotion_summary.json` and candidate freeze manifest | 160-slot, strict-cold, single-repeat paired benchmark of the optimized candidate | Candidate-bound correctness gates and explicitly qualified exploratory timing comparisons | `formal_design_complete=false`, `all_scales_promoted=false`, and `default_switch_allowed=false`; it is not a formal promotion or production-switch result |
+| E14 | B — executable model mathematics | `src/lunar_ice_bpc/domain/real_maps.py`; `exact/solver/gurobi_compact.py`; `exact/core/columns.py`; `exact/core/journey.py`; `exact/core/objective.py`; Native SPPRC option filter and visited-task state | Immutable lunar path inputs, same-endpoint option dominance, compact flow/subtour equivalent, feasible-column connectivity/elementarity, trip/multi-trip route resources, nonrestrictive slot bound, normalizers and sole objective | Manuscript equations (1)--(11), route/fleet-space definitions and their scope qualifiers | Uncalibrated generator mixing coefficients are not scientific model parameters; route-local arc variables are not route-master variables; option filtering requires the stated componentwise substitution proof |
+| E15 | B — executable exact-component predicates | `exact/bpc/pricing/harvest.py`; `exact/bpc/pricing/completion_bounds.py`; `native/lunar_spprc/src/native_pricer.cpp`; `exact/solver/branch_probe.py`; proof-debt and node-bound modules | Addability-aware harvest, exact/context-guarded pruning, Ryan--Foster fractionality, debt blocking and bound fathoming | Manuscript equations (14)--(18) and (22)--(23) | A context-limited or diagnostic predicate must not be generalized into unrestricted proof authority |
+| E16 | B — overall exactness proof chain | `CODEX_lunar_gat_bpc_exact_algorithm_design.md`; `exact/master/journey_rmp.py`; `exact/bpc/solver/branch_tree_solver.py`; `exact/core/branching.py`; `exact/core/cuts.py`; Native SPPRC exhaustive-status fields; proof-debt and node-bound modules | Canonical-route completeness assumptions, route-master equivalence, full node-LP closure, valid cuts, exact child partition, guidance invariance, tree gates and fail-closed states | Manuscript Lemmas 1--5, Theorem 1 and equations (24)--(27) | Proves soundness only for a returned tree-level exact conclusion within the fixed logical-path solution space; it does not prove unconditional completion or continuous-surface optimality |
+| E17 | A/B — benchmark scenario and executable generator | `README.md`, real-map workflow paragraphs at lines 147--155; `src/lunar_ice_bpc/domain/scenario.py`; `src/lunar_ice_bpc/domain/real_maps.py`; `src/lunar_ice_bpc/domain/real_instance.py`; `paper_rewriting_output/lunar_scene_claim_map.md` | Common 50 km by 50 km real-map region, task-density scaling, configured higher-mobility scenario, candidate-site classes, task modes and three path options | Lunar-scene statements in Abstract and Sections 1--5 | The extent and speed are benchmark assumptions rather than current rover capability; resource/risk proxies are not in-situ abundance; no exclusive-PSR or territorial framing |
 
 ## Controlling Fact Boundaries
 
-1. **Current exact production method.** The released line is HiGHS restricted
-   master + Native exact SPPRC pricing + Ryan–Foster branching with
-   `live_sri_policy=no_cut`.
-2. **Live SRI status.** SRI-3/SRI-5, active-cut Phase-I, lineage, dual/context
-   binding and exact cut-state support are implemented. The first formal P0
-   candidate passed correctness but failed the full performance promotion gate,
-   especially at scale 30.
+1. **Paper algorithm baseline.** The P0V2 experimental mainline is HiGHS
+   restricted master + Native exact SPPRC pricing + Ryan–Foster branching +
+   root-only P0 SRI-3. The no-cut line remains an experimental comparator and
+   historical production-policy fact, not the paper's cut-family definition.
+2. **Live SRI scope.** The manuscript contains only root-node SRI-3 under P0.
+   Active-cut Phase-I, lineage, dual/context binding and exact cut-state support
+   apply to admitted root cuts; descendants may inherit them but perform no new
+   SRI separation.
 3. **Current optimized candidate.** Exact nonzero-dual projection and packed
    exact overlap state have passed controlled correctness/replay gates. The
    subsequent 160-slot paired run completed with all scale-local correctness
@@ -54,7 +62,11 @@
    fail-closed results caused by an 8 GiB host-memory limit, not optimal solves.
 5. **Objective boundary.** The official objective combines normalized operating
    cost, normalized risk and `0.4 * normalized_weighted_completion`; makespan is
-   a reporting metric rather than another objective term.
+   a reporting metric rather than another objective term. This exact
+   three-term objective is mandatory throughout the abstract, body, equations,
+   figures, tables, results, appendices, and Chinese translation. Legacy
+   alpha/beta/gamma/delta fields remain internal compatibility data and must
+   not enter manuscript-facing text.
 6. **Fixed logical-path solution space boundary.** Current real-map instances
    use three fixed path options per directed logical edge. Exact claims are
    scoped to that fixed logical-path solution space, not the continuum of all
@@ -81,13 +93,26 @@
    diagnostics, heuristic outputs, replay observations or benchmark gates.
    Literal code identifiers, enum values and file paths retain their original
    names. The controlling wording policy is `terminology_policy.md`.
+10. **Drafting boundary.** `manuscript_draft.md` is the active Phase 4 English
+    working manuscript. `section_3_pre_phase4_scratch.md` is the archived,
+    non-authoritative consistency-check artifact. Missing learning results stay
+    empty under `phase_4_placeholder_ledger.md`.
+11. **Lunar-scene boundary.** The common `50 km × 50 km` map and configured
+    rover mobility define a forward-looking benchmark scenario, not current
+    hardware performance. Permanently shadowed regions are important candidate
+    cold-trap environments but are not presented as the exclusive location of
+    lunar water. Chang'E-5 sample studies support heterogeneous host materials
+    and formation/retention factors, but their quantities are not transferred
+    to south-pole candidate sites. Science-weighted completion remains an
+    objective term rather than a territorial, ownership-priority, competition,
+    or newly named urgency narrative.
 
 ## Research Routing
 
 | Research Need | Primary Local Anchor | External Supplement Needed |
 |---|---|---|
-| Lunar south-pole water-ice exploration motivation | E11, E12 | Mission/science sources and recent lunar rover planning papers |
-| Multi-sortie journey formulation | E08, E10 | Multi-trip/multi-graph VRP and energy-aware routing literature |
+| Lunar south-pole water-ice exploration motivation and mission-epoch environment | E11, E12, E17; C061--C063 in the citation bank | Mission/science sources, recent lunar rover planning papers, and Q1 polar-shadow evidence; keep remote/sample evidence separate from site-level abundance, distinguish epoch-anchor spacing from routing horizon, and keep window-aggregated instances separate from departure-time-dependent routing |
+| Multi-trip route formulation | E08, E10, E17 | Multi-trip/multi-graph VRP and energy-aware routing literature |
 | Exact branch-price-and-cut architecture | E06, E07 | Recent BPC/column-generation papers and foundational pricing references |
 | Learning-guided exact optimization | E08, E10 | Learning-to-price and learning-to-branch literature with exactness-preserving integration |
 | Deterministic subset-row inequalities in live pricing | E06, E09 | SRI/cut-aware pricing literature; background only, never a learned-control contribution |

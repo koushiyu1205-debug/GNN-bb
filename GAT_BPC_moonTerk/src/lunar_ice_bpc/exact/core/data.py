@@ -2,8 +2,65 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from collections.abc import Iterator, Mapping
+from dataclasses import asdict, dataclass, field
+import hashlib
+import json
+from typing import Any, Generic, TypeVar
+
+
+_KeyT = TypeVar("_KeyT")
+_ValueT = TypeVar("_ValueT")
+
+
+class FrozenMap(Mapping[_KeyT, _ValueT], Generic[_KeyT, _ValueT]):
+    """Small pickle-safe read-only mapping used by exact instance data.
+
+    ``MappingProxyType`` is read-only but is not pickleable, which makes it a
+    poor fit for the persistent native host.  ``FrozenMap`` owns a defensive
+    copy, exposes only the ``Mapping`` protocol, and round-trips through
+    multiprocessing pickle without restoring a mutable public container.
+    """
+
+    __slots__ = ("__data",)
+
+    def __init__(
+        self,
+        values: Mapping[_KeyT, _ValueT] | Iterator[tuple[_KeyT, _ValueT]] = (),
+    ) -> None:
+        object.__setattr__(self, "_FrozenMap__data", dict(values))
+
+    def __getitem__(self, key: _KeyT) -> _ValueT:
+        return self.__data[key]
+
+    def __iter__(self) -> Iterator[_KeyT]:
+        return iter(self.__data)
+
+    def __len__(self) -> int:
+        return len(self.__data)
+
+    def __repr__(self) -> str:
+        return f"FrozenMap({self.__data!r})"
+
+    def __reduce__(self):
+        return (type(self), (dict(self.__data),))
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self.__data.items()))
+
+
+def deep_freeze(value: Any) -> Any:
+    """Recursively replace mutable containers with pickle-safe immutable ones."""
+
+    if isinstance(value, FrozenMap):
+        return value
+    if isinstance(value, Mapping):
+        return FrozenMap((key, deep_freeze(item)) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return tuple(deep_freeze(item) for item in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(deep_freeze(item) for item in value)
+    return value
 
 
 @dataclass(frozen=True)
@@ -36,6 +93,10 @@ class ArcOptionData:
 
 @dataclass(frozen=True)
 class ObjectiveWeights:
+    # The four fields below are retained solely to preserve the frozen
+    # instance-content-hash contract.  The exact objective never reads them;
+    # see exact.core.objective.OBJECTIVE_SPEC_ID.  Removing or normalizing
+    # them here would silently invalidate the frozen sentinel manifest.
     alpha_discovery_completion: float
     beta_journey_end_time: float
     gamma_lunar_ice_risk: float
@@ -51,9 +112,9 @@ class ObjectiveWeights:
 class LunarIceData:
     instance_id: str
     scale: int
-    tasks: dict[str, TaskData]
+    tasks: Mapping[str, TaskData]
     depot_xy_km: tuple[float, float]
-    arcs: dict[tuple[str, str], dict[str, ArcOptionData]]
+    arcs: Mapping[tuple[str, str], Mapping[str, ArcOptionData]]
     fleet_size: int
     max_tasks_per_trip: int
     capacity: float
@@ -64,7 +125,23 @@ class LunarIceData:
     max_shadow_exposure_per_sortie: float
     objective: ObjectiveWeights
     path_option_policy_id: str = ""
-    reference_solution: dict[str, Any] | None = None
+    reference_solution: Mapping[str, Any] | None = None
+    instance_content_hash: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        frozen_tasks = deep_freeze(self.tasks)
+        frozen_arcs = deep_freeze(self.arcs)
+        frozen_reference = (
+            None if self.reference_solution is None else deep_freeze(self.reference_solution)
+        )
+        object.__setattr__(self, "tasks", frozen_tasks)
+        object.__setattr__(self, "arcs", frozen_arcs)
+        object.__setattr__(self, "reference_solution", frozen_reference)
+        object.__setattr__(
+            self,
+            "instance_content_hash",
+            lunar_ice_content_hash(self),
+        )
 
     @property
     def task_ids(self) -> tuple[str, ...]:
@@ -72,6 +149,49 @@ class LunarIceData:
 
     def option(self, source: str, target: str, path_type: str) -> ArcOptionData:
         return self.arcs[(str(source), str(target))][str(path_type)]
+
+
+def lunar_ice_content_payload(data: LunarIceData) -> dict[str, Any]:
+    """Return the canonical exact-pricing identity payload.
+
+    Keep this payload compatible with the historical ``spprc_instance_hash``
+    contract.  Reference solutions are deliberately excluded because they are
+    incumbent hints rather than part of the pricing problem.
+    """
+
+    return {
+        "instance_id": data.instance_id,
+        "scale": data.scale,
+        "tasks": [asdict(data.tasks[task_id]) for task_id in data.task_ids],
+        "arcs": [
+            {
+                "source": source,
+                "target": target,
+                "options": [asdict(by_type[path_type]) for path_type in sorted(by_type)],
+            }
+            for (source, target), by_type in sorted(data.arcs.items())
+        ],
+        "fleet_size": data.fleet_size,
+        "max_tasks_per_trip": data.max_tasks_per_trip,
+        "capacity": data.capacity,
+        "energy_limit": data.energy_limit,
+        "horizon": data.horizon,
+        "path_option_policy_id": data.path_option_policy_id,
+        "dock_overhead_min": data.dock_overhead_min,
+        "recharge_power_proxy_per_min": data.recharge_power_proxy_per_min,
+        "max_shadow_exposure_per_sortie": data.max_shadow_exposure_per_sortie,
+        "objective": asdict(data.objective),
+    }
+
+
+def lunar_ice_content_hash(data: LunarIceData) -> str:
+    raw = json.dumps(
+        lunar_ice_content_payload(data),
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def load_lunar_ice_data(instance: dict[str, Any]) -> LunarIceData:

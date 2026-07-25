@@ -32,7 +32,10 @@ from lunar_ice_bpc.exact.bpc.pricing.backends import (
 )
 from lunar_ice_bpc.exact.bpc.pricing.duplicate_only_audit import build_duplicate_only_audit
 from lunar_ice_bpc.exact.bpc.pricing.dual_stabilization import (
+    DevelopmentOracleDualCenter,
+    adaptive_ascg_penalty_from_pricing,
     build_tail_dual_center,
+    build_worker_duals_with_development_oracle_center,
     build_worker_duals_with_tail_center,
 )
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import (
@@ -40,7 +43,10 @@ from lunar_ice_bpc.exact.bpc.pricing.final_judge import (
     LABELING_FINAL_JUDGE_PASS_PROOF_ONLY,
     run_true_dual_root_final_judge,
 )
-from lunar_ice_bpc.exact.bpc.pricing.harvest import harvest_addable_negative_columns
+from lunar_ice_bpc.exact.bpc.pricing.harvest import (
+    DeferredHarvestBuffer,
+    harvest_addable_negative_columns,
+)
 from lunar_ice_bpc.exact.bpc.pricing.hidden_negative_audit import build_hidden_negative_audit
 from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
     DEFAULT_EXACT_BACKEND_ID,
@@ -81,6 +87,7 @@ from lunar_ice_bpc.exact.master.journey_rmp import (
     manual_journey_reduced_cost,
     manual_phase_one_journey_reduced_cost,
     solve_phase_one_journey_rmp,
+    solve_stabilized_journey_dual_sidecar,
 )
 from lunar_ice_bpc.exact.pricing.journey_pricing import (
     DirectPricingCache,
@@ -113,6 +120,15 @@ LABELING_WORKER_MAX_TASK_CAP_ENV = "LUNAR_ICE_LABELING_WORKER_MAX_TASK_CAP"
 LABELING_WORKER_NG_SIZES_ENV = "LUNAR_ICE_LABELING_WORKER_NG_SIZES"
 LABELING_WORKER_NEGATIVE_BATCH_EARLY_STOP_ENV = (
     "LUNAR_ICE_LABELING_WORKER_NEGATIVE_BATCH_EARLY_STOP"
+)
+DUAL_CENTER_TRAJECTORY_COLLECTION_ENV = (
+    "LUNAR_ICE_DUAL_CENTER_TRAJECTORY_COLLECTION"
+)
+ADAPTIVE_TAIL_HARVEST_MAX_ENV = (
+    "LUNAR_ICE_ADAPTIVE_TAIL_HARVEST_MAX"
+)
+ADAPTIVE_TAIL_HARVEST_TRIGGER_SEC_ENV = (
+    "LUNAR_ICE_ADAPTIVE_TAIL_HARVEST_TRIGGER_SEC"
 )
 LABELING_WORKER_NEGATIVE_BATCH_TARGET_ENV = (
     "LUNAR_ICE_LABELING_WORKER_NEGATIVE_BATCH_TARGET"
@@ -205,6 +221,13 @@ def solve_b2_pricing_tail_baseline(
     tail_dual_stabilization_enabled: bool = False,
     tail_dual_stabilization_alpha: float = 0.7,
     tail_dual_stabilization_window: int = 5,
+    development_oracle_dual_center: DevelopmentOracleDualCenter | None = None,
+    development_oracle_initial_true_dual_weight: float = 0.15,
+    development_oracle_release_round: int = 8,
+    development_oracle_l1_sidecar_enabled: bool = False,
+    development_oracle_l1_adaptive_penalty_enabled: bool = False,
+    development_oracle_l1_initial_penalty: float = 1.0,
+    development_oracle_l1_activation_round: int = 2,
     worker_pricer_kind: str = DIRECT_LABEL_WORKER,
     labeling_final_judge_enabled: bool | None = None,
     labeling_final_judge_max_exact_tasks: int | None = None,
@@ -227,6 +250,10 @@ def solve_b2_pricing_tail_baseline(
             wall_time_limit_sec=wall_time_limit_sec,
         )
     if mode in {B2C_MODE, B2D_MODE}:
+        if development_oracle_dual_center is not None:
+            raise ValueError(
+                "development oracle dual center is valid only for B2B_R2/R3"
+            )
         diagnostic_b0 = b0_direct or solve_direct_journey_baseline(
             data,
             max_exact_tasks=min(int(max_direct_tasks), 10),
@@ -258,6 +285,10 @@ def solve_b2_pricing_tail_baseline(
         )
 
     if mode == B2A_MODE:
+        if development_oracle_dual_center is not None:
+            raise ValueError(
+                "development oracle dual center is valid only for B2B_R2/R3"
+            )
         return _solve_b2a_full_universe_audit(
             data,
             b0_direct=b0_direct,
@@ -289,6 +320,25 @@ def solve_b2_pricing_tail_baseline(
             tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
             tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
             tail_dual_stabilization_window=tail_dual_stabilization_window,
+            development_oracle_dual_center=development_oracle_dual_center,
+            development_oracle_initial_true_dual_weight=(
+                development_oracle_initial_true_dual_weight
+            ),
+            development_oracle_release_round=(
+                development_oracle_release_round
+            ),
+            development_oracle_l1_sidecar_enabled=(
+                development_oracle_l1_sidecar_enabled
+            ),
+            development_oracle_l1_adaptive_penalty_enabled=(
+                development_oracle_l1_adaptive_penalty_enabled
+            ),
+            development_oracle_l1_initial_penalty=(
+                development_oracle_l1_initial_penalty
+            ),
+            development_oracle_l1_activation_round=(
+                development_oracle_l1_activation_round
+            ),
             worker_pricer_kind=worker_pricer_kind,
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
@@ -296,6 +346,10 @@ def solve_b2_pricing_tail_baseline(
         )
     if mode != B2B_MODE:
         raise ValueError(f"unsupported B2 mode={mode!r}")
+    if development_oracle_dual_center is not None:
+        raise ValueError(
+            "development oracle dual center is valid only for B2B_R2/R3"
+        )
     return _solve_b2b_seeded_tail_cg(
         data,
         b0_direct=b0_direct,
@@ -403,6 +457,8 @@ def solve_node_pricing_with_b2b_r3(
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
     return_active_columns_payload: bool = False,
+    harvest_micro_batch_size: int | None = None,
+    harvest_deferred_candidate_limit: int = 10000,
 ) -> dict:
     """Solve one B3 branch node with the accepted B2B_R3 pricing order."""
 
@@ -515,6 +571,19 @@ def solve_node_pricing_with_b2b_r3(
         **seed_report,
         "same_journey_seed": branch_seed_report,
         "same_journey_seed_column_count": len(branch_seed_columns),
+        "harvest_micro_batch_size": (
+            None
+            if harvest_micro_batch_size is None
+            else max(1, int(harvest_micro_batch_size))
+        ),
+        "harvest_micro_batch_policy": (
+            "disabled"
+            if harvest_micro_batch_size is None
+            else "U0_deterministic_deferred_true_dual_reprice_v1"
+        ),
+        "harvest_deferred_candidate_limit": max(
+            1, int(harvest_deferred_candidate_limit)
+        ),
     }
 
     pool = ColumnPool()
@@ -549,7 +618,15 @@ def solve_node_pricing_with_b2b_r3(
     last_hidden_audit: dict | None = None
     worker_only_success_count = 0
     tail_dual_history: list[JourneyDuals] = []
-    exact_final_judge_first = _env_bool(EXACT_FINAL_JUDGE_FIRST_ENV, default=False)
+    deferred_harvest_buffer = (
+        None
+        if harvest_micro_batch_size is None
+        else DeferredHarvestBuffer()
+    )
+    exact_final_judge_first = bool(
+        deferred_harvest_buffer is not None
+        or _env_bool(EXACT_FINAL_JUDGE_FIRST_ENV, default=False)
+    )
     configured_final_judge_pass_policy = _labeling_final_judge_pass_policy()
     final_judge_pass_policy = _effective_labeling_final_judge_pass_policy(
         configured_final_judge_pass_policy,
@@ -988,6 +1065,25 @@ def solve_node_pricing_with_b2b_r3(
             cut_context=active_cut_context,
             profiling=profiling,
             source_phase="b3_node_post_final_judge_addability_harvest",
+            guidance_data=data,
+            guidance_duals=master.rmp.duals,
+            guidance_wall_time_limit_sec=remaining_for_judge,
+            guidance_rmp_iteration_id=(
+                f"b3:{active_node_id}:{round_index}:post_final_judge"
+            ),
+            guidance_cut_lineage_hash=(
+                ""
+                if cut_lineage is None
+                else cut_lineage.cut_lineage_hash
+            ),
+            guidance_live_cut_policy_hash=str(
+                live_cut_policy_hash or ""
+            ),
+            guidance_separator_policy_version=str(
+                separator_policy_version or ""
+            ),
+            deferred_buffer=deferred_harvest_buffer,
+            micro_batch_size=harvest_micro_batch_size,
         )
         added = _add_selected_to_pool_and_master(
             pool,
@@ -1036,6 +1132,9 @@ def solve_node_pricing_with_b2b_r3(
                 "exact_final_judge_first_enabled": bool(exact_final_judge_first),
                 **_worker_round_diagnostic_fields(worker.payload),
                 "final_judge_called": True,
+                **_harvest_discovery_round_fields(
+                    judge.pricing_payload
+                ),
                 "final_judge_status": judge.pricing_payload.get("status"),
                 "compact_pricing_phase": judge.pricing_payload.get("compact_pricing_phase"),
                 "final_judge_wall_time": round(judge_wall_time, 6),
@@ -1046,8 +1145,29 @@ def solve_node_pricing_with_b2b_r3(
                 "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                 "addable_negative_count": int(harvest_payload["addable_negative_count"]),
                 "selected_count": int(harvest_payload["selected_count"]),
+                "micro_batch_enabled": bool(
+                    harvest_payload.get("micro_batch_enabled")
+                ),
+                "micro_batch_admission_limit": harvest_payload.get(
+                    "micro_batch_admission_limit"
+                ),
+                "deferred_buffer_count_after": int(
+                    harvest_payload.get("deferred_buffer_count_after")
+                    or 0
+                ),
+                "deferred_permanent_drop_count": int(
+                    harvest_payload.get("deferred_permanent_drop_count")
+                    or 0
+                ),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
+                **_dual_center_trajectory_collection_fields(
+                    negative_pairs,
+                    selected,
+                ),
+                **_dual_center_native_prefix_trace_fields(
+                    judge.pricing_payload
+                ),
                 "harvest_source_phase": harvest_payload.get("harvest_source_phase"),
                 "harvest_selected_count": harvest_payload.get("harvest_selected_count"),
                 "harvest_candidate_negative_count": harvest_payload.get("harvest_candidate_negative_count"),
@@ -1188,6 +1308,62 @@ def solve_node_pricing_with_b2b_r3(
                 pricing_state=PricingState.CERTIFIED_NO_NEGATIVE,
                 node_status="NODE_LP_CERTIFIED",
                 note="B2B_R3 node LP certificate came only from the branch-aware true-dual final judge.",
+                active_columns=export_active_columns(),
+                hidden_audit=last_hidden_audit,
+                seed_catalog=seed_catalog,
+            )
+        if (
+            deferred_harvest_buffer is not None
+            and deferred_harvest_buffer.size
+            > max(1, int(harvest_deferred_candidate_limit))
+        ):
+            profile_totals["exit_reason"] = (
+                "DEFERRED_HARVEST_RESOURCE_LIMIT"
+            )
+            history[-1]["deferred_resource_limit_exceeded"] = True
+            history[-1]["deferred_resource_limit"] = max(
+                1, int(harvest_deferred_candidate_limit)
+            )
+            return _node_engine_payload(
+                data=data,
+                node_id=active_node_id,
+                branch_context=active_context,
+                cut_context=active_cut_context,
+                incumbent_objective=incumbent_objective,
+                completion_policy=completion_policy,
+                proof_debt=proof_debt,
+                profiling=profiling,
+                history=history,
+                harvest_totals=harvest_totals,
+                profile_totals=profile_totals,
+                seed_report=seed_report,
+                loaded_column_count=loaded_count,
+                seed_branch_filtered_column_count=(
+                    seed_branch_filtered_count
+                ),
+                master=master,
+                final_judge=judge.pricing_payload,
+                final_judge_columns=last_final_judge_columns,
+                final_judge_call_count=final_judge_call_count,
+                duplicate_only_count=duplicate_only_count,
+                hidden_negative_count=hidden_negative_count,
+                replacement_only_round_count=(
+                    replacement_only_round_count
+                ),
+                added_to_master_count=added_total,
+                algorithm_status=(
+                    AlgorithmStatus.BPC_INCOMPLETE_PRICING
+                ),
+                certificate_scope=(
+                    CertificateScope.DIAGNOSTIC_PRICING_FRONTIER
+                ),
+                pricing_state=PricingState.INCOMPLETE_LIMIT,
+                node_status="NODE_INCOMPLETE",
+                note=(
+                    "U0 deferred harvest exceeded its explicit candidate "
+                    "resource budget; no candidate was dropped and the "
+                    "experiment failed closed."
+                ),
                 active_columns=export_active_columns(),
                 hidden_audit=last_hidden_audit,
                 seed_catalog=seed_catalog,
@@ -1763,6 +1939,11 @@ def _solve_b2b_seeded_tail_cg(
             active_task_sets={frozenset(column.task_set) for column in master_columns},
             profiling=profiling,
             source_phase="b2_seeded_tail_post_final_judge_addability_harvest",
+            guidance_data=data,
+            guidance_duals=master.rmp.duals,
+            guidance_rmp_iteration_id=(
+                f"b2_seeded:root:{round_index}:post_final_judge"
+            ),
         )
         added = _add_selected_to_pool_and_master(pool, view, selected)
         harvest_payload["added_to_master_count"] = int(added)
@@ -1898,6 +2079,13 @@ def _solve_b2b_r2_worker_before_final_judge(
     tail_dual_stabilization_enabled: bool = False,
     tail_dual_stabilization_alpha: float = 0.7,
     tail_dual_stabilization_window: int = 5,
+    development_oracle_dual_center: DevelopmentOracleDualCenter | None = None,
+    development_oracle_initial_true_dual_weight: float = 0.15,
+    development_oracle_release_round: int = 8,
+    development_oracle_l1_sidecar_enabled: bool = False,
+    development_oracle_l1_adaptive_penalty_enabled: bool = False,
+    development_oracle_l1_initial_penalty: float = 1.0,
+    development_oracle_l1_activation_round: int = 2,
     worker_pricer_kind: str = DIRECT_LABEL_WORKER,
     labeling_final_judge_enabled: bool | None = None,
     labeling_final_judge_max_exact_tasks: int | None = None,
@@ -1905,6 +2093,11 @@ def _solve_b2b_r2_worker_before_final_judge(
 ) -> dict:
     started_at = perf_counter()
     active_mode = str(mode)
+    if development_oracle_dual_center is not None:
+        development_oracle_dual_center.validate_for(
+            instance_content_hash=data.instance_content_hash,
+            task_ids=list(data.task_ids),
+        )
     seed_columns, seed_report = _build_b2b_r2_lightweight_seed_columns(
         data,
         b0_direct=b0_direct,
@@ -1932,8 +2125,33 @@ def _solve_b2b_r2_worker_before_final_judge(
     last_duplicate_audit: dict | None = None
     last_hidden_audit: dict | None = None
     worker_only_success_count = 0
+    previous_final_judge_wall_sec = 0.0
     tail_dual_history: list[JourneyDuals] = []
     exact_final_judge_first = _env_bool(EXACT_FINAL_JUDGE_FIRST_ENV, default=False)
+    if (
+        development_oracle_l1_adaptive_penalty_enabled
+        and not development_oracle_l1_sidecar_enabled
+    ):
+        raise ValueError(
+            "development adaptive ASCG penalty requires the L1 sidecar"
+        )
+    if (
+        development_oracle_l1_sidecar_enabled
+        and not exact_final_judge_first
+    ):
+        raise ValueError(
+            "development oracle L1 sidecar requires exact-final-judge-first"
+        )
+    adaptive_oracle_l1_penalty = float(
+        development_oracle_l1_initial_penalty
+    )
+    if (
+        not isfinite(adaptive_oracle_l1_penalty)
+        or adaptive_oracle_l1_penalty < 0.0
+    ):
+        raise ValueError(
+            "development oracle L1 initial penalty must be finite and nonnegative"
+        )
     configured_final_judge_pass_policy = _labeling_final_judge_pass_policy()
     final_judge_pass_policy = _effective_labeling_final_judge_pass_policy(
         configured_final_judge_pass_policy,
@@ -1947,6 +2165,12 @@ def _solve_b2b_r2_worker_before_final_judge(
     )
 
     for round_index in range(1, max(1, int(max_rounds)) + 1):
+        round_max_columns_per_round = _adaptive_tail_harvest_limit(
+            base_limit=max_columns_per_round,
+            previous_final_judge_wall_sec=(
+                previous_final_judge_wall_sec
+            ),
+        )
         if _wall_time_limit_exceeded(wall_time_limit_sec, started_at=started_at):
             profile_totals["exit_reason"] = "ROW_TIME_LIMIT_BEFORE_ROUND"
             return _payload(
@@ -2040,9 +2264,9 @@ def _solve_b2b_r2_worker_before_final_judge(
                 profiling=profiling,
                 round_index=round_index,
                 max_direct_tasks=max_direct_tasks,
-                max_candidate_sets=max_columns_per_round,
+                max_candidate_sets=round_max_columns_per_round,
                 negative_eps=negative_eps,
-                max_selected=max_columns_per_round,
+                max_selected=round_max_columns_per_round,
                 tail_dual_history=_tail_dual_history_with_current(
                     tail_dual_history,
                     master.reduced_cost_context,
@@ -2051,6 +2275,15 @@ def _solve_b2b_r2_worker_before_final_judge(
                 tail_dual_stabilization_enabled=tail_dual_stabilization_enabled,
                 tail_dual_stabilization_alpha=tail_dual_stabilization_alpha,
                 tail_dual_stabilization_window=tail_dual_stabilization_window,
+                development_oracle_dual_center=(
+                    development_oracle_dual_center
+                ),
+                development_oracle_initial_true_dual_weight=(
+                    development_oracle_initial_true_dual_weight
+                ),
+                development_oracle_release_round=(
+                    development_oracle_release_round
+                ),
                 worker_pricer_kind=worker_pricer_kind,
                 wall_time_limit_sec=remaining_for_worker,
             )
@@ -2174,9 +2407,126 @@ def _solve_b2b_r2_worker_before_final_judge(
             )
         active_task_sets_for_judge = {frozenset(column.task_set) for column in master_columns}
         effective_exact_harvest_target = _adaptive_labeling_final_judge_exact_harvest_target(
-            labeling_final_judge_exact_harvest_target,
+            (
+                round_max_columns_per_round
+                if round_max_columns_per_round
+                != max_columns_per_round
+                else labeling_final_judge_exact_harvest_target
+            ),
             active_task_set_count=len(active_task_sets_for_judge),
         )
+        oracle_harvest_duals: JourneyDuals | None = None
+        oracle_harvest_metadata: dict = {}
+        sidecar_penalty = 0.0
+        sidecar_status = ""
+        if (
+            development_oracle_dual_center is not None
+            and next_final_judge_pass_strategy
+            != LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+        ):
+            official_duals = _duals_from_reduced_cost_context(
+                master.reduced_cost_context
+            )
+            if development_oracle_l1_sidecar_enabled:
+                if development_oracle_l1_adaptive_penalty_enabled:
+                    sidecar_penalty = (
+                        adaptive_oracle_l1_penalty
+                        if round_index
+                        >= max(
+                            2,
+                            int(
+                                development_oracle_l1_activation_round
+                            ),
+                        )
+                        else 0.0
+                    )
+                else:
+                    sidecar_penalty = _development_oracle_l1_penalty(
+                        round_index=round_index,
+                        initial_penalty=(
+                            development_oracle_l1_initial_penalty
+                        ),
+                        activation_round=(
+                            development_oracle_l1_activation_round
+                        ),
+                        release_round=development_oracle_release_round,
+                    )
+                if sidecar_penalty > 0.0:
+                    sidecar_started = perf_counter()
+                    sidecar = solve_stabilized_journey_dual_sidecar(
+                        data.task_ids,
+                        master_columns,
+                        fleet_size=data.fleet_size,
+                        task_dual_center=(
+                            development_oracle_dual_center.task_duals
+                        ),
+                        penalty=sidecar_penalty,
+                    )
+                    sidecar_status = str(sidecar.status)
+                    sidecar_wall = perf_counter() - sidecar_started
+                    oracle_harvest_metadata = {
+                        "schema_version": (
+                            "lunar_ice_bpc.development_oracle_ascg_l1_sidecar.v1"
+                        ),
+                        "stabilization_method": "l1_penalized_rmp_sidecar",
+                        "adaptive_penalty_enabled": bool(
+                            development_oracle_l1_adaptive_penalty_enabled
+                        ),
+                        "worker_dual_source": (
+                            "development_oracle_l1_stabilized_rmp_cover_dual"
+                        ),
+                        "official_dual_source": "current_true_rmp_dual",
+                        "oracle_center_id": (
+                            development_oracle_dual_center.oracle_center_id
+                        ),
+                        "oracle_source_partition": (
+                            development_oracle_dual_center.source_partition
+                        ),
+                        "oracle_development_only": True,
+                        "oracle_deployable": False,
+                        "oracle_influence": 1.0,
+                        "oracle_round_index": int(round_index),
+                        "oracle_activation_round": int(
+                            development_oracle_l1_activation_round
+                        ),
+                        "oracle_release_round": int(
+                            development_oracle_release_round
+                        ),
+                        "stabilization_penalty": float(sidecar_penalty),
+                        "stabilized_rmp_status": sidecar.status,
+                        "stabilized_rmp_wall_sec": round(
+                            float(sidecar_wall), 9
+                        ),
+                        "stabilized_rmp_center_l1_distance": (
+                            sidecar.center_l1_distance
+                        ),
+                        "worker_dual_only": True,
+                        "requires_true_dual_rc_recompute": True,
+                        "can_certify_no_negative": False,
+                        "official_bound_safe": False,
+                    }
+                    if sidecar.status == "STABILIZED_RMP_OPTIMAL":
+                        oracle_harvest_duals = JourneyDuals(
+                            cover=sidecar.duals.cover,
+                            fleet_limit=official_duals.fleet_limit,
+                            cuts=official_duals.cuts,
+                        )
+            else:
+                candidate_oracle_duals, oracle_harvest_metadata = (
+                    build_worker_duals_with_development_oracle_center(
+                        official_duals,
+                        development_oracle_dual_center,
+                        round_index=round_index,
+                        initial_true_dual_weight=(
+                            development_oracle_initial_true_dual_weight
+                        ),
+                        release_round=development_oracle_release_round,
+                    )
+                )
+                if float(
+                    oracle_harvest_metadata.get("oracle_influence") or 0.0
+                ) > 0.0:
+                    oracle_harvest_duals = candidate_oracle_duals
         judge_start = perf_counter()
         judge = run_true_dual_root_final_judge(
             data,
@@ -2194,8 +2544,52 @@ def _solve_b2b_r2_worker_before_final_judge(
             labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
             labeling_final_judge_pass_strategy=next_final_judge_pass_strategy,
             labeling_final_judge_harvest_time_cap_sec=final_judge_harvest_time_cap_sec,
+            harvest_discovery_duals=oracle_harvest_duals,
+            harvest_discovery_metadata=oracle_harvest_metadata,
         )
         judge_wall_time = perf_counter() - judge_start
+        if (
+            development_oracle_l1_adaptive_penalty_enabled
+            and sidecar_penalty > 0.0
+        ):
+            discovery_best_rc = _optional_float(
+                judge.pricing_payload.get(
+                    "labeling_final_judge_harvest_pass_true_best_reduced_cost"
+                )
+            )
+            if sidecar_status != "STABILIZED_RMP_OPTIMAL":
+                next_penalty = 0.0
+                penalty_update = {
+                    "minimum_reduced_cost": discovery_best_rc,
+                    "raw_next_penalty": 0.0,
+                    "next_penalty": 0.0,
+                    "release_threshold": 1.0e-2,
+                    "release_reason": (
+                        "stabilized_rmp_not_optimal_fail_closed"
+                    ),
+                    "can_certify_no_negative": False,
+                }
+            else:
+                next_penalty, penalty_update = (
+                    adaptive_ascg_penalty_from_pricing(
+                        discovery_best_rc
+                    )
+                )
+            adaptive_oracle_l1_penalty = float(next_penalty)
+            discovery_metadata = judge.pricing_payload.get(
+                "harvest_discovery_metadata"
+            )
+            if isinstance(discovery_metadata, dict):
+                discovery_metadata.update(
+                    {
+                        "adaptive_penalty_update": penalty_update,
+                        "adaptive_next_penalty": float(next_penalty),
+                        "adaptive_release_complete": bool(
+                            next_penalty <= 0.0
+                        ),
+                    }
+                )
+        previous_final_judge_wall_sec = float(judge_wall_time)
         profile_totals["final_judge_wall_time"] += judge_wall_time
         profile_totals["final_judge_call_count_profiled"] += 1
         final_judge_call_count += 1
@@ -2204,7 +2598,7 @@ def _solve_b2b_r2_worker_before_final_judge(
         next_final_judge_pass_strategy = _next_labeling_final_judge_pass_strategy(
             final_judge_pass_policy,
             judge.pricing_payload,
-            max_columns_per_round=max_columns_per_round,
+            max_columns_per_round=round_max_columns_per_round,
             effective_harvest_target=effective_exact_harvest_target,
         )
         profiling.merge_completion_payload(judge.pricing_payload)
@@ -2230,10 +2624,16 @@ def _solve_b2b_r2_worker_before_final_judge(
             view=view,
             node_id="root",
             negative_eps=negative_eps,
-            max_selected=max_columns_per_round,
+            max_selected=round_max_columns_per_round,
             active_task_sets={frozenset(column.task_set) for column in master_columns},
             profiling=profiling,
             source_phase="b2b_r2_post_final_judge_addability_harvest",
+            guidance_data=data,
+            guidance_duals=master.rmp.duals,
+            guidance_wall_time_limit_sec=remaining_for_judge,
+            guidance_rmp_iteration_id=(
+                f"b2b_r2:root:{round_index}:post_final_judge"
+            ),
         )
         added = _add_selected_to_pool_and_master(pool, view, selected)
         harvest_payload["added_to_master_count"] = int(added)
@@ -2271,9 +2671,19 @@ def _solve_b2b_r2_worker_before_final_judge(
                 "exact_final_judge_first_enabled": bool(exact_final_judge_first),
                 **_worker_round_diagnostic_fields(worker.payload),
                 "final_judge_called": True,
+                **_harvest_discovery_round_fields(
+                    judge.pricing_payload
+                ),
                 "final_judge_status": judge.pricing_payload.get("status"),
                 "compact_pricing_phase": judge.pricing_payload.get("compact_pricing_phase"),
                 "final_judge_wall_time": round(judge_wall_time, 6),
+                "adaptive_tail_harvest_limit": int(
+                    round_max_columns_per_round
+                ),
+                "adaptive_tail_harvest_active": bool(
+                    round_max_columns_per_round
+                    != max_columns_per_round
+                ),
                 "negative_column_count": int(
                     judge.pricing_payload.get("negative_column_count")
                     or len(getattr(judge, "negative_columns", tuple()))
@@ -2283,6 +2693,13 @@ def _solve_b2b_r2_worker_before_final_judge(
                 "selected_count": int(harvest_payload["selected_count"]),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
+                **_dual_center_trajectory_collection_fields(
+                    negative_pairs,
+                    selected,
+                ),
+                **_dual_center_native_prefix_trace_fields(
+                    judge.pricing_payload
+                ),
                 "harvest_source_phase": harvest_payload.get("harvest_source_phase"),
                 "harvest_selected_count": harvest_payload.get("harvest_selected_count"),
                 "harvest_candidate_negative_count": harvest_payload.get("harvest_candidate_negative_count"),
@@ -2553,6 +2970,21 @@ def _worker_round_diagnostic_fields(payload: dict) -> dict:
         "worker_underlying_incomplete": bool(payload.get("worker_underlying_incomplete")),
         "worker_underlying_pricing_state": str(payload.get("worker_underlying_pricing_state") or ""),
         "worker_underlying_status": str(payload.get("worker_underlying_status") or ""),
+        "development_oracle_dual_center_active": bool(
+            payload.get("development_oracle_dual_center_active")
+        ),
+        "development_oracle_dual_center_id": str(
+            payload.get("development_oracle_dual_center_id") or ""
+        ),
+        "development_oracle_influence": payload.get(
+            "development_oracle_influence"
+        ),
+        "development_oracle_release_complete": bool(
+            payload.get("development_oracle_release_complete")
+        ),
+        "development_oracle_deployable": bool(
+            payload.get("development_oracle_deployable")
+        ),
         "labeling_seed_task_set_count": int(payload.get("labeling_seed_task_set_count") or 0),
         "ng_seed_task_set_count": int(payload.get("ng_seed_task_set_count") or 0),
         "resource_extension_seed_enabled": bool(payload.get("resource_extension_seed_enabled")),
@@ -3004,6 +3436,269 @@ def _worker_round_diagnostic_fields(payload: dict) -> dict:
     }
 
 
+def _harvest_discovery_round_fields(payload: dict) -> dict:
+    metadata = (
+        payload.get("harvest_discovery_metadata")
+        if isinstance(payload.get("harvest_discovery_metadata"), dict)
+        else {}
+    )
+    return {
+        "harvest_discovery_dual_used": bool(
+            payload.get("harvest_discovery_dual_used")
+        ),
+        "harvest_discovery_dual_source": str(
+            payload.get("harvest_discovery_dual_source") or ""
+        ),
+        "harvest_discovery_dual_can_certify": bool(
+            payload.get("harvest_discovery_dual_can_certify")
+        ),
+        "harvest_discovery_columns_reaudited_under_true_dual": bool(
+            payload.get(
+                "harvest_discovery_columns_reaudited_under_true_dual"
+            )
+        ),
+        "harvest_discovery_oracle_center_id": str(
+            metadata.get("oracle_center_id") or ""
+        ),
+        "harvest_discovery_oracle_influence": metadata.get(
+            "oracle_influence"
+        ),
+        "harvest_discovery_stabilization_method": str(
+            metadata.get("stabilization_method") or ""
+        ),
+        "harvest_discovery_stabilization_penalty": metadata.get(
+            "stabilization_penalty"
+        ),
+        "harvest_discovery_stabilized_rmp_status": str(
+            metadata.get("stabilized_rmp_status") or ""
+        ),
+        "harvest_discovery_stabilized_rmp_wall_sec": metadata.get(
+            "stabilized_rmp_wall_sec"
+        ),
+        "harvest_discovery_stabilized_rmp_center_l1_distance": (
+            metadata.get("stabilized_rmp_center_l1_distance")
+        ),
+    }
+
+
+def _dual_center_trajectory_collection_fields(
+    negative_pairs: Iterable[tuple[float, JourneyColumn]],
+    selected_columns: Iterable[JourneyColumn],
+) -> dict:
+    """Persist bounded, observed-only route rows for development collection."""
+
+    if not _env_bool(
+        DUAL_CENTER_TRAJECTORY_COLLECTION_ENV,
+        default=False,
+    ):
+        return {}
+    rows = tuple(negative_pairs)
+    maximum = 256
+    selected_ids = {id(column) for column in selected_columns}
+    retained = rows[:maximum]
+    return {
+        "dual_center_trajectory_collection_enabled": True,
+        "dual_center_trajectory_schema_version": (
+            "lunar_ice_bpc.root_dual_center_observed_routes.v1"
+        ),
+        "dual_center_route_candidate_count": len(rows),
+        "dual_center_route_candidate_retained_count": len(retained),
+        "dual_center_route_candidate_truncated_count": max(
+            0, len(rows) - len(retained)
+        ),
+        "dual_center_route_candidates": [
+            {
+                "candidate_rank": index,
+                "task_ids": sorted(str(task_id) for task_id in column.task_set),
+                "objective": round(float(column.objective), 9),
+                "true_reduced_cost": round(float(rc), 9),
+                "selected_into_batch": bool(id(column) in selected_ids),
+            }
+            for index, (rc, column) in enumerate(retained)
+        ],
+        "dual_center_unexplored_candidates_used_as_negative": False,
+    }
+
+
+def _dual_center_native_prefix_trace_fields(
+    pricing_payload: Mapping[str, object],
+) -> dict:
+    """Join bounded best-RC events to their reconstructed successful routes."""
+
+    if not _env_bool(
+        DUAL_CENTER_TRAJECTORY_COLLECTION_ENV,
+        default=False,
+    ):
+        return {}
+    native_result = pricing_payload.get("native_backend_result")
+    if not isinstance(native_result, Mapping):
+        return {
+            "dual_center_native_prefix_trace_usable": False,
+            "dual_center_native_prefix_trace_error": (
+                "native_backend_result_missing"
+            ),
+        }
+    telemetry = native_result.get("telemetry")
+    if not isinstance(telemetry, Mapping):
+        return {
+            "dual_center_native_prefix_trace_usable": False,
+            "dual_center_native_prefix_trace_error": (
+                "native_telemetry_missing"
+            ),
+        }
+    if not bool(
+        telemetry.get(
+            "best_reduced_cost_event_trace_usable_for_training"
+        )
+    ):
+        return {
+            "dual_center_native_prefix_trace_usable": False,
+            "dual_center_native_prefix_trace_error": str(
+                telemetry.get("best_reduced_cost_event_trace_error")
+                or "native_event_trace_not_usable"
+            ),
+        }
+    reconstruction = telemetry.get("reconstruction_audit")
+    events = telemetry.get("best_reduced_cost_events_audited")
+    if not isinstance(reconstruction, (list, tuple)) or not isinstance(
+        events, (list, tuple)
+    ):
+        return {
+            "dual_center_native_prefix_trace_usable": False,
+            "dual_center_native_prefix_trace_error": (
+                "native_trace_rows_missing"
+            ),
+        }
+    by_index = {
+        int(row["native_route_index"]): row
+        for row in reconstruction
+        if isinstance(row, Mapping)
+        and bool(row.get("accepted"))
+        and row.get("native_route_index") is not None
+        and isinstance(row.get("native_route_sorties"), (list, tuple))
+    }
+    joined = []
+    for event in events[:128]:
+        if not isinstance(event, Mapping):
+            continue
+        route_index = int(event.get("solution_count") or 0) - 1
+        route = by_index.get(route_index)
+        if route is None:
+            continue
+        joined.append(
+            {
+                "event_index": int(event.get("event_index") or 0),
+                "elapsed_sec": float(event.get("elapsed_sec") or 0.0),
+                "extended_labels": int(
+                    event.get("extended_labels") or 0
+                ),
+                "solution_count": int(
+                    event.get("solution_count") or 0
+                ),
+                "discovered_true_rc": float(
+                    event.get("discovered_true_rc") or 0.0
+                ),
+                "best_true_rc": float(
+                    event.get("best_true_rc") or 0.0
+                ),
+                "native_route_index": route_index,
+                "task_set": list(route.get("task_set") or ()),
+                "objective": route.get(
+                    "rmp_real_objective_contribution"
+                ),
+                "sorties": list(
+                    route.get("native_route_sorties") or ()
+                ),
+            }
+        )
+    return {
+        "dual_center_native_prefix_trace_schema": (
+            "lunar_ice_bpc.native_best_rc_prefix_routes.v1"
+        ),
+        "dual_center_native_prefix_trace_usable": bool(joined),
+        "dual_center_native_prefix_trace_error": (
+            "" if joined else "best_rc_event_route_join_empty"
+        ),
+        "dual_center_native_prefix_trace_event_count": len(joined),
+        "dual_center_native_prefix_trace_events": joined,
+        "dual_center_native_prefix_trace_truncated": bool(
+            len(events) > 128
+        ),
+        "dual_center_native_prefix_unexplored_actions_used_as_negative": (
+            False
+        ),
+    }
+
+
+def _development_oracle_l1_penalty(
+    *,
+    round_index: int,
+    initial_penalty: float,
+    activation_round: int,
+    release_round: int,
+) -> float:
+    """ASCG-style sidecar schedule with a true-dual first and final phase."""
+
+    initial = float(initial_penalty)
+    if not isfinite(initial) or initial < 0.0:
+        raise ValueError(
+            "development oracle L1 initial penalty must be finite and nonnegative"
+        )
+    current_round = max(1, int(round_index))
+    activation = max(2, int(activation_round))
+    release = max(activation + 1, int(release_round))
+    # The reference ASCG implementation uses the ordinary RMP at iteration 1
+    # because there is no prior pricing feedback yet.
+    if current_round < activation or current_round >= release:
+        return 0.0
+    progress = float(current_round - activation) / float(
+        release - activation
+    )
+    return round(initial * max(0.0, 1.0 - progress), 9)
+
+
+def _adaptive_tail_harvest_limit(
+    *,
+    base_limit: int,
+    previous_final_judge_wall_sec: float,
+) -> int:
+    """Development experiment: widen one batch only after measured tail work."""
+
+    base = max(1, int(base_limit))
+    raw_maximum = str(
+        os.getenv(ADAPTIVE_TAIL_HARVEST_MAX_ENV, "0")
+    ).strip()
+    try:
+        maximum = int(raw_maximum or 0)
+    except ValueError as exc:
+        raise ValueError(
+            "adaptive tail harvest maximum must be an integer"
+        ) from exc
+    if maximum <= base:
+        return base
+    raw_trigger = str(
+        os.getenv(
+            ADAPTIVE_TAIL_HARVEST_TRIGGER_SEC_ENV,
+            "1.0",
+        )
+    ).strip()
+    try:
+        trigger = float(raw_trigger or 1.0)
+    except ValueError as exc:
+        raise ValueError(
+            "adaptive tail harvest trigger must be numeric"
+        ) from exc
+    if not isfinite(trigger) or trigger <= 0.0:
+        raise ValueError(
+            "adaptive tail harvest trigger must be finite and positive"
+        )
+    return (
+        maximum
+        if float(previous_final_judge_wall_sec) >= trigger
+        else base
+    )
+
+
 def _exact_final_judge_first_skipped_worker_result(
     *,
     worker_pricer_kind: str,
@@ -3220,6 +3915,9 @@ def _run_negative_search_worker(
     tail_dual_stabilization_enabled: bool = False,
     tail_dual_stabilization_alpha: float = 0.7,
     tail_dual_stabilization_window: int = 5,
+    development_oracle_dual_center: DevelopmentOracleDualCenter | None = None,
+    development_oracle_initial_true_dual_weight: float = 0.15,
+    development_oracle_release_round: int = 8,
     worker_pricer_kind: str = DIRECT_LABEL_WORKER,
     cut_context: CutContext | None = None,
     wall_time_limit_sec: float | None = None,
@@ -3237,13 +3935,32 @@ def _run_negative_search_worker(
         tail_dual_history or (true_duals,),
         window=tail_dual_stabilization_window,
     )
-    worker_duals, tail_dual_payload = build_worker_duals_with_tail_center(
-        true_duals,
-        tail_dual_center=tail_center,
-        enabled=tail_dual_stabilization_enabled,
-        alpha=tail_dual_stabilization_alpha,
-        window=tail_dual_stabilization_window,
-    )
+    if development_oracle_dual_center is not None:
+        development_oracle_dual_center.validate_for(
+            instance_content_hash=data.instance_content_hash,
+            task_ids=list(data.task_ids),
+        )
+        worker_duals, tail_dual_payload = (
+            build_worker_duals_with_development_oracle_center(
+                true_duals,
+                development_oracle_dual_center,
+                round_index=round_index,
+                initial_true_dual_weight=(
+                    development_oracle_initial_true_dual_weight
+                ),
+                release_round=development_oracle_release_round,
+            )
+        )
+    else:
+        worker_duals, tail_dual_payload = (
+            build_worker_duals_with_tail_center(
+                true_duals,
+                tail_dual_center=tail_center,
+                enabled=tail_dual_stabilization_enabled,
+                alpha=tail_dual_stabilization_alpha,
+                window=tail_dual_stabilization_window,
+            )
+        )
     worker_task_cap = _worker_task_cap(data, max_direct_tasks)
     seed_task_sets = _negative_worker_seed_task_sets(
         data,
@@ -3298,7 +4015,11 @@ def _run_negative_search_worker(
         )
         pricing, priced_columns = run_bpc_labeling_pricer(
             data,
-            true_duals,
+            (
+                worker_duals
+                if development_oracle_dual_center is not None
+                else true_duals
+            ),
             config=LabelingPricingConfig(
                 mode=RELAXED_NG_ROUTE_MODE,
                 max_label_task_count=worker_task_cap,
@@ -3307,7 +4028,10 @@ def _run_negative_search_worker(
                 negative_eps=negative_eps,
                 ng_neighborhood_size=ng_sizes[-1],
                 ng_neighborhood_sizes=ng_sizes,
-                dual_stabilization_enabled=tail_dual_stabilization_enabled,
+                dual_stabilization_enabled=(
+                    tail_dual_stabilization_enabled
+                    and development_oracle_dual_center is None
+                ),
                 dual_stabilization_alpha=tail_dual_stabilization_alpha,
                 dual_stabilization_window=tail_dual_stabilization_window,
                 support_continuation_seed_enabled=_env_bool(
@@ -3399,8 +4123,15 @@ def _run_negative_search_worker(
         branch_context=branch_context,
         cut_context=active_cut_context,
     )
-    candidate_search_dual_matches_true_dual = pricing.get("candidate_search_dual_matches_true_dual")
-    if candidate_search_dual_matches_true_dual is None:
+    candidate_search_dual_matches_true_dual = pricing.get(
+        "candidate_search_dual_matches_true_dual"
+    )
+    if development_oracle_dual_center is not None:
+        candidate_search_dual_matches_true_dual = _journey_duals_match(
+            worker_duals,
+            true_duals,
+        )
+    elif candidate_search_dual_matches_true_dual is None:
         candidate_search_dual_matches_true_dual = _journey_duals_match(worker_duals, true_duals)
     candidate_search_rc_recomputed_under_true_dual = pricing.get(
         "candidate_search_rc_recomputed_under_true_dual"
@@ -3419,6 +4150,12 @@ def _run_negative_search_worker(
         cut_context=active_cut_context,
         profiling=profiling,
         source_phase="worker_candidate_search_addability_harvest",
+        guidance_data=data,
+        guidance_duals=true_duals,
+        guidance_wall_time_limit_sec=wall_time_limit_sec,
+        guidance_rmp_iteration_id=(
+            f"worker:{node_id}:{round_index}:candidate_search"
+        ),
     )
     selected_audit_payload = _audit_selected_columns_for_master_entry(
         selected,
@@ -3570,7 +4307,7 @@ def _run_negative_search_worker(
         "root_lp_bound_official": False,
         "dual_source": "master.reduced_cost_context",
         "diagnostic_dual_source": (
-            "tail_dual_stabilized_worker_dual"
+            str(tail_dual_payload.get("worker_dual_source"))
             if tail_dual_payload.get("tail_dual_stabilization_enabled")
             else "master.reduced_cost_context"
         ),
@@ -3618,6 +4355,20 @@ def _run_negative_search_worker(
         ),
         "tail_dual_no_column_can_certify": False,
         "tail_dual_stabilization": tail_dual_payload,
+        "development_oracle_dual_center_active": bool(
+            development_oracle_dual_center is not None
+            and not tail_dual_payload.get("oracle_release_complete")
+        ),
+        "development_oracle_dual_center_id": str(
+            tail_dual_payload.get("oracle_center_id") or ""
+        ),
+        "development_oracle_influence": tail_dual_payload.get(
+            "oracle_influence"
+        ),
+        "development_oracle_release_complete": bool(
+            tail_dual_payload.get("oracle_release_complete")
+        ),
+        "development_oracle_deployable": False,
         "diagnostic_rmp_iteration_id": str(getattr(reduced_cost_context, "rmp_iteration_id", "") or ""),
         "diagnostic_dual_fingerprint": str(getattr(reduced_cost_context, "dual_fingerprint", "") or ""),
         "completion_bound_pruning_enabled": bool(completion_payload.get("enabled")),
@@ -5393,6 +6144,9 @@ def _recover_branch_rmp_with_phase_one(
     backend_id = str(
         os.getenv("LUNAR_ICE_SPPRC_EXACT_BACKEND", DEFAULT_EXACT_BACKEND_ID)
     )
+    from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import (
+        spprc_engine_build_hash,
+    )
     if backend_id == "python_reference":
         return {
             "status": "UNSUPPORTED_BACKEND",
@@ -5465,6 +6219,7 @@ def _recover_branch_rmp_with_phase_one(
                 harvest_target=max(1, int(max_columns_per_round)),
                 wall_time_limit_sec=remaining,
                 negative_eps=phase_one_negative_eps,
+                engine_hash=spprc_engine_build_hash(backend_id),
                 dual_binding_hash=true_dual_binding_hash(
                     phase.duals.cover,
                     fleet_limit=phase.duals.fleet_limit,

@@ -78,6 +78,28 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertTrue(result.frontier_empty)
         self.assertEqual(result.proved_no_rc_below, -1.0e-6)
         self.assertIsNone(result.global_min_rc)
+
+    def test_proof_queue_policies_preserve_exact_result_and_report_policy(self) -> None:
+        results = {}
+        for policy_id in ("Q0", "QC0", "QD1", "QB1"):
+            results[policy_id] = NativeRcsppInprocessBackend().solve(
+                BackendPricingRequest(
+                    data=self.data,
+                    true_duals=JourneyDuals(cover={}),
+                    proof_queue_policy_id=policy_id,
+                )
+            )
+
+        for policy_id, result in results.items():
+            self.assertEqual(result.engine_status, "COMPLETE")
+            self.assertTrue(result.search_exhaustive)
+            self.assertTrue(result.frontier_empty)
+            self.assertFalse(result.labels_dropped)
+            self.assertEqual(result.proved_no_rc_below, -1.0e-6)
+            self.assertEqual(
+                result.telemetry["proof_queue_policy_id"],
+                policy_id,
+            )
         self.assertFalse(result.global_min_rc_is_exact)
         self.assertTrue(result.can_enter_certificate_audit)
 

@@ -1,0 +1,542 @@
+{
+  "allowed_partitions": [
+    "development"
+  ],
+  "config_hash": "2f9ba6730f218c773afe0ef4488dd3561f8404470c0a3a6f1c0cdce76d090192",
+  "contexts": [
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hashe0b6d_5db81e",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_018_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/e0b6d2d4849b93d0/6eb424e3890166666d4a243d1f2750bfc5a0c9581b538190618da1ac921c82dd.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hashb7b9f_197d0f",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_047_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/b7b9fecef6e2acd3/fd285890d668e0e6080343557cf35b61e7fe505468c4179d25f5e2089e23a63a.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash2692e_e80a37",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_054_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/2692e99b4d96a48f/e313a3c592afe45b1ae28e791159535af6a73535e36d96a18f2ef8ce221c4f23.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hashfac01_77d173",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_035_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/fac01e219f661ddc/a49a96b042d4ff3b027c4dd793da4051c9b08a2c4e6f5c18fdc24603ab532ff1.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hashe1a5a_71a8cb",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_028_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/e1a5a0af9e0d6014/9f98399e9d0f9552bc7da4d1775442fcb624fac3e3dba8c6ca3616567b30c63d.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash6c2dc_5db81e",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_002_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/6c2dc37bf3ddcffe/884cc4ea18b20eff81c70ae76d0fdaa4f7bef7e2caddbf4cdb2028c661ab5587.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash62cee_e80a37",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_046_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/62ceee84961695aa/ff580394f59499d447a1a8294e054d84ef8a660f6cf7843a0ee2a2d4ef61d9e6.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash0319c_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_024_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/0319c8d2575839d5/e0c98ff0531f5a66522d3882d331d3b245872083a52a90acd13a4e6464aa8bc4.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash08636_197d0f",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_056_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/08636d1c73ef9caa/58ec98279d80596f9c42ce95a58aca683c5afd1f86ce5b6c4cfd8f78ca384056.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash0dec5_272b6d",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_013_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/0dec54b9f285b9eb/7e4724890022a632e684be843d92d7e4785a75f25f92facefdaeda59722809b6.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash85828_5db81e",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_005_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/858281922ec35289/630826c6bb62e1e518fa446bf3884dffe8521fe4e34b6664966cef43c8dfe9b7.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash1a9d8_a376d1",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_019_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/1a9d8aab35f7c3ab/07ccce603e1babe9064639c33282264bc9f4968534fbeaeef2f3a4941032f55c.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash02b53_a376d1",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_038_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/02b53ea0ee27b184/63e2d283f0f56e89693c1ab0e2ebbdcc259c09ab12796ee12b64fc0d0315292c.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash26462_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_048_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/26462b2d2b2599c3/e9e754b633bb77df843515d79d332951a34e510b08bc5fd163e1c2a31ba4017a.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hashbe51c_a376d1",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_008_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/be51c0e2698d1f64/31db2ec03a80e0bc43aa0bd7df7e0ae36fc558a096c5562b4a741de5a457f859.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hashba651_71a8cb",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_023_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/ba6518a9b1923642/826e7c77d1f18b7cb0c5e490e59579000394a64c17d7392669ce13d9cc384d22.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hashc73cf_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_052_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/c73cfd4388e066a1/97ee81ecac119f0f2aa06d2fdb4b526e91d14d78570d2278e64168529c962314.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hasha7192_a376d1",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_022_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/a71927fe97989c6b/ca7e7b5305170054ccbaa2f26f0d9ace0077b0cfa78c905a231b3de6185fc4f7.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash76998_5db81e",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_049_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/769985bf30a88a9f/af323b8336741354d224136252764fb2ba73b891e3b9ef0e23b456ce036d94c7.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale20_hash9286e_77d173",
+      "instance": "data/gat_p0v2/development_instances/scale_020/instance_045_logical_graph.json",
+      "scale": 20,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/9286e70e80795d5c/174cb7d4023e7309a1859b037acf79213b50ed359c7572803b8f56e3bcb21188.json",
+      "source_pricing_mode": "negative_harvest",
+      "source_role": "mathematical_context",
+      "subset_dominance": "off",
+      "wall_time_limit_sec": 30.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hashe21c3_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_051_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/e21c370bb8ecb2a5/4b6fcbd61285e5816c1d71e08a3f727e99ece8e94c31941fca165c20c72ee12c.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash6d085_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_017_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/6d085f5edc474c17/98487fa0acc6b230c57c57916876f13513e451fcc1872ff7fe1358796315cb08.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash9f32f_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_002_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/9f32f66b6229d572/6c1a74287f449c466584d868164eedc01412927052301203f076d8819d732920.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hashea4b2_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_015_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/ea4b20b0c14b8112/585aa616c9c6900ee7e8bd841aec1923c4ea806eb1ece08c810886fcc61f9cc1.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash93cce_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_047_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/93cce4cc39f07226/261fad06835ad49d558ebfa523c74711b547b0c90156af8f64358e4c1940389f.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash87b14_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_043_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/87b14738bda6834f/f509305f5ecb5b4271422d4bf286121961c4c9150a58d18090b085f794ba98e5.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash28ce6_8befba",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_048_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/28ce6b1dd26e1585/65d8f1f51606de57a8035ef6905f128505bf8fc7119fe22194d40c8d32b80f19.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash502e6_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_040_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/502e6677b1770400/8a54c5f7bcfdd2b62327837a9c8bf96ce5eb077c33c2526b8c82e023461cb431.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hashdeb54_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_021_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/deb540591f5d05be/42ae295c403f50d33ceb344b3aa7696432adb274c684a97540491b16e47d0413.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash2498a_9ba1a2",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_019_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/2498a712c0f570fa/fe78b0296457bb0cd2d1ba74597846bd285495579b6e6dbc1aff417daae21528.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hashf76f8_8befba",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_034_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/f76f86581aec0991/f7c3cf4e7eedb1156ec5494522dc1ad0b5ce3e5664277e95e968244daa35a08e.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash624a3_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_046_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/624a3d5e32f18bc9/2d10bfad441db8aef8b3bfeed5f4b0e169b1baea75da4d8747cf35cbe8cf9db0.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash2486b_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_050_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/2486b02e317823d0/ad5601c478f90514ed4632b1155b9e933e3dde5288f766ba1c0a23102d1fa98d.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash825c3_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_042_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/825c3c5722551e80/bb3fc56f805883742d63e415aebd95df534198dafc9590612a5555c5dc494ca8.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash7a022_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_041_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/7a0221ea049e4c68/c16cb88016d3a52527a0d0d4f5848aa7b73f77bc0ac31ed5dc0387ed9a42d666.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hashcf2ab_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_057_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/cf2ab7c27b51cd85/b3fb7418531c63c742856193d0cef0b29b7a736d26dbd223d88c4262f96727fb.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash88a21_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_049_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/88a2134fbc2609c2/0dcd5534492d0bbcbb88618ec194f09e4544a4c0018776b22e4d332894b14422.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hashc5c2f_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_028_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/c5c2f0595a746895/69ba1c4f58183bbb83957bc5cb9113bfe8bf034987db7cc378b79b5b998ccb89.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hashdb08c_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_033_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/db08c8583f39804b/16d2f26abfe411855ade3d97566c61f1741adbb31b4ad59b69ab6d8afda459a2.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    },
+    {
+      "completion_bound": "off",
+      "context_id": "scale30_hash65297_1ae334",
+      "instance": "data/gat_p0v2/development_instances/scale_030/instance_058_logical_graph.json",
+      "scale": 30,
+      "selection_reason": "pre_outcome_stable_hash_from_development_split",
+      "snapshot": "runs/p0v2_gat_binding_v2_training_collection/snapshots/652971e1b8f45f03/9bb4f62c03dce79227dd2ea2f9fbb9d20dc9abe898c7e0ddc5a856611eefb211.json",
+      "source_pricing_mode": "exact_proof",
+      "source_role": "exact_control",
+      "subset_dominance": "on",
+      "wall_time_limit_sec": 120.0
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.proof_tail_context_config.v1",
+  "selection_fields": [
+    "development_partition",
+    "scale",
+    "instance_content_hash",
+    "canonical_binding",
+    "source_pricing_mode",
+    "stable_selection_salt"
+  ],
+  "selection_salt": "p0v2-proof-tail-development-quota-v1-20260724",
+  "selection_stream": "development_quota_pre_outcome_v1",
+  "selection_summary": {
+    "20": {
+      "eligible_instance_count": 48,
+      "folds": {
+        "0": 4,
+        "1": 3,
+        "2": 2,
+        "3": 6,
+        "4": 5
+      },
+      "p0_difficulty_bins": {
+        "easy": 10,
+        "hard": 3,
+        "medium": 7
+      },
+      "selected_context_count": 20,
+      "source_pricing_modes": {
+        "negative_harvest": 20
+      }
+    },
+    "30": {
+      "eligible_instance_count": 41,
+      "folds": {
+        "0": 3,
+        "1": 2,
+        "2": 5,
+        "3": 4,
+        "4": 6
+      },
+      "p0_difficulty_bins": {
+        "easy": 8,
+        "medium": 4,
+        "tail_censored": 8
+      },
+      "selected_context_count": 20,
+      "source_pricing_modes": {
+        "exact_proof": 20
+      }
+    }
+  },
+  "selection_uses_qc0_qd1_outcomes": false,
+  "split_manifest": "data/gat_p0v2/p0v2_gat_split_manifest.json",
+  "split_manifest_hash": "c05be9fea1828b64690050f51003d9879685db6af2d78ae7c4e343774b5b5c5f"
+}

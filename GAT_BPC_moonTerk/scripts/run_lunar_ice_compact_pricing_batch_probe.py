@@ -40,6 +40,21 @@ def main() -> int:
     parser.add_argument("--write-active-columns", action="store_true")
     parser.add_argument("--batch-target", type=int, default=2)
     parser.add_argument(
+        "--harvest-micro-batch-size",
+        type=int,
+        default=None,
+        help=(
+            "Opt-in U0 experiment: admit only this many final-judge "
+            "columns per RMP round and reprice all deferred columns under "
+            "the next true dual."
+        ),
+    )
+    parser.add_argument(
+        "--harvest-deferred-candidate-limit",
+        type=int,
+        default=10000,
+    )
+    parser.add_argument(
         "--root-engine",
         choices=("b1_compact_final_judge", "b2b_r3_worker"),
         default="b1_compact_final_judge",
@@ -88,6 +103,10 @@ def main() -> int:
             tail_dual_stabilization_alpha=float(args.tail_dual_stabilization_alpha),
             tail_dual_stabilization_window=int(args.tail_dual_stabilization_window),
             return_active_columns_payload=bool(args.write_active_columns or initial_columns),
+            harvest_micro_batch_size=args.harvest_micro_batch_size,
+            harvest_deferred_candidate_limit=int(
+                args.harvest_deferred_candidate_limit
+            ),
         )
     else:
         result = solve_b1_root_node_baseline(
@@ -117,6 +136,10 @@ def main() -> int:
             "tail_dual_stabilization_enabled": bool(args.tail_dual_stabilization_enabled),
             "tail_dual_stabilization_alpha": float(args.tail_dual_stabilization_alpha),
             "tail_dual_stabilization_window": int(args.tail_dual_stabilization_window),
+            "harvest_micro_batch_size": args.harvest_micro_batch_size,
+            "harvest_deferred_candidate_limit": int(
+                args.harvest_deferred_candidate_limit
+            ),
             "env_compact_negative_batch_target": os.environ.get("LUNAR_ICE_COMPACT_NEGATIVE_BATCH_TARGET", ""),
             "env_compact_negative_search_cap_sec": os.environ.get("LUNAR_ICE_COMPACT_NEGATIVE_SEARCH_CAP_SEC", ""),
             "env_compact_negative_no_good_scope": os.environ.get("LUNAR_ICE_COMPACT_NEGATIVE_NO_GOOD_SCOPE", ""),

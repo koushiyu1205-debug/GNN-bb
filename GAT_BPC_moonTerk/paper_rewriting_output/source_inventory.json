@@ -209,6 +209,110 @@
       "role": "mandatory_paper_terminology_and_restricted_certify_policy",
       "authority": "A",
       "status": "active"
+    },
+    {
+      "id": "S040",
+      "path": "paper_rewriting_output/phase_3_pre_draft_freeze.md",
+      "type": "markdown",
+      "role": "phase_3_pre_draft_freeze_and_manuscript_lock",
+      "authority": "A",
+      "status": "frozen"
+    },
+    {
+      "id": "S041",
+      "path": "paper_rewriting_output/model_notation_and_equation_register.md",
+      "type": "markdown",
+      "role": "model_notation_equations_and_internal_objective_schema_audit",
+      "authority": "A/B",
+      "status": "frozen"
+    },
+    {
+      "id": "S042",
+      "path": "paper_rewriting_output/section_writing_input_packets.md",
+      "type": "markdown",
+      "role": "section_by_section_drafting_inputs",
+      "authority": "A",
+      "status": "frozen"
+    },
+    {
+      "id": "S043",
+      "path": "paper_rewriting_output/citation_lock.md",
+      "type": "markdown",
+      "role": "twenty_two_reference_core_citation_lock",
+      "authority": "B",
+      "status": "manually_verified"
+    },
+    {
+      "id": "S044",
+      "path": "paper_rewriting_output/result_placeholder_schema.md",
+      "type": "markdown",
+      "role": "learning_result_activation_and_placeholder_schema",
+      "authority": "A",
+      "status": "frozen_results_tbd"
+    },
+    {
+      "id": "S045",
+      "path": "paper_rewriting_output/phase_3_readiness_audit.md",
+      "type": "markdown",
+      "role": "phase_3_closeout_audit",
+      "authority": "A",
+      "status": "complete"
+    },
+    {
+      "id": "S046",
+      "path": "paper_rewriting_output/phase_4_drafting_contract.md",
+      "type": "markdown",
+      "role": "phase_4_authorization_and_drafting_rules",
+      "authority": "A",
+      "status": "active"
+    },
+    {
+      "id": "S047",
+      "path": "paper_rewriting_output/manuscript_draft.md",
+      "type": "markdown",
+      "role": "active_english_journal_working_draft",
+      "authority": "A/B",
+      "status": "phase_4_complete_with_explicit_tbd_blocks"
+    },
+    {
+      "id": "S048",
+      "path": "paper_rewriting_output/section_3_pre_phase4_scratch.md",
+      "type": "markdown",
+      "role": "archived_pre_phase_4_consistency_check",
+      "authority": "D",
+      "status": "inactive_archive"
+    },
+    {
+      "id": "S049-S054",
+      "path": "paper_rewriting_output/phase_4_*.md plus logic_transfer_audit.md and structured_review.md",
+      "type": "markdown_group",
+      "role": "phase_4_placeholder_reverse_outline_claim_logic_review_and_closeout_audits",
+      "authority": "A/B",
+      "status": "complete_or_closeout_generated"
+    },
+    {
+      "id": "S055",
+      "path": "src/lunar_ice_bpc/domain/real_maps.py plus exact/core/columns.py, exact/core/journey.py, and exact/core/objective.py",
+      "type": "python_group",
+      "role": "detailed_lunar_path_sortie_journey_normalization_and_objective_mathematics",
+      "authority": "B",
+      "status": "implemented"
+    },
+    {
+      "id": "S056",
+      "path": "exact pricing harvest/completion-bound, branch-probe, proof-debt, and node-bound modules",
+      "type": "python_group",
+      "role": "harvest_pruning_branch_fractionality_proof_debt_and_node_bound_predicates",
+      "authority": "B",
+      "status": "implemented_with_context_limits"
+    },
+    {
+      "id": "S058",
+      "path": "paper_rewriting_output/introduction_revision_audit.md",
+      "type": "markdown",
+      "role": "introduction_reverse_outline_claim_transfer_and_self_review",
+      "authority": "A/B",
+      "status": "complete"
     }
   ],
   "missing_evidence": [

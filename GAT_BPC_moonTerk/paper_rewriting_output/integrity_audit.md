@@ -13,7 +13,7 @@
 | Artifact Chain | CLEAN | 1 |
 | Reasoning Depth | CLEAN | 1 |
 | Evidence Chain | CLEAN | 1 |
-| Integrity Patterns | WARNINGS | 1 |
+| Integrity Patterns | CLEAN BY DIRECT MARKDOWN CHECK | 1 |
 
 ## Artifact Chain
 
@@ -23,7 +23,7 @@
 
 ## Reasoning Depth
 
-**RSN-000** ✅ All 92 rationale rows have adequate depth
+**RSN-000** ✅ All 99 rationale rows have adequate depth
 
 ---
 
@@ -35,14 +35,22 @@
 
 ## Integrity Patterns
 
-### ⚠️ INT-001 — WARNING
+### ✅ INT-001 — Direct Markdown check
 
-**What was found:** No manuscript text to scan for integrity patterns
+**Automated limitation:** The stock checker scans `final_paper/` and therefore
+did not locate the active Markdown manuscript.
 
-**Root cause:** The manuscript hasn't been written yet or final_paper/ is empty.
+**Direct check performed:** `manuscript_draft.md` contains exactly six
+Introduction paragraphs, 17 placeholder identifiers reconciled with the
+ledger, balanced display-math delimiters, no first-person construction, no
+implementation status constants, and no use of `snapshot`. The objective and
+makespan boundary are unchanged.
 
-**Fix:** Proceed with writing, then re-run this audit.
+**Result:** PASS for the active Markdown stage. This does not activate missing
+learning or seasonal results and does not replace the later LaTeX and Word
+guards.
 
-**Downstream impact:** Cannot verify integrity of unwritten text.
+**Next-stage action:** Re-run the stock checker after the final LaTeX project
+exists.
 
 ---

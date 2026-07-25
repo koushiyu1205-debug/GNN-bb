@@ -1,0 +1,43 @@
+{
+  "schema_version": "lunar_ice_bpc.proof_tail_full80_promotion_decision.v1",
+  "experiment_id": "P0V2_PROOF_TAIL_DYNAMIC_QD1_FULL80_PROMOTION_20260724",
+  "decided_at": "2026-07-25T03:08:49+08:00",
+  "status": "NOT_PROMOTED",
+  "candidate_rule": "scale30_branch_or_cut_qd1_else_q0",
+  "control_baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+  "active_experiment_baseline_after_decision": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+  "production_default_policy_after_decision": "no_cut",
+  "new_baseline_freeze_created": false,
+  "baseline_registry_modified": false,
+  "protected_full80_consumed": true,
+  "protected_full80_reuse_for_selection_allowed": false,
+  "future_promotion_requires_new_frozen_test_set": true,
+  "completed_slot_count": 160,
+  "exact_slot_count": 160,
+  "extra_incomplete_count": 0,
+  "safety_failure_count": 0,
+  "failed_scale30_gates": [
+    "paired_geometric_mean_wall_ratio_max",
+    "paired_log_ratio_bootstrap_ucb95_max",
+    "worst_instance_wall_ratio_max"
+  ],
+  "scale30_metrics": {
+    "paired_geometric_mean_wall_ratio": 0.9796242320575611,
+    "paired_median_wall_ratio": 0.9974345909494886,
+    "arithmetic_mean_wall_ratio": 0.9456595042616646,
+    "paired_log_ratio_bootstrap_ucb95": 0.012857116982601158,
+    "paired_worst_wall_ratio": 1.0802838069606915
+  },
+  "artifacts": {
+    "promotion_manifest_path": "configs/experiments/p0v2_proof_tail_full80_paired_promotion_v1.json",
+    "promotion_manifest_sha256": "1d3be882696e8e8926c03cd2c95f2255d51f21e877b95d7716b90f598ef481c1",
+    "promotion_audit_path": "runs/p0v2_proof_tail_dynamic_qd1_full80_promotion_20260724/promotion_audit.json",
+    "promotion_audit_sha256": "30af5c9b1804a584726875145c666a272fdaa35fc4781e0dc39b019d77b7cd88",
+    "promotion_rows_path": "runs/p0v2_proof_tail_dynamic_qd1_full80_promotion_20260724/promotion_rows.json",
+    "promotion_rows_sha256": "3902ce213194193c17540b5159650c3bd87e2e725306715cc94e490959da0ee0",
+    "runtime_source_bundle_path": "runs/p0v2_proof_tail_dynamic_qd1_full80_promotion_20260724/frozen_inputs/runtime_source_bundle.json",
+    "runtime_source_bundle_file_sha256": "f97eb3560ef4c50c2f0d15e4f55badddb847553428bb26f48b534708206dd6e5",
+    "runtime_source_bundle_sha256": "de8330fda2538340eed2301ba3226a2dff5ae56835a684d1928913c4d67dfd47",
+    "report_path": "runs/p0v2_proof_tail_dynamic_qd1_full80_promotion_20260724/promotion_report_zh.md"
+  }
+}

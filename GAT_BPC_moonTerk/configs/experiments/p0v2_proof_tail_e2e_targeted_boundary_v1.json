@@ -1,0 +1,21 @@
+{
+  "schema_version": "lunar_ice_bpc.proof_tail_e2e_pair_manifest.v1",
+  "selection_frozen_before_outcome": true,
+  "selection_uses_qc0_qd1_outcomes": true,
+  "evidence_scope": "targeted_mechanism_check_not_promotion",
+  "split_manifest": "data/gat_p0v2/p0v2_gat_split_manifest.json",
+  "allowed_partition": "development",
+  "control_config": "configs/benchmarks/p0v2_gat_binding_v2_b0_probe.yaml",
+  "candidate_config": "configs/benchmarks/p0v2_proof_tail_scale30_qd1_probe.yaml",
+  "candidate_rule": "scale30_qd1_else_q0",
+  "production_policy_changed": false,
+  "pairs": [
+    {
+      "scale": 30,
+      "index": 15,
+      "instance_content_hash": "ea4b20b0c14b8112",
+      "run_order": ["candidate", "control"],
+      "selection_reason": "strong_positive_snapshot_boundary"
+    }
+  ]
+}

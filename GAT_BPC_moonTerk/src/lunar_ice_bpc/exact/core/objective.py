@@ -13,6 +13,9 @@ from lunar_ice_bpc.exact.core.data import LunarIceData
 
 OBJECTIVE_SCHEMA_VERSION = "lunar_ice_bpc.normalized_additive_objective.v1"
 OBJECTIVE_MODE = "normalized_operating_cost_risk_weighted_completion"
+OBJECTIVE_SPEC_ID = (
+    "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1"
+)
 
 _EPS = 1.0e-9
 _REFERENCE_CACHE: dict[int, tuple[weakref.ReferenceType[LunarIceData], "ObjectiveReferences"]] = {}
@@ -31,6 +34,7 @@ class ObjectiveReferences:
         return {
             "schema_version": OBJECTIVE_SCHEMA_VERSION,
             "mode": OBJECTIVE_MODE,
+            "objective_spec_id": OBJECTIVE_SPEC_ID,
             **asdict(self),
         }
 
@@ -60,6 +64,7 @@ class ObjectiveBreakdown:
         return {
             "schema_version": OBJECTIVE_SCHEMA_VERSION,
             "mode": OBJECTIVE_MODE,
+            "objective_spec_id": OBJECTIVE_SPEC_ID,
             **payload,
             "normalized_objective": self.objective,
             "official_objective": self.objective,
@@ -245,6 +250,7 @@ def objective_metadata(data: LunarIceData) -> dict:
     return {
         "schema_version": OBJECTIVE_SCHEMA_VERSION,
         "mode": OBJECTIVE_MODE,
+        "objective_spec_id": OBJECTIVE_SPEC_ID,
         "weights": {
             "operating_cost": float(data.objective.weight_operating_cost),
             "risk": float(data.objective.weight_risk),
@@ -253,6 +259,19 @@ def objective_metadata(data: LunarIceData) -> dict:
         },
         "reference": objective_references(data).to_payload(),
         "makespan_enters_pricing_objective": False,
+        "legacy_source_coefficients_ignored_by_exact_objective": {
+            "alpha_discovery_completion": float(
+                data.objective.alpha_discovery_completion
+            ),
+            "beta_journey_end_time": float(
+                data.objective.beta_journey_end_time
+            ),
+            "gamma_lunar_ice_risk": float(
+                data.objective.gamma_lunar_ice_risk
+            ),
+            "delta_energy": float(data.objective.delta_energy),
+        },
+        "source_objective_mode_diagnostic_only": str(data.objective.mode),
     }
 
 
@@ -263,6 +282,7 @@ def flatten_objective_payload(payload: Mapping | None, *, prefix: str = "objecti
     return {
         f"{prefix}_schema_version": payload.get("schema_version"),
         f"{prefix}_mode": payload.get("mode"),
+        f"{prefix}_spec_id": payload.get("objective_spec_id"),
         f"{prefix}_raw_operating_cost": payload.get("raw_operating_cost"),
         f"{prefix}_raw_risk": payload.get("raw_risk"),
         f"{prefix}_raw_weighted_completion_time": payload.get("raw_weighted_completion_time"),

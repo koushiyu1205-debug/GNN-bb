@@ -949,6 +949,8 @@ def run_b4_1_tree_closure_from_probe(
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
     live_sri_policy: str = "no_cut",
+    development_branch_rank_index: int = 0,
+    development_branch_rank_by_path: dict[tuple[str, ...], int] | None = None,
 ) -> dict:
     """Rebuild a B3 tree certificate from a saved active-column root probe."""
 
@@ -989,6 +991,12 @@ def run_b4_1_tree_closure_from_probe(
         labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
         labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
         live_sri_policy=str(live_sri_policy),
+        development_branch_rank_index=int(
+            development_branch_rank_index
+        ),
+        development_branch_rank_by_path=(
+            development_branch_rank_by_path
+        ),
     )
     root_node = (raw_result.get("nodes") or [{}])[0]
     final_judge = probe.get("final_judge") if isinstance(probe.get("final_judge"), dict) else {}
@@ -1022,6 +1030,13 @@ def run_b4_1_tree_closure_from_probe(
             "labeling_final_judge_exact_harvest_target": labeling_final_judge_exact_harvest_target,
             "live_sri_policy": str(live_sri_policy),
             "live_sri_enabled": str(live_sri_policy).lower() != "no_cut",
+            "development_branch_rank_index": int(
+                development_branch_rank_index
+            ),
+            "development_branch_rank_guidance_active": bool(
+                int(development_branch_rank_index) != 0
+                or development_branch_rank_by_path
+            ),
             "active_column_count": len(initial_columns),
             "active_columns_after_merge": len(initial_columns),
             "columns_added": root_node.get("added_column_count", raw_result.get("added_column_count", "")),
@@ -8546,6 +8561,32 @@ def _build_requirement_audit(
 def _tail_dual_certificate_leak(row: dict) -> bool:
     if _bool_value(row.get("tail_dual_no_column_can_certify")):
         return True
+    worker_observed = any(
+        (
+            _has_value(row.get("worker_status")),
+            _has_value(row.get("worker_dual_source")),
+            int(row.get("worker_generated_column_task_set_count") or 0) > 0,
+            _has_value(
+                row.get(
+                    "candidate_search_rc_recomputed_under_true_dual"
+                )
+            ),
+            _has_value(row.get("worker_true_dual_candidate_audit_pass")),
+            _has_value(row.get("tail_dual_center_task_count")),
+            _has_value(row.get("tail_dual_current_task_count")),
+        )
+    )
+    if not worker_observed:
+        # A configured-but-unreached worker has no certificate role.  Missing
+        # booleans on such a row are not evidence of a certificate leak.
+        if not _bool_value(row.get("can_certify_no_negative")):
+            return False
+        proof_kind = str(
+            row.get("pricing_proof_kind")
+            or row.get("underlying_pricing_proof_kind")
+            or ""
+        )
+        return proof_kind != "EXHAUSTIVE_NO_NEGATIVE"
     if not _bool_value(row.get("worker_dual_only")):
         return True
     if not _bool_value(row.get("true_dual_rc_recomputed")):

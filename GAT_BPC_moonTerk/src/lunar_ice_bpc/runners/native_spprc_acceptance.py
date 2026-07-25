@@ -15,6 +15,10 @@ import sys
 from time import perf_counter
 
 from lunar_ice_bpc.exact.bpc.pricing.backends.native_rcspp import effective_memory_limit_gb
+from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
+    PROOF_QUEUE_EXPERIMENT_ENV,
+    PROOF_QUEUE_EXPERIMENT_MODES,
+)
 from lunar_ice_bpc.exact.bpc.pricing.backends.scale_profiles import (
     NativeSpprcScaleProfile,
     native_spprc_scale_profile,
@@ -46,6 +50,17 @@ def run_native_spprc_acceptance(
     started = perf_counter()
     baseline_commit_at_start = _git_head(root)
     for scale in scales:
+        proof_queue_experiment = str(
+            config.get(
+                "native_proof_queue_experiment_policy", "off"
+            )
+            or "off"
+        )
+        if proof_queue_experiment not in PROOF_QUEUE_EXPERIMENT_MODES:
+            raise ValueError(
+                "unsupported native_proof_queue_experiment_policy "
+                f"{proof_queue_experiment!r}"
+            )
         profile = _profile_from_config(int(scale), config)
         backend_id = str(backend_override or profile.backend_id)
         engine_build_hash_at_start = spprc_engine_build_hash(backend_id)
@@ -70,6 +85,7 @@ def run_native_spprc_acceptance(
             "final_judge_pass_policy": final_judge_pass_policy,
             "adaptive_harvest_cap_sec": adaptive_harvest_cap_sec,
             "live_sri_policy": str(config.get("live_sri_policy", "no_cut")),
+            "proof_queue_experiment_policy": proof_queue_experiment,
             "profile": asdict(profile),
             "effective_memory_limit_gb": round(effective_memory_limit_gb(profile.memory_limit_gb), 6),
             "instance_count": len(scale_instances),
@@ -138,6 +154,7 @@ def run_native_spprc_acceptance(
                 "LUNAR_ICE_SPPRC_CUT_STATE": (
                     "1" if bool(config.get("native_cut_state_enabled", False)) else "0"
                 ),
+                PROOF_QUEUE_EXPERIMENT_ENV: proof_queue_experiment,
                 "LUNAR_ICE_LABELING_WORKER_NG_SIZES": ",".join(str(value) for value in profile.ng_sizes),
                 # The row deadline owns the single clock.  v1 promotes the
                 # root exact pricer first, so the candidate worker is skipped
