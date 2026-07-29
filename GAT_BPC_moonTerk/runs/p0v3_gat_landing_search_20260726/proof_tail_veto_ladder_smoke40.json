@@ -1,0 +1,1222 @@
+{
+  "all_state_labels": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_all_proof_state_exact_labels.json",
+  "artifact_hash": "350a6fbf02fbedb82ce441951e60ff28e2fe3ffd9a9cd43e829490dc1fa60011",
+  "deployable": false,
+  "development_only": true,
+  "epochs": 40,
+  "example_count": 20,
+  "excluded_non_call_state_count": 25,
+  "excluded_non_call_states": [
+    {
+      "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "02cf5560512b1049a8e1958bebb99ea25ec1d34e09faef7d757f6d46392f29a4"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "d684b5c64451c50404dd26cc758b8ed9dbe9cfeeab82958a28c1cbbfc7f0a597"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_006_seed202807272",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "a28c3cb145e473a444b12faf1ee17976330e3890554970d49deb3d92a2935e3c"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "385328ea20a4a75a1ffaf03ad7be81b17c4d00b9f822c2cc67bc8be050e3d222"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "9eae468a4b3beec38ecac591eb7d06ed422ef3ef1eb54420543beedb1573ee16"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "7f6a0852d57566f56690cc4ffa3d543fc556ccd6fed9e19da167429dc39b812a"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "98daf627dbf2e0d3bfa4939644b3d3aea6acf8cc102c399a21024c60be87dc36"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_001_seed202807261",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "78e41c08741be72d7d5f5ded52e1a310337e3231dee27a0e92597388203fd1b4"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_003_seed202907263",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "ab735a17f935c4818a68de76ecf27c3e78fdf7bc0c524cc6b41848e3fe64d871"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_003_seed202907263",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "b31dd4f05efcfb44ddd9b77e101f39f16929ff63a0cab096904db236e4d1c27d"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "4c92ee83883d588614df0535c2f1ff5ac1c777aba52746dfffdc8855c2815bd6"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "5e61c0283dd0d8b8d06c205b2884019783c58f76eb34ed08fc308f6d7b56385c"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "66a3dac36bf4556a906a0d71c8e5607e47c4f4bccfc5d6b1d7fb81f3cf870c41"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_005_seed202807271",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "1991c7f531bdc591148c0cbcf13a952b3f7c608ab659d57dee30f931b9c5a372"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_020_005_seed202807271",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "9909e1aa1aa494da70d358487bb3773b2ca2e01690fc08da933330773ee96aca"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "249bf4c73a525ef018178294cf02a09e5b118f74ea475b2a9d6348cb47a1300f"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "3494287551791cf2aebedd31bf47601b15c6acf96abc8edd18aa91dcc2138e6a"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "ae75f5a7efd7491a0b6dcf9aaa3f658b2760389a427702e9cd1800eb0c94050d"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_002_seed202907262",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "26731115f4bde70bb09f445e01e8c4e383c0b126b035a787db3a1b705c9458dc"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_002_seed202907262",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "5d71950f998ec53c95f81372e1f682aab1e69e0e41f26d3fc5a1d7941336c004"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_002_seed202907262",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "94bcc29c5b2b79bef51e38cca9ec7b7f96425323adbeba8e62e4941e13746cce"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_006_seed202907270",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "4f75dfd5c6bbb2412ba2e1203496d9f32c6ef3ac333e2b453cd9ec1bdf47f79f"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_006_seed202907270",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "8168a1f0b04c86251b209a1a05dc49e28cee958a065b37e3881477f2d1b79221"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_007_seed202907271",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "3fe3047e140df51f970da94140c9ffa0494f1cc6a3c935c49bcf5ebfe679f087"
+    },
+    {
+      "instance_id": "lunar_ice_sp50_030_005_seed202907269",
+      "observed_sparse_harvest_strikes": 0,
+      "reason": "NOT_A_TWO_STRIKE_PRE_CALL_STATE",
+      "required_sparse_harvest_strikes": 2,
+      "source_pass_strategy": "proof_only",
+      "state_hash": "3636f2e51b66123b4a37e794cfdfb382e266c892c4083fdf76c9fa7ae9061d7d"
+    }
+  ],
+  "first_trigger_count": 13,
+  "first_trigger_labels": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_all_realdev_exact_labels.json",
+  "fold_count": 5,
+  "instance_count": 13,
+  "instance_folds": {
+    "103e4ad5fa78176f": 4,
+    "2fb79d2d6afd0eb1": 2,
+    "32e7e2804578fa0a": 1,
+    "348fca29db1913f6": 0,
+    "37037d48065d317b": 0,
+    "4277d0edc78aaeff": 1,
+    "4a7b82692a2ab385": 2,
+    "4c368eccc957e6bd": 4,
+    "4fc392d5ac545bbd": 3,
+    "4fd39191a233502d": 3,
+    "5c27cdbd962c734d": 3,
+    "82ea214bf17d5c38": 4,
+    "c37a19389e5c5fcf": 0
+  },
+  "minimum_call_cost_sec": 0.02,
+  "models": [
+    {
+      "folds": [
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.037191811949014664,
+            "cost": 0.18304364383220673,
+            "ranking": 0.8758514523506165,
+            "total": 1.096087098121643
+          },
+          "fold": 0,
+          "forward_wall_sec": [
+            2.071700873784721e-05,
+            2.060900442302227e-05,
+            2.0566018065437675e-05
+          ],
+          "heldout_instance_hashes": [
+            "348fca29db1913f6",
+            "37037d48065d317b",
+            "c37a19389e5c5fcf"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.05955190300000002,
+              "actual_veto_target": false,
+              "instance_content_hash": "348fca29db1913f6",
+              "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+              "predicted_advantage_sec": 0.40091199626897644,
+              "predicted_harvest_cost_sec": 1.2000777036818988,
+              "predicted_proof_cost_sec": 1.6009896999508753,
+              "predicted_veto": true,
+              "scale": 20,
+              "state_hash": "fb2d376982cda29f8ed09b21e70c80e0532278b69d18b54b00be70a08dfa0180",
+              "veto_threshold_sec": 0.36324965892797173
+            },
+            {
+              "actual_advantage_sec": -0.045701281999999954,
+              "actual_veto_target": false,
+              "instance_content_hash": "37037d48065d317b",
+              "instance_id": "lunar_ice_sp50_020_001_seed202807261",
+              "predicted_advantage_sec": 0.1703229804943982,
+              "predicted_harvest_cost_sec": 1.3495272361994939,
+              "predicted_proof_cost_sec": 1.519850216693892,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "60fba12c2773232ab43d0fa2d6fcc3c6bbb11548b9571896f49525084b27b96b",
+              "veto_threshold_sec": 0.36324965892797173
+            },
+            {
+              "actual_advantage_sec": -6.655153675000001,
+              "actual_veto_target": false,
+              "instance_content_hash": "c37a19389e5c5fcf",
+              "instance_id": "lunar_ice_sp50_030_007_seed202907271",
+              "predicted_advantage_sec": 0.1120640527471457,
+              "predicted_harvest_cost_sec": 1.2489234314007,
+              "predicted_proof_cost_sec": 1.3609874841478458,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "e458c2c5bb61c693fcc5de8c6bfb6f492029fd3876113842fd96b84eb04ce7f9",
+              "veto_threshold_sec": 0.36324965892797173
+            }
+          ],
+          "kind": "linear",
+          "parameter_count": 126,
+          "seed": 20260726,
+          "train_instance_count": 10,
+          "train_state_count": 15,
+          "train_wall_sec": 0.7396069100068416,
+          "veto_threshold_sec": 0.36324965892797173
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.017255874350667,
+            "cost": 0.35891345143318176,
+            "ranking": 0.8470476269721985,
+            "total": 1.2232170104980469
+          },
+          "fold": 1,
+          "forward_wall_sec": [
+            2.068100729957223e-05,
+            1.944298855960369e-05
+          ],
+          "heldout_instance_hashes": [
+            "32e7e2804578fa0a",
+            "4277d0edc78aaeff"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.8081168689999998,
+              "actual_veto_target": false,
+              "instance_content_hash": "32e7e2804578fa0a",
+              "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+              "predicted_advantage_sec": 0.019984198926188412,
+              "predicted_harvest_cost_sec": 1.3453379558859924,
+              "predicted_proof_cost_sec": 1.3653221548121808,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "20087c306e2373b8e6f20562b94ba2e1f6576fee792e3da0cf185a6ad831b7a3",
+              "veto_threshold_sec": 0.2706159425327109
+            },
+            {
+              "actual_advantage_sec": -0.099704389,
+              "actual_veto_target": false,
+              "instance_content_hash": "4277d0edc78aaeff",
+              "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+              "predicted_advantage_sec": -0.11058402228818265,
+              "predicted_harvest_cost_sec": 1.501226438690372,
+              "predicted_proof_cost_sec": 1.3906424164021893,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "a26830c90f5f45bc3bdd59459830272affbf5fd12bc695a95d44dc768df0404f",
+              "veto_threshold_sec": 0.2706159425327109
+            }
+          ],
+          "kind": "linear",
+          "parameter_count": 126,
+          "seed": 20260727,
+          "train_instance_count": 11,
+          "train_state_count": 16,
+          "train_wall_sec": 0.10276735801016912,
+          "veto_threshold_sec": 0.2706159425327109
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.019641177728772163,
+            "cost": 0.3306554853916168,
+            "ranking": 0.7636793255805969,
+            "total": 1.113976001739502
+          },
+          "fold": 2,
+          "forward_wall_sec": [
+            2.0529987523332238e-05,
+            1.9711005734279752e-05
+          ],
+          "heldout_instance_hashes": [
+            "2fb79d2d6afd0eb1",
+            "4a7b82692a2ab385"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.09690451999999994,
+              "actual_veto_target": false,
+              "instance_content_hash": "2fb79d2d6afd0eb1",
+              "instance_id": "lunar_ice_sp50_020_006_seed202807272",
+              "predicted_advantage_sec": -0.801594829341634,
+              "predicted_harvest_cost_sec": 2.660560374068301,
+              "predicted_proof_cost_sec": 1.858965544726667,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "a9033653744a3e932222aac1f91ecb5d37e7da47f4fa4fff0b5ecfdd9651cd7f",
+              "veto_threshold_sec": -0.019659258608123592
+            },
+            {
+              "actual_advantage_sec": 0.265357251,
+              "actual_veto_target": true,
+              "instance_content_hash": "4a7b82692a2ab385",
+              "instance_id": "lunar_ice_sp50_020_005_seed202807271",
+              "predicted_advantage_sec": -0.3797412493396566,
+              "predicted_harvest_cost_sec": 2.2098409262664407,
+              "predicted_proof_cost_sec": 1.830099676926784,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "ca6ad6737a21542038769d4d2a56824c9faf5b171471bfe75ad4417c7ee6b6da",
+              "veto_threshold_sec": -0.019659258608123592
+            }
+          ],
+          "kind": "linear",
+          "parameter_count": 126,
+          "seed": 20260728,
+          "train_instance_count": 11,
+          "train_state_count": 18,
+          "train_wall_sec": 0.11239360098261386,
+          "veto_threshold_sec": -0.019659258608123592
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.031128263100981712,
+            "cost": 0.2867891192436218,
+            "ranking": 0.7885560393333435,
+            "total": 1.106473445892334
+          },
+          "fold": 3,
+          "forward_wall_sec": [
+            1.965899718925357e-05,
+            2.0541978301480412e-05,
+            1.9503000658005476e-05
+          ],
+          "heldout_instance_hashes": [
+            "4fc392d5ac545bbd",
+            "4fd39191a233502d",
+            "5c27cdbd962c734d"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.07256788999999997,
+              "actual_veto_target": false,
+              "instance_content_hash": "4fc392d5ac545bbd",
+              "instance_id": "lunar_ice_sp50_020_002_seed202807262",
+              "predicted_advantage_sec": -0.08114071810376267,
+              "predicted_harvest_cost_sec": 2.1998053845107624,
+              "predicted_proof_cost_sec": 2.1186646664069997,
+              "predicted_veto": true,
+              "scale": 20,
+              "state_hash": "27af815e322664f1367797ff3c64ab71eee6ab78b70d5697caf2d6b2066183a5",
+              "veto_threshold_sec": -0.4194967257756818
+            },
+            {
+              "actual_advantage_sec": -0.5337553689999999,
+              "actual_veto_target": false,
+              "instance_content_hash": "4fd39191a233502d",
+              "instance_id": "lunar_ice_sp50_030_003_seed2026372703",
+              "predicted_advantage_sec": -1.1455829389181909,
+              "predicted_harvest_cost_sec": 2.923295209229676,
+              "predicted_proof_cost_sec": 1.777712270311485,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "79636bff694a03d222a24532a6451c86cdade12f779f296fab06ebce868a7cae",
+              "veto_threshold_sec": -0.4194967257756818
+            },
+            {
+              "actual_advantage_sec": 0.17293469699999964,
+              "actual_veto_target": true,
+              "instance_content_hash": "5c27cdbd962c734d",
+              "instance_id": "lunar_ice_sp50_030_002_seed202907262",
+              "predicted_advantage_sec": -1.220883906533245,
+              "predicted_harvest_cost_sec": 2.7822467543253873,
+              "predicted_proof_cost_sec": 1.5613628477921422,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "d908c5b2ab294402e408b7a7c80100e02f3bce093490a3d54935f1eba88bda0e",
+              "veto_threshold_sec": -0.4194967257756818
+            }
+          ],
+          "kind": "linear",
+          "parameter_count": 126,
+          "seed": 20260729,
+          "train_instance_count": 10,
+          "train_state_count": 16,
+          "train_wall_sec": 0.1045765710005071,
+          "veto_threshold_sec": -0.4194967257756818
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.016965854912996292,
+            "cost": 0.3427262604236603,
+            "ranking": 0.7042688131332397,
+            "total": 1.0639609098434448
+          },
+          "fold": 4,
+          "forward_wall_sec": [
+            2.0413019228726625e-05,
+            1.990402233786881e-05,
+            2.006100839935243e-05
+          ],
+          "heldout_instance_hashes": [
+            "103e4ad5fa78176f",
+            "4c368eccc957e6bd",
+            "82ea214bf17d5c38"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.16087139399999995,
+              "actual_veto_target": false,
+              "instance_content_hash": "103e4ad5fa78176f",
+              "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+              "predicted_advantage_sec": -0.6036479349283561,
+              "predicted_harvest_cost_sec": 2.742122763406485,
+              "predicted_proof_cost_sec": 2.1384748284781288,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "f6c917aa3c08453dd980a163fd624a0f2590e8bac0cba10fc6ffe47226b860f0",
+              "veto_threshold_sec": 0.21443319297350558
+            },
+            {
+              "actual_advantage_sec": 2.182736998,
+              "actual_veto_target": true,
+              "instance_content_hash": "4c368eccc957e6bd",
+              "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+              "predicted_advantage_sec": -0.8055740556641751,
+              "predicted_harvest_cost_sec": 2.8962751037780667,
+              "predicted_proof_cost_sec": 2.0907010481138917,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "5a75daca93efaf55335982854b0d08954b74a0d8a10f42be5b004d0a9f499bc3",
+              "veto_threshold_sec": 0.21443319297350558
+            },
+            {
+              "actual_advantage_sec": 1.1108094620000006,
+              "actual_veto_target": true,
+              "instance_content_hash": "82ea214bf17d5c38",
+              "instance_id": "lunar_ice_sp50_030_006_seed202907270",
+              "predicted_advantage_sec": 0.030364032835120014,
+              "predicted_harvest_cost_sec": 2.4076063141716784,
+              "predicted_proof_cost_sec": 2.4379703470067984,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "dd6ea10251fdbafa74a14ffbc6a4f7cb3f201e5c1a15fa25733c3653d80c2809",
+              "veto_threshold_sec": 0.21443319297350558
+            }
+          ],
+          "kind": "linear",
+          "parameter_count": 126,
+          "seed": 20260730,
+          "train_instance_count": 10,
+          "train_state_count": 15,
+          "train_wall_sec": 0.09671172601520084,
+          "veto_threshold_sec": 0.21443319297350558
+        }
+      ],
+      "forward_wall_sec_max": 2.071700873784721e-05,
+      "forward_wall_sec_p50": 2.0413019228726625e-05,
+      "kind": "linear",
+      "metrics": {
+        "action_gain_before_call_cost_sec": -0.13211979299999999,
+        "assumed_total_call_cost_sec": 0.26,
+        "false_veto_count": 2,
+        "first_trigger_count": 13,
+        "missed_veto_count": 4,
+        "realized_net_gain_sec": -0.392119793,
+        "true_veto_count": 0,
+        "veto_precision": 0.0,
+        "veto_recall": 0.0
+      }
+    },
+    {
+      "folds": [
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.014772849157452583,
+            "cost": 0.1553306132555008,
+            "ranking": 0.7565778493881226,
+            "total": 0.9266812205314636
+          },
+          "fold": 0,
+          "forward_wall_sec": [
+            5.49200049135834e-05,
+            5.1176000852137804e-05,
+            6.541598122566938e-05
+          ],
+          "heldout_instance_hashes": [
+            "348fca29db1913f6",
+            "37037d48065d317b",
+            "c37a19389e5c5fcf"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.05955190300000002,
+              "actual_veto_target": false,
+              "instance_content_hash": "348fca29db1913f6",
+              "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+              "predicted_advantage_sec": -0.6349342130278084,
+              "predicted_harvest_cost_sec": 1.92647892347168,
+              "predicted_proof_cost_sec": 1.2915447104438715,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "fb2d376982cda29f8ed09b21e70c80e0532278b69d18b54b00be70a08dfa0180",
+              "veto_threshold_sec": 0.362821583464017
+            },
+            {
+              "actual_advantage_sec": -0.045701281999999954,
+              "actual_veto_target": false,
+              "instance_content_hash": "37037d48065d317b",
+              "instance_id": "lunar_ice_sp50_020_001_seed202807261",
+              "predicted_advantage_sec": -0.34902053332920335,
+              "predicted_harvest_cost_sec": 1.793433569274446,
+              "predicted_proof_cost_sec": 1.4444130359452427,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "60fba12c2773232ab43d0fa2d6fcc3c6bbb11548b9571896f49525084b27b96b",
+              "veto_threshold_sec": 0.362821583464017
+            },
+            {
+              "actual_advantage_sec": -6.655153675000001,
+              "actual_veto_target": false,
+              "instance_content_hash": "c37a19389e5c5fcf",
+              "instance_id": "lunar_ice_sp50_030_007_seed202907271",
+              "predicted_advantage_sec": -0.28089788741209354,
+              "predicted_harvest_cost_sec": 2.0073991914768343,
+              "predicted_proof_cost_sec": 1.7265013040647408,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "e458c2c5bb61c693fcc5de8c6bfb6f492029fd3876113842fd96b84eb04ce7f9",
+              "veto_threshold_sec": 0.362821583464017
+            }
+          ],
+          "kind": "mlp2x32",
+          "parameter_count": 4770,
+          "seed": 20260726,
+          "train_instance_count": 10,
+          "train_state_count": 15,
+          "train_wall_sec": 0.22801043398794718,
+          "veto_threshold_sec": 0.362821583464017
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.018804170191287994,
+            "cost": 0.3286823332309723,
+            "ranking": 0.7486748099327087,
+            "total": 1.0961613655090332
+          },
+          "fold": 1,
+          "forward_wall_sec": [
+            6.501202005892992e-05,
+            5.212301039136946e-05
+          ],
+          "heldout_instance_hashes": [
+            "32e7e2804578fa0a",
+            "4277d0edc78aaeff"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.8081168689999998,
+              "actual_veto_target": false,
+              "instance_content_hash": "32e7e2804578fa0a",
+              "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+              "predicted_advantage_sec": -0.3413177639964957,
+              "predicted_harvest_cost_sec": 2.1134207493559893,
+              "predicted_proof_cost_sec": 1.7721029853594936,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "20087c306e2373b8e6f20562b94ba2e1f6576fee792e3da0cf185a6ad831b7a3",
+              "veto_threshold_sec": 0.596091800404423
+            },
+            {
+              "actual_advantage_sec": -0.099704389,
+              "actual_veto_target": false,
+              "instance_content_hash": "4277d0edc78aaeff",
+              "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+              "predicted_advantage_sec": -0.35623930097203305,
+              "predicted_harvest_cost_sec": 1.9094777965974892,
+              "predicted_proof_cost_sec": 1.5532384956254561,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "a26830c90f5f45bc3bdd59459830272affbf5fd12bc695a95d44dc768df0404f",
+              "veto_threshold_sec": 0.596091800404423
+            }
+          ],
+          "kind": "mlp2x32",
+          "parameter_count": 4770,
+          "seed": 20260727,
+          "train_instance_count": 11,
+          "train_state_count": 16,
+          "train_wall_sec": 0.21314720300142653,
+          "veto_threshold_sec": 0.596091800404423
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.013742800801992416,
+            "cost": 0.32333987951278687,
+            "ranking": 0.7751867771148682,
+            "total": 1.112269401550293
+          },
+          "fold": 2,
+          "forward_wall_sec": [
+            5.564000457525253e-05,
+            5.2939984016120434e-05
+          ],
+          "heldout_instance_hashes": [
+            "2fb79d2d6afd0eb1",
+            "4a7b82692a2ab385"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.09690451999999994,
+              "actual_veto_target": false,
+              "instance_content_hash": "2fb79d2d6afd0eb1",
+              "instance_id": "lunar_ice_sp50_020_006_seed202807272",
+              "predicted_advantage_sec": -0.6522167408940756,
+              "predicted_harvest_cost_sec": 2.209995900364305,
+              "predicted_proof_cost_sec": 1.5577791594702295,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "a9033653744a3e932222aac1f91ecb5d37e7da47f4fa4fff0b5ecfdd9651cd7f",
+              "veto_threshold_sec": -0.17405061429854266
+            },
+            {
+              "actual_advantage_sec": 0.265357251,
+              "actual_veto_target": true,
+              "instance_content_hash": "4a7b82692a2ab385",
+              "instance_id": "lunar_ice_sp50_020_005_seed202807271",
+              "predicted_advantage_sec": -0.32611187986632295,
+              "predicted_harvest_cost_sec": 1.9001282580294157,
+              "predicted_proof_cost_sec": 1.5740163781630927,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "ca6ad6737a21542038769d4d2a56824c9faf5b171471bfe75ad4417c7ee6b6da",
+              "veto_threshold_sec": -0.17405061429854266
+            }
+          ],
+          "kind": "mlp2x32",
+          "parameter_count": 4770,
+          "seed": 20260728,
+          "train_instance_count": 11,
+          "train_state_count": 18,
+          "train_wall_sec": 0.21802129899151623,
+          "veto_threshold_sec": -0.17405061429854266
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.013384784571826458,
+            "cost": 0.31361547112464905,
+            "ranking": 0.7771182060241699,
+            "total": 1.1041184663772583
+          },
+          "fold": 3,
+          "forward_wall_sec": [
+            6.463500903919339e-05,
+            6.857700645923615e-05,
+            6.580402259714901e-05
+          ],
+          "heldout_instance_hashes": [
+            "4fc392d5ac545bbd",
+            "4fd39191a233502d",
+            "5c27cdbd962c734d"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.07256788999999997,
+              "actual_veto_target": false,
+              "instance_content_hash": "4fc392d5ac545bbd",
+              "instance_id": "lunar_ice_sp50_020_002_seed202807262",
+              "predicted_advantage_sec": 0.24915830519730808,
+              "predicted_harvest_cost_sec": 1.7384274256540455,
+              "predicted_proof_cost_sec": 1.9875857308513536,
+              "predicted_veto": true,
+              "scale": 20,
+              "state_hash": "27af815e322664f1367797ff3c64ab71eee6ab78b70d5697caf2d6b2066183a5",
+              "veto_threshold_sec": -0.35176318625362096
+            },
+            {
+              "actual_advantage_sec": -0.5337553689999999,
+              "actual_veto_target": false,
+              "instance_content_hash": "4fd39191a233502d",
+              "instance_id": "lunar_ice_sp50_030_003_seed2026372703",
+              "predicted_advantage_sec": -0.23738128002834347,
+              "predicted_harvest_cost_sec": 2.0967312902072175,
+              "predicted_proof_cost_sec": 1.859350010178874,
+              "predicted_veto": true,
+              "scale": 30,
+              "state_hash": "79636bff694a03d222a24532a6451c86cdade12f779f296fab06ebce868a7cae",
+              "veto_threshold_sec": -0.35176318625362096
+            },
+            {
+              "actual_advantage_sec": 0.17293469699999964,
+              "actual_veto_target": true,
+              "instance_content_hash": "5c27cdbd962c734d",
+              "instance_id": "lunar_ice_sp50_030_002_seed202907262",
+              "predicted_advantage_sec": -0.4436729755038129,
+              "predicted_harvest_cost_sec": 2.245278051567605,
+              "predicted_proof_cost_sec": 1.8016050760637923,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "d908c5b2ab294402e408b7a7c80100e02f3bce093490a3d54935f1eba88bda0e",
+              "veto_threshold_sec": -0.35176318625362096
+            }
+          ],
+          "kind": "mlp2x32",
+          "parameter_count": 4770,
+          "seed": 20260729,
+          "train_instance_count": 10,
+          "train_state_count": 16,
+          "train_wall_sec": 0.21003571501933038,
+          "veto_threshold_sec": -0.35176318625362096
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.01807413622736931,
+            "cost": 0.26292291283607483,
+            "ranking": 0.7178815007209778,
+            "total": 0.9988784790039062
+          },
+          "fold": 4,
+          "forward_wall_sec": [
+            5.4928008466959e-05,
+            6.521499017253518e-05,
+            6.503099575638771e-05
+          ],
+          "heldout_instance_hashes": [
+            "103e4ad5fa78176f",
+            "4c368eccc957e6bd",
+            "82ea214bf17d5c38"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.16087139399999995,
+              "actual_veto_target": false,
+              "instance_content_hash": "103e4ad5fa78176f",
+              "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+              "predicted_advantage_sec": -0.4981217757640106,
+              "predicted_harvest_cost_sec": 1.748955909808677,
+              "predicted_proof_cost_sec": 1.2508341340446665,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "f6c917aa3c08453dd980a163fd624a0f2590e8bac0cba10fc6ffe47226b860f0",
+              "veto_threshold_sec": -0.42978940853110753
+            },
+            {
+              "actual_advantage_sec": 2.182736998,
+              "actual_veto_target": true,
+              "instance_content_hash": "4c368eccc957e6bd",
+              "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+              "predicted_advantage_sec": -0.6474737708749427,
+              "predicted_harvest_cost_sec": 2.063144449074694,
+              "predicted_proof_cost_sec": 1.4156706781997515,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "5a75daca93efaf55335982854b0d08954b74a0d8a10f42be5b004d0a9f499bc3",
+              "veto_threshold_sec": -0.42978940853110753
+            },
+            {
+              "actual_advantage_sec": 1.1108094620000006,
+              "actual_veto_target": true,
+              "instance_content_hash": "82ea214bf17d5c38",
+              "instance_id": "lunar_ice_sp50_030_006_seed202907270",
+              "predicted_advantage_sec": -0.6179861758382053,
+              "predicted_harvest_cost_sec": 1.9857453690488693,
+              "predicted_proof_cost_sec": 1.367759193210664,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "dd6ea10251fdbafa74a14ffbc6a4f7cb3f201e5c1a15fa25733c3653d80c2809",
+              "veto_threshold_sec": -0.42978940853110753
+            }
+          ],
+          "kind": "mlp2x32",
+          "parameter_count": 4770,
+          "seed": 20260730,
+          "train_instance_count": 10,
+          "train_state_count": 15,
+          "train_wall_sec": 0.1971543510153424,
+          "veto_threshold_sec": -0.42978940853110753
+        }
+      ],
+      "forward_wall_sec_max": 6.857700645923615e-05,
+      "forward_wall_sec_p50": 6.463500903919339e-05,
+      "kind": "mlp2x32",
+      "metrics": {
+        "action_gain_before_call_cost_sec": -0.6063232589999998,
+        "assumed_total_call_cost_sec": 0.26,
+        "false_veto_count": 2,
+        "first_trigger_count": 13,
+        "missed_veto_count": 4,
+        "realized_net_gain_sec": -0.8663232589999998,
+        "true_veto_count": 0,
+        "veto_precision": 0.0,
+        "veto_recall": 0.0
+      }
+    },
+    {
+      "folds": [
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.014490194618701935,
+            "cost": 0.15828487277030945,
+            "ranking": 0.7311481237411499,
+            "total": 0.9039232134819031
+          },
+          "fold": 0,
+          "forward_wall_sec": [
+            0.00023845001123845577,
+            0.00022763898596167564,
+            0.0003403100126888603
+          ],
+          "heldout_instance_hashes": [
+            "348fca29db1913f6",
+            "37037d48065d317b",
+            "c37a19389e5c5fcf"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.05955190300000002,
+              "actual_veto_target": false,
+              "instance_content_hash": "348fca29db1913f6",
+              "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+              "predicted_advantage_sec": -0.7311235510089564,
+              "predicted_harvest_cost_sec": 2.063060099367889,
+              "predicted_proof_cost_sec": 1.3319365483589327,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "fb2d376982cda29f8ed09b21e70c80e0532278b69d18b54b00be70a08dfa0180",
+              "veto_threshold_sec": 0.38015625975177275
+            },
+            {
+              "actual_advantage_sec": -0.045701281999999954,
+              "actual_veto_target": false,
+              "instance_content_hash": "37037d48065d317b",
+              "instance_id": "lunar_ice_sp50_020_001_seed202807261",
+              "predicted_advantage_sec": -0.2781272067159499,
+              "predicted_harvest_cost_sec": 1.8310643940718883,
+              "predicted_proof_cost_sec": 1.5529371873559383,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "60fba12c2773232ab43d0fa2d6fcc3c6bbb11548b9571896f49525084b27b96b",
+              "veto_threshold_sec": 0.38015625975177275
+            },
+            {
+              "actual_advantage_sec": -6.655153675000001,
+              "actual_veto_target": false,
+              "instance_content_hash": "c37a19389e5c5fcf",
+              "instance_id": "lunar_ice_sp50_030_007_seed202907271",
+              "predicted_advantage_sec": -0.4219633629848154,
+              "predicted_harvest_cost_sec": 2.0389641405021037,
+              "predicted_proof_cost_sec": 1.6170007775172883,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "e458c2c5bb61c693fcc5de8c6bfb6f492029fd3876113842fd96b84eb04ce7f9",
+              "veto_threshold_sec": 0.38015625975177275
+            }
+          ],
+          "kind": "gat1x32x1",
+          "parameter_count": 10050,
+          "seed": 20260726,
+          "train_instance_count": 10,
+          "train_state_count": 15,
+          "train_wall_sec": 0.8225968900078442,
+          "veto_threshold_sec": 0.38015625975177275
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.024660764262080193,
+            "cost": 0.30982863903045654,
+            "ranking": 0.7329229712486267,
+            "total": 1.0674124956130981
+          },
+          "fold": 1,
+          "forward_wall_sec": [
+            0.0003394950181245804,
+            0.00027427999884821475
+          ],
+          "heldout_instance_hashes": [
+            "32e7e2804578fa0a",
+            "4277d0edc78aaeff"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.8081168689999998,
+              "actual_veto_target": false,
+              "instance_content_hash": "32e7e2804578fa0a",
+              "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+              "predicted_advantage_sec": 0.00035851868709624313,
+              "predicted_harvest_cost_sec": 1.902786696784837,
+              "predicted_proof_cost_sec": 1.9031452154719333,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "20087c306e2373b8e6f20562b94ba2e1f6576fee792e3da0cf185a6ad831b7a3",
+              "veto_threshold_sec": 0.5683487845747154
+            },
+            {
+              "actual_advantage_sec": -0.099704389,
+              "actual_veto_target": false,
+              "instance_content_hash": "4277d0edc78aaeff",
+              "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+              "predicted_advantage_sec": -0.056801953728983445,
+              "predicted_harvest_cost_sec": 1.6486066607871992,
+              "predicted_proof_cost_sec": 1.5918047070582158,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "a26830c90f5f45bc3bdd59459830272affbf5fd12bc695a95d44dc768df0404f",
+              "veto_threshold_sec": 0.5683487845747154
+            }
+          ],
+          "kind": "gat1x32x1",
+          "parameter_count": 10050,
+          "seed": 20260727,
+          "train_instance_count": 11,
+          "train_state_count": 16,
+          "train_wall_sec": 0.7797462579910643,
+          "veto_threshold_sec": 0.5683487845747154
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.02005808800458908,
+            "cost": 0.29652783274650574,
+            "ranking": 0.7290721535682678,
+            "total": 1.045657992362976
+          },
+          "fold": 2,
+          "forward_wall_sec": [
+            0.00023452599998563528,
+            0.0002221189788542688
+          ],
+          "heldout_instance_hashes": [
+            "2fb79d2d6afd0eb1",
+            "4a7b82692a2ab385"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.09690451999999994,
+              "actual_veto_target": false,
+              "instance_content_hash": "2fb79d2d6afd0eb1",
+              "instance_id": "lunar_ice_sp50_020_006_seed202807272",
+              "predicted_advantage_sec": -0.42625464134384483,
+              "predicted_harvest_cost_sec": 2.1002794640401277,
+              "predicted_proof_cost_sec": 1.6740248226962828,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "a9033653744a3e932222aac1f91ecb5d37e7da47f4fa4fff0b5ecfdd9651cd7f",
+              "veto_threshold_sec": 0.13848419146404986
+            },
+            {
+              "actual_advantage_sec": 0.265357251,
+              "actual_veto_target": true,
+              "instance_content_hash": "4a7b82692a2ab385",
+              "instance_id": "lunar_ice_sp50_020_005_seed202807271",
+              "predicted_advantage_sec": -0.1014308804514179,
+              "predicted_harvest_cost_sec": 2.091675726298451,
+              "predicted_proof_cost_sec": 1.9902448458470332,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "ca6ad6737a21542038769d4d2a56824c9faf5b171471bfe75ad4417c7ee6b6da",
+              "veto_threshold_sec": 0.13848419146404986
+            }
+          ],
+          "kind": "gat1x32x1",
+          "parameter_count": 10050,
+          "seed": 20260728,
+          "train_instance_count": 11,
+          "train_state_count": 18,
+          "train_wall_sec": 0.8783355319756083,
+          "veto_threshold_sec": 0.13848419146404986
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.014335212297737598,
+            "cost": 0.32109206914901733,
+            "ranking": 0.7887179255485535,
+            "total": 1.124145269393921
+          },
+          "fold": 3,
+          "forward_wall_sec": [
+            0.00026471499586477876,
+            0.00047042898950167,
+            0.0003548039821907878
+          ],
+          "heldout_instance_hashes": [
+            "4fc392d5ac545bbd",
+            "4fd39191a233502d",
+            "5c27cdbd962c734d"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.07256788999999997,
+              "actual_veto_target": false,
+              "instance_content_hash": "4fc392d5ac545bbd",
+              "instance_id": "lunar_ice_sp50_020_002_seed202807262",
+              "predicted_advantage_sec": 0.11249668278380676,
+              "predicted_harvest_cost_sec": 1.5932581871918043,
+              "predicted_proof_cost_sec": 1.705754869975611,
+              "predicted_veto": true,
+              "scale": 20,
+              "state_hash": "27af815e322664f1367797ff3c64ab71eee6ab78b70d5697caf2d6b2066183a5",
+              "veto_threshold_sec": -0.1601986623026467
+            },
+            {
+              "actual_advantage_sec": -0.5337553689999999,
+              "actual_veto_target": false,
+              "instance_content_hash": "4fd39191a233502d",
+              "instance_id": "lunar_ice_sp50_030_003_seed2026372703",
+              "predicted_advantage_sec": -0.15780166553780028,
+              "predicted_harvest_cost_sec": 1.9131305447502995,
+              "predicted_proof_cost_sec": 1.7553288792124992,
+              "predicted_veto": true,
+              "scale": 30,
+              "state_hash": "79636bff694a03d222a24532a6451c86cdade12f779f296fab06ebce868a7cae",
+              "veto_threshold_sec": -0.1601986623026467
+            },
+            {
+              "actual_advantage_sec": 0.17293469699999964,
+              "actual_veto_target": true,
+              "instance_content_hash": "5c27cdbd962c734d",
+              "instance_id": "lunar_ice_sp50_030_002_seed202907262",
+              "predicted_advantage_sec": -0.2797217527816722,
+              "predicted_harvest_cost_sec": 2.0094814205808187,
+              "predicted_proof_cost_sec": 1.7297596677991465,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "d908c5b2ab294402e408b7a7c80100e02f3bce093490a3d54935f1eba88bda0e",
+              "veto_threshold_sec": -0.1601986623026467
+            }
+          ],
+          "kind": "gat1x32x1",
+          "parameter_count": 10050,
+          "seed": 20260729,
+          "train_instance_count": 10,
+          "train_state_count": 16,
+          "train_wall_sec": 0.7471041469834745,
+          "veto_threshold_sec": -0.1601986623026467
+        },
+        {
+          "epochs": 40,
+          "final_losses": {
+            "advantage": 0.016810236498713493,
+            "cost": 0.2672157287597656,
+            "ranking": 0.719847559928894,
+            "total": 1.003873586654663
+          },
+          "fold": 4,
+          "forward_wall_sec": [
+            0.00024314000620506704,
+            0.00034608898567967117,
+            0.00034066999796777964
+          ],
+          "heldout_instance_hashes": [
+            "103e4ad5fa78176f",
+            "4c368eccc957e6bd",
+            "82ea214bf17d5c38"
+          ],
+          "heldout_predictions": [
+            {
+              "actual_advantage_sec": -0.16087139399999995,
+              "actual_veto_target": false,
+              "instance_content_hash": "103e4ad5fa78176f",
+              "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+              "predicted_advantage_sec": -0.42620297446668887,
+              "predicted_harvest_cost_sec": 1.6585454502291899,
+              "predicted_proof_cost_sec": 1.232342475762501,
+              "predicted_veto": false,
+              "scale": 20,
+              "state_hash": "f6c917aa3c08453dd980a163fd624a0f2590e8bac0cba10fc6ffe47226b860f0",
+              "veto_threshold_sec": -0.32149721634599143
+            },
+            {
+              "actual_advantage_sec": 2.182736998,
+              "actual_veto_target": true,
+              "instance_content_hash": "4c368eccc957e6bd",
+              "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+              "predicted_advantage_sec": -0.4972282926973035,
+              "predicted_harvest_cost_sec": 1.7904867141109158,
+              "predicted_proof_cost_sec": 1.2932584214136122,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "5a75daca93efaf55335982854b0d08954b74a0d8a10f42be5b004d0a9f499bc3",
+              "veto_threshold_sec": -0.32149721634599143
+            },
+            {
+              "actual_advantage_sec": 1.1108094620000006,
+              "actual_veto_target": true,
+              "instance_content_hash": "82ea214bf17d5c38",
+              "instance_id": "lunar_ice_sp50_030_006_seed202907270",
+              "predicted_advantage_sec": -0.3973152896753587,
+              "predicted_harvest_cost_sec": 1.6570436580544405,
+              "predicted_proof_cost_sec": 1.2597283683790819,
+              "predicted_veto": false,
+              "scale": 30,
+              "state_hash": "dd6ea10251fdbafa74a14ffbc6a4f7cb3f201e5c1a15fa25733c3653d80c2809",
+              "veto_threshold_sec": -0.32149721634599143
+            }
+          ],
+          "kind": "gat1x32x1",
+          "parameter_count": 10050,
+          "seed": 20260730,
+          "train_instance_count": 10,
+          "train_state_count": 15,
+          "train_wall_sec": 0.706835499004228,
+          "veto_threshold_sec": -0.32149721634599143
+        }
+      ],
+      "forward_wall_sec_max": 0.00047042898950167,
+      "forward_wall_sec_p50": 0.00027427999884821475,
+      "kind": "gat1x32x1",
+      "metrics": {
+        "action_gain_before_call_cost_sec": -0.6063232589999998,
+        "assumed_total_call_cost_sec": 0.26,
+        "false_veto_count": 2,
+        "first_trigger_count": 13,
+        "missed_veto_count": 4,
+        "realized_net_gain_sec": -0.8663232589999998,
+        "true_veto_count": 0,
+        "veto_precision": 0.0,
+        "veto_recall": 0.0
+      }
+    }
+  ],
+  "promotion_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v3_proof_tail_veto_ladder_pilot.v1",
+  "selection_status": "PILOT_ONLY_NO_MODEL_PROMOTED",
+  "torch_version": "2.12.0+cu130",
+  "training_authorized": false
+}

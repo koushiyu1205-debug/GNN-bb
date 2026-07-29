@@ -8,6 +8,8 @@ import hashlib
 import json
 from typing import Any, Generic, TypeVar
 
+from lunar_ice_bpc.domain.scenario import SERVICE_TIMING_POLICY_ID
+
 
 _KeyT = TypeVar("_KeyT")
 _ValueT = TypeVar("_ValueT")
@@ -125,10 +127,17 @@ class LunarIceData:
     max_shadow_exposure_per_sortie: float
     objective: ObjectiveWeights
     path_option_policy_id: str = ""
+    service_timing_policy_id: str = SERVICE_TIMING_POLICY_ID
     reference_solution: Mapping[str, Any] | None = None
     instance_content_hash: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if self.service_timing_policy_id != SERVICE_TIMING_POLICY_ID:
+            raise ValueError(
+                "unsupported service timing policy: "
+                f"{self.service_timing_policy_id!r}; expected "
+                f"{SERVICE_TIMING_POLICY_ID!r}"
+            )
         frozen_tasks = deep_freeze(self.tasks)
         frozen_arcs = deep_freeze(self.arcs)
         frozen_reference = (
@@ -177,6 +186,7 @@ def lunar_ice_content_payload(data: LunarIceData) -> dict[str, Any]:
         "energy_limit": data.energy_limit,
         "horizon": data.horizon,
         "path_option_policy_id": data.path_option_policy_id,
+        "service_timing_policy_id": data.service_timing_policy_id,
         "dock_overhead_min": data.dock_overhead_min,
         "recharge_power_proxy_per_min": data.recharge_power_proxy_per_min,
         "max_shadow_exposure_per_sortie": data.max_shadow_exposure_per_sortie,
@@ -195,6 +205,19 @@ def lunar_ice_content_hash(data: LunarIceData) -> str:
 
 
 def load_lunar_ice_data(instance: dict[str, Any]) -> LunarIceData:
+    scheduling = instance["scheduling"]
+    service_timing_policy_id = str(
+        scheduling.get(
+            "service_timing_policy_id",
+            SERVICE_TIMING_POLICY_ID,
+        )
+    )
+    if service_timing_policy_id != SERVICE_TIMING_POLICY_ID:
+        raise ValueError(
+            "unsupported service timing policy: "
+            f"{service_timing_policy_id!r}; expected "
+            f"{SERVICE_TIMING_POLICY_ID!r}"
+        )
     tasks: dict[str, TaskData] = {}
     for task_id, payload in sorted(instance["tasks"].items()):
         tasks[str(task_id)] = TaskData(
@@ -231,7 +254,7 @@ def load_lunar_ice_data(instance: dict[str, Any]) -> LunarIceData:
         arcs[(source, target)] = by_type
 
     vehicle = instance["vehicle"]
-    objective_payload = instance["scheduling"]["objective"]
+    objective_payload = scheduling["objective"]
     return LunarIceData(
         instance_id=str(instance["instance_id"]),
         scale=int(instance["scale"]),
@@ -242,7 +265,7 @@ def load_lunar_ice_data(instance: dict[str, Any]) -> LunarIceData:
         max_tasks_per_trip=int(vehicle["max_tasks_per_trip"]),
         capacity=float(vehicle["Q_ice"]),
         energy_limit=float(vehicle["B_use"]),
-        horizon=float(instance["scheduling"]["horizon_min"]),
+        horizon=float(scheduling["horizon_min"]),
         dock_overhead_min=float(vehicle["dock_overhead_min"]),
         recharge_power_proxy_per_min=float(vehicle["recharge_power_proxy_per_min"]),
         max_shadow_exposure_per_sortie=float(vehicle["max_shadow_exposure_per_sortie"]),
@@ -267,5 +290,6 @@ def load_lunar_ice_data(instance: dict[str, Any]) -> LunarIceData:
             mode=str(objective_payload.get("mode") or "normalized_operating_cost_risk_weighted_completion"),
         ),
         path_option_policy_id=str(instance.get("logical_graph", {}).get("path_option_policy_id") or ""),
+        service_timing_policy_id=service_timing_policy_id,
         reference_solution=instance.get("reference_solution") if isinstance(instance.get("reference_solution"), dict) else None,
     )

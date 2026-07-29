@@ -1547,16 +1547,22 @@ def _resource_extension_nondominated_path_types(
             if other_type == path_type:
                 continue
             other = options[str(other_type)]
+            same_travel_time = (
+                abs(
+                    float(other.travel_time_min)
+                    - float(option.travel_time_min)
+                )
+                <= 1.0e-9
+            )
             weakly_better = (
-                float(other.travel_time_min) <= float(option.travel_time_min) + 1.0e-9
+                same_travel_time
                 and float(other.distance_km) <= float(option.distance_km) + 1.0e-9
                 and float(other.energy_proxy) <= float(option.energy_proxy) + 1.0e-9
                 and float(other.risk_integral) <= float(option.risk_integral) + 1.0e-9
                 and float(other.shadow_exposure_min) <= float(option.shadow_exposure_min) + 1.0e-9
             )
             strictly_better = (
-                float(other.travel_time_min) < float(option.travel_time_min) - 1.0e-9
-                or float(other.distance_km) < float(option.distance_km) - 1.0e-9
+                float(other.distance_km) < float(option.distance_km) - 1.0e-9
                 or float(other.energy_proxy) < float(option.energy_proxy) - 1.0e-9
                 or float(other.risk_integral) < float(option.risk_integral) - 1.0e-9
                 or float(other.shadow_exposure_min) < float(option.shadow_exposure_min) - 1.0e-9

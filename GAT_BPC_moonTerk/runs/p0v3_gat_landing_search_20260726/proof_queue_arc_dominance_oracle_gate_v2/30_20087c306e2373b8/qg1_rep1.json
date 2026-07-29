@@ -1,0 +1,565 @@
+{
+  "best_found_rc": -0.005941,
+  "can_certify_source_solve": false,
+  "can_enter_certificate_audit": true,
+  "certificate_blockers": [],
+  "column_count": 35,
+  "deployable": false,
+  "development_only": true,
+  "engine_status": "COMPLETE",
+  "exact_safe_ordering_audit": {
+    "guidance_can_certify": false,
+    "guidance_can_change_reduced_cost": false,
+    "guidance_can_filter": false,
+    "guidance_can_prune": false,
+    "ordering_only": true,
+    "passed": true
+  },
+  "fresh_process_arm": true,
+  "frontier_empty": true,
+  "global_min_rc": -0.005941,
+  "global_min_rc_is_exact": true,
+  "instance_content_hash": "32e7e2804578fa0a",
+  "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+  "labels_dropped": false,
+  "mutates_p0": false,
+  "policy": "QG1",
+  "potential_id": "2bc9d1a49c6a0fab01863dee22cbdc89f7286fa95e5999f7141b4240af5e8a65",
+  "potential_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/proof_queue_arc_dominance_oracle_gate_v2/30_20087c306e2373b8/arc_dominance_net_log_potential.json",
+  "proof_telemetry": {
+    "dominance_candidate_checks": 6467173,
+    "dominance_wall_time_seconds": 0.061565306,
+    "dominated_labels": 135148,
+    "extended_labels": 5624928,
+    "extension_wall_time_seconds": 0.322357925,
+    "guidance_arc_drop_count": 0,
+    "guidance_branch_pair_drop_count": 0,
+    "guidance_effective_mode": "task_arc",
+    "guidance_filter_count": 0,
+    "guidance_label_drop_count": 0,
+    "guidance_task_arc_enabled": null,
+    "legal_action_universe_hash_before_sort": "c2b8b400eb649e25083a3816de84a23801579c864737a02f0c22cdc9dac0d411",
+    "legal_arc_universe_hash_before_sort": "663a28b6a30a6c0d6995c6b98c2da040a6e1639de6a250a7464783af18d3d648",
+    "max_visited_bucket_size": 729,
+    "memory_pressure_triggered": false,
+    "processed_labels": 64051,
+    "proof_queue_arc_potential_trace": [],
+    "proof_queue_policy_id": "QG1",
+    "proof_queue_potential_trace": [],
+    "proof_queue_potential_trace_enabled": false,
+    "request_bindings_match": true,
+    "solution_count": 35,
+    "subset_dominance_rejected_labels": 110782,
+    "wall_time_seconds": 0.338267003
+  },
+  "proved_no_rc_below": null,
+  "repeat_index": 1,
+  "replay_binding": {
+    "binding_hash": "5e6ae0279da83f2989974738bcc340340d9b55f56487565a177ed5f86099d400",
+    "branch_context_hash": "ea4a363b99a4f0b8f4de960f15f3757c5c1f8456b617b220a7852745fc55c38e",
+    "checkpoint_id": "2bc9d1a49c6a0fab01863dee22cbdc89f7286fa95e5999f7141b4240af5e8a65",
+    "config_hash": "cf3d4d9d22b104ee32f3ae7d8b5d569f41ec6da92ffc305415ff481c6769a919",
+    "cut_lineage_hash": "bf0677654e0f9963d0a298ca47cf5975da083fb4c52fd403ef19274cc9e05d92",
+    "cut_state_schema_version": "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2",
+    "engine_hash": "",
+    "feature_schema_version": "p0v3_task_potential_oracle.v1",
+    "full_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "instance_hash": "32e7e2804578fa0a",
+    "live_cut_policy_hash": "",
+    "mathematical_dual_hash": "01bac11c35288d7ca3cf7856ecbd7c409c9fde8b57ef5d70adbb2a17ae7aa5f1",
+    "normalization_version": "centered_maxabs.v1",
+    "objective_mode": "official",
+    "ood_policy_version": "exact_state_hash_only.v1",
+    "phase": "phase_two",
+    "pricing_mode": "exact_proof",
+    "projected_pricing_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "raw_ieee_dual_hash": "0485b8ac11ae73423e2fd24b6a1e9b77253b69502cbc7e28a806078e5b4ed18c",
+    "request_dual_hash": "",
+    "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-21",
+    "schema_version": "lunar_ice_bpc.canonical_solve_binding.v2",
+    "separator_policy_version": ""
+  },
+  "route_rows": [
+    {
+      "accepted": true,
+      "native_rc": -0.0059407694216120875,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.005941,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0059401647261619304,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00594,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_026",
+        "ice_site_027",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.005631493613977353,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.005631,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_019",
+        "ice_site_027",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.005618721206209095,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.005619,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0056181165107589935,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.005618,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_026",
+        "ice_site_027",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.005593954795635899,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.005594,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_019",
+        "ice_site_027",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.005271906580232962,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.005272,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_019",
+        "ice_site_027",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.004468965417188383,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.004469,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_021",
+        "ice_site_022",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.004468360721738226,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.004468,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_026",
+        "ice_site_027",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0041221507912121945,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.004122,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_019",
+        "ice_site_027",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00263144067872639,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002631,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0014816848897056221,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001482,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001178754995931338,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001179,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_025"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0011785881184813683,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001179,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_008",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_025"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0011785322971171151,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001179,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_023",
+        "ice_site_024"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001178428690829899,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001178,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_023"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0011779668741584946,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001178,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_025"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0011776405690570556,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001178,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_023"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008395398722810775,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00084,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_023",
+        "ice_site_024"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007941315923755098,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000794,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_004",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_024"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007939647149254846,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000794,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_008",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_024"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007933434706026664,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000793,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_024"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007416579691373291,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000742,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.000741491091687304,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000741,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_008",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007408698473644303,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000741,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007359226370027803,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000736,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_025"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007355963319013968,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000736,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_023"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007147866176412353,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000715,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_025"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0005700260127723365,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00057,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_023"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00040821374383259376,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000408,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_023",
+        "ice_site_028"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00035129923344697986,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000351,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_024"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00031159052663159645,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000312,
+      "task_set": [
+        "ice_site_013",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_028",
+        "ice_site_029"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00029882561020874374,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000299,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00017239030537046993,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000172,
+      "task_set": [
+        "ice_site_013",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_023",
+        "ice_site_028",
+        "ice_site_029"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -8.616552842960132e-05,
+      "native_route_sorties": [],
+      "python_manual_rc": -8.6e-05,
+      "task_set": [
+        "ice_site_009",
+        "ice_site_013",
+        "ice_site_023",
+        "ice_site_028"
+      ]
+    }
+  ],
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.p0v3_proof_queue_potential_replay.v1",
+  "search_exhaustive": true,
+  "source_round": 21,
+  "source_snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale30_instance001_work100000_twostrike_snapshots/round_snapshots/round_0021_20087c306e2373b8.json",
+  "source_state_hash": "20087c306e2373b8e6f20562b94ba2e1f6576fee792e3da0cf185a6ad831b7a3",
+  "total_fresh_process_wall_sec": 0.394511632
+}

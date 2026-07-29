@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0v3_six_scale_full120_baseline_20260727/slots/scale_020/instance_006/attempt_01/scale_020/proofs/scale_020/instance_006/b4_1_report_zh.md

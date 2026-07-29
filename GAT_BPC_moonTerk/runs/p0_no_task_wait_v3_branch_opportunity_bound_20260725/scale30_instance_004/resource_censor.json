@@ -1,0 +1,20 @@
+{
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_resource_censor.v1",
+  "instance_id": "lunar_ice_030_004_seed110727001",
+  "instance_content_hash": "4f05ecc5f0e916e6",
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "systemd_invocation_id": "168d8482e6a24ffbb3485dca98808a96",
+  "unit": "p0v3-opp-s30-004.service",
+  "status": "RESOURCE_CENSORED_OOM",
+  "signal": "SIGKILL",
+  "oom_kill": true,
+  "cpu_time_sec": 1050.702,
+  "memory_peak_gib": 10.0,
+  "swap_peak_gib": 3.1,
+  "root_exact_safe": false,
+  "p0_root_node_exact_safe": false,
+  "candidate_label_authorized": false,
+  "certificate_authorized": false,
+  "note": "The cgroup OOM killer stopped the bound V3 opportunity run before any root source or certificate artifact was written."
+}

@@ -13,6 +13,7 @@ from lunar_ice_bpc.domain.scenario import (
     HORIZON_BY_SCALE,
     LunarIceConfig,
     PATH_TYPES,
+    SERVICE_TIMING_POLICY_ID,
     SHADOW_CAP_BY_SCALE,
 )
 
@@ -84,6 +85,18 @@ def _scenario_parameter_issues(instance: dict[str, Any], scale: int, config: Lun
     resource = instance.get("resource_map") or {}
     vehicle = instance.get("vehicle") or {}
     scheduling = instance.get("scheduling") or {}
+    explicit_service_timing_policy = scheduling.get(
+        "service_timing_policy_id"
+    )
+    if (
+        explicit_service_timing_policy is not None
+        and explicit_service_timing_policy != SERVICE_TIMING_POLICY_ID
+    ):
+        issues.append(
+            "scheduling.service_timing_policy_id must be "
+            f"{SERVICE_TIMING_POLICY_ID!r}, got "
+            f"{explicit_service_timing_policy!r}"
+        )
     expected_shape = int(round(config.resource_map_extent_km * 1000.0 / config.synthetic_grid_resolution_m))
     checks = (
         ("resource_map.extent_km", resource.get("extent_km"), config.resource_map_extent_km),

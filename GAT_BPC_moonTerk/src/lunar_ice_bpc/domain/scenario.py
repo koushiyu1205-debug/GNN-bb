@@ -11,6 +11,7 @@ OPERATION_MODES: tuple[str, ...] = ("detect", "sample", "drill")
 SYNTHETIC_GENERATOR_ID = "synthetic_polar_resource_grid_v1"
 RISK_SCHEMA_VERSION = "lunar_ice_risk_v2"
 TIME_WINDOW_POLICY_ID = "sp50_three_temporal_modes_v1"
+SERVICE_TIMING_POLICY_ID = "no_task_wait_base_departure_shift_v1"
 PATH_OPTION_POLICY_ID = "sp50_three_path_psr_rim_slope_contrast_v2"
 
 FLEET_BY_SCALE = {5: 1, 10: 2, 20: 3, 30: 4, 50: 5, 100: 8}

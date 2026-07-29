@@ -1,0 +1,82 @@
+{
+  "development_only": true,
+  "instance_generator_domain": "real_lunar_south_pole_sp50_benchmark_v1",
+  "requested_instance_content_hashes": [
+    "103e4ad5fa78176f",
+    "348fca29db1913f6",
+    "4277d0edc78aaeff"
+  ],
+  "rows": [
+    {
+      "actionable_state_count": 0,
+      "candidate_count": 0,
+      "control_exact_safe": true,
+      "driver_wall_sec": 7.380726,
+      "instance_content_hash": "103e4ad5fa78176f",
+      "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_tail_selective_real_map_pilot_20260726/lunar_ice_sp50_020/instance_003_logical_graph.json",
+      "opportunity_node_lp_exact_safe": true,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale20_census/scale20_instance_003",
+      "returncode": 0,
+      "root_exact_safe": true,
+      "root_wall_sec": 5.723764,
+      "source_p0_difficulty_bin": "unmeasured_v3_not_used_for_assignment",
+      "source_p0_difficulty_is_stale": true,
+      "status": "EXACT_NONACTIONABLE",
+      "tree_result_is_exact_bpc": false,
+      "tree_wall_sec": 0.761986
+    },
+    {
+      "actionable_state_count": 0,
+      "candidate_count": 0,
+      "control_exact_safe": true,
+      "driver_wall_sec": 5.705859,
+      "instance_content_hash": "348fca29db1913f6",
+      "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_tail_selective_real_map_pilot_20260726/lunar_ice_sp50_020/instance_001_logical_graph.json",
+      "opportunity_node_lp_exact_safe": true,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale20_census/scale20_instance_001",
+      "returncode": 0,
+      "root_exact_safe": true,
+      "root_wall_sec": 2.558485,
+      "source_p0_difficulty_bin": "unmeasured_v3_not_used_for_assignment",
+      "source_p0_difficulty_is_stale": true,
+      "status": "EXACT_NONACTIONABLE",
+      "tree_result_is_exact_bpc": false,
+      "tree_wall_sec": 2.856768
+    },
+    {
+      "actionable_state_count": 0,
+      "candidate_count": 0,
+      "control_exact_safe": true,
+      "driver_wall_sec": 18.5628,
+      "instance_content_hash": "4277d0edc78aaeff",
+      "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_tail_selective_real_map_pilot_20260726/lunar_ice_sp50_020/instance_004_logical_graph.json",
+      "opportunity_node_lp_exact_safe": true,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale20_census/scale20_instance_004",
+      "returncode": 0,
+      "root_exact_safe": true,
+      "root_wall_sec": 15.851738,
+      "source_p0_difficulty_bin": "unmeasured_v3_not_used_for_assignment",
+      "source_p0_difficulty_is_stale": true,
+      "status": "EXACT_NONACTIONABLE",
+      "tree_result_is_exact_bpc": false,
+      "tree_wall_sec": 2.361997
+    }
+  ],
+  "scale": 20,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_opportunity_census.v1",
+  "split_manifest_hash": "25e49533ae35412f5e4bf7f457fa2d0f887877ad4e1a2866f92a11f9bf0bd344",
+  "summary": {
+    "actionable_state_count": 0,
+    "attempted_instance_count": 3,
+    "exact_actionable_instance_count": 0,
+    "exact_actionable_rate": 0.0,
+    "exact_count": 3,
+    "status_counts": {
+      "EXACT_NONACTIONABLE": 3
+    }
+  },
+  "training_authorized": false
+}

@@ -20,6 +20,7 @@ enum class ProofQueuePolicy {
     QC0CachedPartialCost,
     QD1DeeperFirst,
     QB1OptimisticCompletion,
+    QG1GuidancePotential,
 };
 
 struct PairBranchDecision {
@@ -94,11 +95,15 @@ struct Model {
     mutable std::size_t completion_bound_pruned_labels = 0;
     bool subset_dominance_enabled = false;
     bool guidance_task_arc_enabled = false;
+    bool dssr_relaxation_enabled = false;
+    std::vector<std::uint64_t> dssr_critical_task_mask;
+    std::vector<std::uint64_t> dssr_branch_task_mask;
 };
 
 struct SolveParams {
     bool exact_proof = true;
     std::size_t harvest_target = 16;
+    std::size_t harvest_max_processed_labels = 0;
     double timeout_seconds = std::numeric_limits<double>::infinity();
     double max_memory_gb = 0.0;
     double negative_epsilon = 1.0e-6;
@@ -107,6 +112,9 @@ struct SolveParams {
     std::size_t graph_cache_entries = 1;
     bool completion_bound_enabled = false;
     bool subset_dominance_enabled = false;
+    bool proof_queue_potential_trace_enabled = false;
+    double proof_queue_guidance_bucket_width = 0.01;
+    bool dssr_enabled = false;
     ProofQueuePolicy proof_queue_policy = ProofQueuePolicy::Q0PartialCost;
 };
 
@@ -129,7 +137,34 @@ struct BestReducedCostEvent {
     double best_reduced_cost = std::numeric_limits<double>::infinity();
 };
 
+struct TaskDominanceTraceRow {
+    std::size_t task_index = 0;
+    std::uint64_t incoming_evaluated = 0;
+    std::uint64_t incoming_rejected = 0;
+    std::uint64_t existing_dominator_wins = 0;
+    std::uint64_t accepted_removed_existing = 0;
+    std::uint64_t removed_as_existing = 0;
+};
+
+struct DssrIterationTraceRow {
+    std::size_t iteration = 0;
+    std::size_t critical_task_count_before = 0;
+    std::size_t repeated_task_count = 0;
+    std::size_t processed_labels = 0;
+    std::size_t extended_labels = 0;
+    std::size_t dominated_labels = 0;
+    std::size_t max_visited_bucket_size = 0;
+    double wall_time_seconds = 0.0;
+    std::string status;
+    bool search_exhaustive = false;
+    bool frontier_empty = false;
+    bool labels_dropped = false;
+    bool negative_witness_found = false;
+    bool witness_elementary = false;
+};
+
 struct Telemetry {
+    std::size_t processed_labels = 0;
     std::size_t extended_labels = 0;
     std::size_t dominated_labels = 0;
     std::size_t dominance_candidate_checks = 0;
@@ -153,6 +188,19 @@ struct Telemetry {
     std::vector<BestReducedCostEvent> best_reduced_cost_events;
     std::size_t best_reduced_cost_event_count_total = 0;
     bool best_reduced_cost_events_truncated = false;
+    bool proof_queue_potential_trace_enabled = false;
+    std::vector<TaskDominanceTraceRow> proof_queue_potential_trace;
+    std::vector<TaskDominanceTraceRow> proof_queue_arc_potential_trace;
+    bool dssr_enabled = false;
+    std::string dssr_policy_version;
+    std::size_t dssr_iteration_count = 0;
+    std::size_t dssr_refinement_count = 0;
+    std::size_t dssr_initial_critical_task_count = 0;
+    std::size_t dssr_final_critical_task_count = 0;
+    std::size_t dssr_repeated_witness_count = 0;
+    bool dssr_elementary_witness_returned = false;
+    bool dssr_relaxation_no_negative_certificate = false;
+    std::vector<DssrIterationTraceRow> dssr_iteration_trace;
 };
 
 struct SolveOutput {

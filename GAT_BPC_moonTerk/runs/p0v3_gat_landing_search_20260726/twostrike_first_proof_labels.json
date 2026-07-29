@@ -1,0 +1,414 @@
+{
+  "absolute_deadband_sec": 0.05,
+  "artifact_hash": "e85e90339e39f8866ff9660a1e1cf091f419ec7a499c99d73c5169826f81ac27",
+  "bound_match_tolerance": 1.1e-06,
+  "can_certify": false,
+  "deployable": false,
+  "development_only": true,
+  "inference_overhead_sec": 0.02,
+  "missing_pairs": [],
+  "objective": "paired_exact_cost_to_closure_one_step_action_regret",
+  "relative_deadband": 0.02,
+  "rows": [
+    {
+      "best_action_outside_deadband": "proof_only",
+      "deadband_sec": 0.05,
+      "fork_node_lp_bound": 1.931892,
+      "fork_paths_by_action": {
+        "harvest_then_proof": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance003_work10000/harvest_then_proof_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance003_work10000/harvest_then_proof_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance003_work10000/harvest_then_proof_rep3.json"
+        ],
+        "proof_only": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance003_work10000/proof_only_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance003_work10000/proof_only_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance003_work10000/proof_only_rep3.json"
+        ]
+      },
+      "harvest_cost_to_closure_sec": 1.053646288,
+      "inference_overhead_sec": 0.02,
+      "instance_content_hash": "103e4ad5fa78176f",
+      "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+      "net_oracle_gain_sec": 0.0,
+      "observation_count_by_action": {
+        "harvest_then_proof": 3,
+        "proof_only": 3
+      },
+      "oracle_cost_sec": 0.892774894,
+      "oracle_gain_before_overhead_sec": 0.0,
+      "override_or_abstain_target": "abstain",
+      "paired_bound_abs_delta": 0.0,
+      "paired_fork_node_lp_bounds": {
+        "harvest_then_proof": 1.931892,
+        "proof_only": 1.931892
+      },
+      "proof_advantage_ratio": 0.15268064418977004,
+      "proof_advantage_sec": 0.16087139399999995,
+      "proof_cost_to_closure_sec": 0.892774894,
+      "source_action_cost_sec": 0.892774894,
+      "source_pass_policy": "adaptive_sparse_harvest_v1",
+      "source_pass_strategy": "proof_only",
+      "source_round": 20,
+      "source_state_hash": "f6c917aa3c08453dd980a163fd624a0f2590e8bac0cba10fc6ffe47226b860f0",
+      "trajectory_features": {
+        "active_column_count": 601,
+        "active_task_set_count": 601,
+        "dual_l1_delta_from_previous": 0.388316,
+        "dual_linf_delta_from_previous": 0.108617,
+        "effective_harvest_target": 32,
+        "node_lp_bound": 1.933432,
+        "node_lp_bound_delta": 0.0,
+        "previous_added_column_count": 9,
+        "previous_best_true_rc": -0.001299,
+        "previous_final_judge_wall_time": 0.035187,
+        "previous_harvest_column_count": 9,
+        "previous_harvest_pass_wall_time": 0.034794,
+        "previous_harvest_processed_labels": 10000,
+        "previous_node_lp_bound": 1.933432,
+        "previous_proof_pass_wall_time": 0.0,
+        "required_sparse_harvest_strikes": 2,
+        "rmp_primal_fractional_count": 0,
+        "rmp_primal_nonzero_count": 3,
+        "round": 20,
+        "sparse_harvest_strike_count": 2
+      }
+    },
+    {
+      "best_action_outside_deadband": "proof_only",
+      "deadband_sec": 0.05,
+      "fork_node_lp_bound": 1.729463,
+      "fork_paths_by_action": {
+        "harvest_then_proof": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance001_work100000/harvest_then_proof_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance001_work100000/harvest_then_proof_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance001_work100000/harvest_then_proof_rep3.json"
+        ],
+        "proof_only": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance001_work100000/proof_only_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance001_work100000/proof_only_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance001_work100000/proof_only_rep3.json"
+        ]
+      },
+      "harvest_cost_to_closure_sec": 2.4955939,
+      "inference_overhead_sec": 0.02,
+      "instance_content_hash": "32e7e2804578fa0a",
+      "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+      "net_oracle_gain_sec": 0.0,
+      "observation_count_by_action": {
+        "harvest_then_proof": 3,
+        "proof_only": 3
+      },
+      "oracle_cost_sec": 1.687477031,
+      "oracle_gain_before_overhead_sec": 0.0,
+      "override_or_abstain_target": "abstain",
+      "paired_bound_abs_delta": 0.0,
+      "paired_fork_node_lp_bounds": {
+        "harvest_then_proof": 1.729463,
+        "proof_only": 1.729463
+      },
+      "proof_advantage_ratio": 0.3238174564379244,
+      "proof_advantage_sec": 0.8081168689999998,
+      "proof_cost_to_closure_sec": 1.687477031,
+      "source_action_cost_sec": 1.687477031,
+      "source_pass_policy": "adaptive_sparse_harvest_v1",
+      "source_pass_strategy": "proof_only",
+      "source_round": 21,
+      "source_state_hash": "20087c306e2373b8e6f20562b94ba2e1f6576fee792e3da0cf185a6ad831b7a3",
+      "trajectory_features": {
+        "active_column_count": 1237,
+        "active_task_set_count": 1237,
+        "dual_l1_delta_from_previous": 0.32882,
+        "dual_linf_delta_from_previous": 0.048598999999999996,
+        "effective_harvest_target": 64,
+        "node_lp_bound": 1.729463,
+        "node_lp_bound_delta": -0.0012440000000000229,
+        "previous_added_column_count": 51,
+        "previous_best_true_rc": -0.001244,
+        "previous_final_judge_wall_time": 0.528047,
+        "previous_harvest_column_count": 51,
+        "previous_harvest_pass_wall_time": 0.527016,
+        "previous_harvest_processed_labels": 100000,
+        "previous_node_lp_bound": 1.730707,
+        "previous_proof_pass_wall_time": 0.0,
+        "required_sparse_harvest_strikes": 2,
+        "rmp_primal_fractional_count": 0,
+        "rmp_primal_nonzero_count": 4,
+        "round": 21,
+        "sparse_harvest_strike_count": 2
+      }
+    },
+    {
+      "best_action_outside_deadband": "proof_only",
+      "deadband_sec": 0.05,
+      "fork_node_lp_bound": 1.811753,
+      "fork_paths_by_action": {
+        "harvest_then_proof": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance001_work10000/harvest_then_proof_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance001_work10000/harvest_then_proof_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance001_work10000/harvest_then_proof_rep3.json"
+        ],
+        "proof_only": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance001_work10000/proof_only_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance001_work10000/proof_only_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance001_work10000/proof_only_rep3.json"
+        ]
+      },
+      "harvest_cost_to_closure_sec": 0.794251685,
+      "inference_overhead_sec": 0.02,
+      "instance_content_hash": "348fca29db1913f6",
+      "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+      "net_oracle_gain_sec": 0.0,
+      "observation_count_by_action": {
+        "harvest_then_proof": 3,
+        "proof_only": 3
+      },
+      "oracle_cost_sec": 0.734699782,
+      "oracle_gain_before_overhead_sec": 0.0,
+      "override_or_abstain_target": "abstain",
+      "paired_bound_abs_delta": 0.0,
+      "paired_fork_node_lp_bounds": {
+        "harvest_then_proof": 1.811753,
+        "proof_only": 1.811753
+      },
+      "proof_advantage_ratio": 0.07497862972742704,
+      "proof_advantage_sec": 0.05955190300000002,
+      "proof_cost_to_closure_sec": 0.734699782,
+      "source_action_cost_sec": 0.734699782,
+      "source_pass_policy": "adaptive_sparse_harvest_v1",
+      "source_pass_strategy": "proof_only",
+      "source_round": 14,
+      "source_state_hash": "fb2d376982cda29f8ed09b21e70c80e0532278b69d18b54b00be70a08dfa0180",
+      "trajectory_features": {
+        "active_column_count": 379,
+        "active_task_set_count": 379,
+        "dual_l1_delta_from_previous": 0.069172001,
+        "dual_linf_delta_from_previous": 0.030844666999999992,
+        "effective_harvest_target": 32,
+        "node_lp_bound": 1.813927,
+        "node_lp_bound_delta": 0.0,
+        "previous_added_column_count": 21,
+        "previous_best_true_rc": -0.003018668,
+        "previous_final_judge_wall_time": 0.044383,
+        "previous_harvest_column_count": 21,
+        "previous_harvest_pass_wall_time": 0.044042,
+        "previous_harvest_processed_labels": 10000,
+        "previous_node_lp_bound": 1.813927,
+        "previous_proof_pass_wall_time": 0.0,
+        "required_sparse_harvest_strikes": 2,
+        "rmp_primal_fractional_count": 5,
+        "rmp_primal_nonzero_count": 6,
+        "round": 14,
+        "sparse_harvest_strike_count": 2
+      }
+    },
+    {
+      "best_action_outside_deadband": "proof_only",
+      "deadband_sec": 0.05,
+      "fork_node_lp_bound": 1.783393,
+      "fork_paths_by_action": {
+        "harvest_then_proof": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance004_work10000/harvest_then_proof_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance004_work10000/harvest_then_proof_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance004_work10000/harvest_then_proof_rep3.json"
+        ],
+        "proof_only": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance004_work10000/proof_only_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance004_work10000/proof_only_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale20_instance004_work10000/proof_only_rep3.json"
+        ]
+      },
+      "harvest_cost_to_closure_sec": 2.009321431,
+      "inference_overhead_sec": 0.02,
+      "instance_content_hash": "4277d0edc78aaeff",
+      "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+      "net_oracle_gain_sec": 0.0,
+      "observation_count_by_action": {
+        "harvest_then_proof": 3,
+        "proof_only": 3
+      },
+      "oracle_cost_sec": 1.909617042,
+      "oracle_gain_before_overhead_sec": 0.0,
+      "override_or_abstain_target": "abstain",
+      "paired_bound_abs_delta": 0.0,
+      "paired_fork_node_lp_bounds": {
+        "harvest_then_proof": 1.783393,
+        "proof_only": 1.783393
+      },
+      "proof_advantage_ratio": 0.049620925483474826,
+      "proof_advantage_sec": 0.099704389,
+      "proof_cost_to_closure_sec": 1.909617042,
+      "source_action_cost_sec": 1.909617042,
+      "source_pass_policy": "adaptive_sparse_harvest_v1",
+      "source_pass_strategy": "proof_only",
+      "source_round": 19,
+      "source_state_hash": "a26830c90f5f45bc3bdd59459830272affbf5fd12bc695a95d44dc768df0404f",
+      "trajectory_features": {
+        "active_column_count": 525,
+        "active_task_set_count": 525,
+        "dual_l1_delta_from_previous": 0.243848,
+        "dual_linf_delta_from_previous": 0.065166,
+        "effective_harvest_target": 32,
+        "node_lp_bound": 1.784256,
+        "node_lp_bound_delta": 0.0,
+        "previous_added_column_count": 3,
+        "previous_best_true_rc": -0.00183,
+        "previous_final_judge_wall_time": 0.038855,
+        "previous_harvest_column_count": 3,
+        "previous_harvest_pass_wall_time": 0.0385,
+        "previous_harvest_processed_labels": 10000,
+        "previous_node_lp_bound": 1.784256,
+        "previous_proof_pass_wall_time": 0.0,
+        "required_sparse_harvest_strikes": 2,
+        "rmp_primal_fractional_count": 0,
+        "rmp_primal_nonzero_count": 3,
+        "round": 19,
+        "sparse_harvest_strike_count": 2
+      }
+    },
+    {
+      "best_action_outside_deadband": "harvest_then_proof",
+      "deadband_sec": 0.05238862826,
+      "fork_node_lp_bound": 1.791399,
+      "fork_paths_by_action": {
+        "harvest_then_proof": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance004_work100000/harvest_then_proof_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance004_work100000/harvest_then_proof_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance004_work100000/harvest_then_proof_rep3.json"
+        ],
+        "proof_only": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance004_work100000/proof_only_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance004_work100000/proof_only_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance004_work100000/proof_only_rep3.json"
+        ]
+      },
+      "harvest_cost_to_closure_sec": 2.619431413,
+      "inference_overhead_sec": 0.02,
+      "instance_content_hash": "4c368eccc957e6bd",
+      "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+      "net_oracle_gain_sec": 2.162736998,
+      "observation_count_by_action": {
+        "harvest_then_proof": 3,
+        "proof_only": 3
+      },
+      "oracle_cost_sec": 2.619431413,
+      "oracle_gain_before_overhead_sec": 2.182736998,
+      "override_or_abstain_target": "harvest_then_proof",
+      "paired_bound_abs_delta": 0.0,
+      "paired_fork_node_lp_bounds": {
+        "harvest_then_proof": 1.791399,
+        "proof_only": 1.791399
+      },
+      "proof_advantage_ratio": -0.8332865625598269,
+      "proof_advantage_sec": -2.182736998,
+      "proof_cost_to_closure_sec": 4.802168411,
+      "source_action_cost_sec": 4.802168411,
+      "source_pass_policy": "adaptive_sparse_harvest_v1",
+      "source_pass_strategy": "proof_only",
+      "source_round": 24,
+      "source_state_hash": "5a75daca93efaf55335982854b0d08954b74a0d8a10f42be5b004d0a9f499bc3",
+      "trajectory_features": {
+        "active_column_count": 1411,
+        "active_task_set_count": 1411,
+        "dual_l1_delta_from_previous": 0.394676,
+        "dual_linf_delta_from_previous": 0.046794,
+        "effective_harvest_target": 64,
+        "node_lp_bound": 1.792333,
+        "node_lp_bound_delta": 0.0,
+        "previous_added_column_count": 4,
+        "previous_best_true_rc": -0.000105,
+        "previous_final_judge_wall_time": 0.465913,
+        "previous_harvest_column_count": 4,
+        "previous_harvest_pass_wall_time": 0.464692,
+        "previous_harvest_processed_labels": 100000,
+        "previous_node_lp_bound": 1.792333,
+        "previous_proof_pass_wall_time": 0.0,
+        "required_sparse_harvest_strikes": 2,
+        "rmp_primal_fractional_count": 0,
+        "rmp_primal_nonzero_count": 4,
+        "round": 24,
+        "sparse_harvest_strike_count": 2
+      }
+    },
+    {
+      "best_action_outside_deadband": "proof_only",
+      "deadband_sec": 0.05,
+      "fork_node_lp_bound": 1.750965,
+      "fork_paths_by_action": {
+        "harvest_then_proof": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance003_work100000/harvest_then_proof_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance003_work100000/harvest_then_proof_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance003_work100000/harvest_then_proof_rep3.json"
+        ],
+        "proof_only": [
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance003_work100000/proof_only_rep1.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance003_work100000/proof_only_rep2.json",
+          "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_forks/scale30_instance003_work100000/proof_only_rep3.json"
+        ]
+      },
+      "harvest_cost_to_closure_sec": 1.734003367,
+      "inference_overhead_sec": 0.02,
+      "instance_content_hash": "4fd39191a233502d",
+      "instance_id": "lunar_ice_sp50_030_003_seed2026372703",
+      "net_oracle_gain_sec": 0.0,
+      "observation_count_by_action": {
+        "harvest_then_proof": 3,
+        "proof_only": 3
+      },
+      "oracle_cost_sec": 1.200247998,
+      "oracle_gain_before_overhead_sec": 0.0,
+      "override_or_abstain_target": "abstain",
+      "paired_bound_abs_delta": 0.0,
+      "paired_fork_node_lp_bounds": {
+        "harvest_then_proof": 1.750965,
+        "proof_only": 1.750965
+      },
+      "proof_advantage_ratio": 0.30781680079632734,
+      "proof_advantage_sec": 0.5337553689999999,
+      "proof_cost_to_closure_sec": 1.200247998,
+      "source_action_cost_sec": 1.200247998,
+      "source_pass_policy": "adaptive_sparse_harvest_v1",
+      "source_pass_strategy": "proof_only",
+      "source_round": 37,
+      "source_state_hash": "79636bff694a03d222a24532a6451c86cdade12f779f296fab06ebce868a7cae",
+      "trajectory_features": {
+        "active_column_count": 2311,
+        "active_task_set_count": 2311,
+        "dual_l1_delta_from_previous": 0.37474999999999997,
+        "dual_linf_delta_from_previous": 0.070221,
+        "effective_harvest_target": 64,
+        "node_lp_bound": 1.750965,
+        "node_lp_bound_delta": 0.0,
+        "previous_added_column_count": 55,
+        "previous_best_true_rc": -0.000425,
+        "previous_final_judge_wall_time": 0.603931,
+        "previous_harvest_column_count": 55,
+        "previous_harvest_pass_wall_time": 0.601653,
+        "previous_harvest_processed_labels": 100000,
+        "previous_node_lp_bound": 1.750965,
+        "previous_proof_pass_wall_time": 0.0,
+        "required_sparse_harvest_strikes": 2,
+        "rmp_primal_fractional_count": 0,
+        "rmp_primal_nonzero_count": 4,
+        "round": 37,
+        "sparse_harvest_strike_count": 2
+      }
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v3_root_policy_fork_labels.v1",
+  "summary": {
+    "abstain_target_count": 5,
+    "action_label_density": 1.0,
+    "harvest_best_count": 1,
+    "indistinguishable_count": 0,
+    "missing_pair_count": 0,
+    "override_label_density": 0.16666666666666666,
+    "override_target_count": 1,
+    "paired_state_count": 6,
+    "positive_net_oracle_gain_count": 1,
+    "proof_best_count": 5,
+    "total_net_oracle_gain_sec": 2.162736998,
+    "training_authorized": false,
+    "training_blocker": "PILOT_ONLY_REQUIRES_MORE_INSTANCES_AND_REPEATED_FORKS"
+  }
+}

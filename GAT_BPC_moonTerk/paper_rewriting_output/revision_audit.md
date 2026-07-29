@@ -35,7 +35,8 @@ functions are:
    scope;
 4. exact-pricing difficulty and the limit of learned ordering;
 5. the proposed exact framework and its fixed-instance proof boundary; and
-6. four contributions and the paper roadmap.
+6. three contributions—model, algorithm, and benchmark/evaluation
+   package—and the paper roadmap.
 
 No self-posed research question, `snapshot` wording, first-person construction,
 or completed learning/seasonal result appears in the Introduction.

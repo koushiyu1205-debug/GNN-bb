@@ -23,9 +23,15 @@ surrounding access terrain. The decision assigns sites and predeclared
 terrain-aware paths to rovers and groups visits into successive
 depot-to-depot trips. Each trip obeys time-window, energy, load, and cumulative
 shadow-exposure limits, while return, docking, recharge, and elapsed mission
-time couple consecutive trips. The problem is formulated over a fixed
-logical-path solution space and solved through a pricing-led,
-branching-assisted learning-guided exact Branch-Price-and-Cut (BPC) framework.
+time couple consecutive trips. Waiting is prohibited at candidate task sites
+and en route, so arrival at a candidate task coincides with the start of its
+prescribed service. A rover may instead wait at the support depot and adjust the
+departure time of each trip to reach every selected task within its time
+window. The prohibition concerns idle loitering; prescribed detection,
+sampling, and drilling service times remain part of task execution. The
+problem is formulated over a fixed logical-path solution space,
+and a pricing-led, branching-assisted learning-guided exact
+Branch-Price-and-Cut (BPC) framework is specified for its solution.
 Multi-trip route columns encode complete one-rover schedules. The normalized
 objective combines operating cost, risk, and $0.4$ times science-weighted
 completion time, so earlier completion is valued more strongly for
@@ -35,15 +41,14 @@ bounds, pruning, termination, or proof records. Exact pricing completion,
 deterministic valid-cut logic, exact branch construction with fail-closed
 incomplete handling, and the branch tree remain responsible for all formal
 conclusions.
-The frozen exact framework solves 80 benchmark instances with 5, 10, 20, and
-30 tasks. Under the recorded memory limit, bounded 50- and 100-task runs
-terminate fail-closed and make no exact claim.
-[[TBD-ABS-RESULT: Insert one sentence reporting the paired L0/L1/L2 learning
-ablation, inference overhead, exact-fallback frequency, and uncertainty only
-after M001–M005 and all exact-safety gates are frozen.]]
-The resulting architecture enables auditable tests of learned pricing and
-branching order without changing the feasible schedules, normalized objective,
-or proof chain of the frozen lunar fleet-routing model.
+The no-task-wait formulation and its conditional exactness proof are specified
+in this paper and realized by the frozen exact implementation. In a fresh-process
+benchmark with one run per instance, all 80 instances with 5--30 tasks reached
+exact closure and passed the recorded correctness checks under the specified
+no-task-wait formulation. The learning-guided and seasonal comparisons remain
+pending. The learning interface is designed to alter only search order,
+leaving the feasible set, normalized objective, and proof requirements
+unchanged.
 
 **Keywords:** lunar exploration routing; multi-trip fleet routing;
 Branch-Price-and-Cut; resource-constrained shortest path; learning-guided
@@ -87,12 +92,25 @@ difficult to preserve a safe-return margin [@C042; @C055]. Crater slopes,
 surface roughness, and shadow exposure jointly determine traversal conditions
 between prospecting targets. Consequently, several terrain-feasible paths may
 connect the same pair of sites; although a shorter path reduces spatial
-distance, it often entails longer shadow exposure and greater traversal risk.
+distance, it may entail longer shadow exposure and greater traversal risk.
 Because detection, sampling, and drilling in PSRs can rely on
 onboard energy, thermal-control systems, and active instruments, direct
 sunlight is not imposed as a prerequisite for task execution. Instead,
 predefined task time windows represent constraints on instrument operation,
-communication scheduling, and mission planning.
+communication scheduling, and mission planning. The rover is not allowed to
+wait at a candidate site or along a path after leaving the depot. If a selected
+task would otherwise be reached before its window opens, the corresponding
+trip is delayed at the support depot; this delay changes the trip's departure
+time and elapsed mission time but does not create a task-site loitering state.
+The shift is feasible only if one common departure time satisfies every task
+window in that trip; otherwise, the selected task sequence and path-option
+combination is infeasible. The prohibition concerns idle waiting, not the
+prescribed detection, sampling, or drilling service duration; arrival at a
+candidate task therefore coincides with service start.
+The depot is modeled as a base-supported holding environment with power and
+thermal-control service. Excluding depot waiting from trip energy, path risk,
+and shadow exposure is therefore a forward-looking benchmark assumption, not
+a validated hardware capability.
 
 When candidate sites are represented as task nodes, the planning task can be
 formulated as a multi-path, multi-trip capacitated vehicle-routing problem
@@ -101,13 +119,15 @@ sampling, and drilling have different service durations, load requirements,
 and energy demands. Each task also carries a science weight, and
 delayed completion of a higher-weight task incurs a stronger penalty. In the
 setting considered here, several alternative paths with different resource
-attributes may connect any pair of candidate targets, while their travel time,
-shadow exposure, energy consumption, and traversal risk may vary with the
-rover's departure time. A feasible plan assigns every task to one rover,
+attributes may connect any pair of candidate targets. These attributes can
+differ among path alternatives and independently generated mission-epoch
+instances, but remain fixed during one optimization run. A feasible plan
+assigns every task to one rover,
 partitions each rover's work into a sequence of depot-to-depot trips, selects
-a path option for every leg, and satisfies task time windows, rover load and
-energy limits, cumulative shadow-exposure limits, return and recharge
-requirements, and the mission horizon. The experimental setting
+a path option for every leg, schedules depot waiting and each trip departure,
+and satisfies every task window without waiting at a candidate site, together
+with rover load and energy limits, cumulative shadow-exposure limits, return
+and recharge requirements, and the mission horizon. The experimental setting
 is explicitly oriented toward future lunar water-ice prospecting. The
 benchmark instances cover a common
 $50\,\mathrm{km}\times50\,\mathrm{km}$ lunar south-polar region constructed
@@ -143,35 +163,34 @@ and candidates generated by the exact branching rule. Path feasibility,
 reduced-cost evaluation, deterministic valid inequalities, node bounds,
 pruning, and branch-tree closure remain the responsibility of exact
 procedures; a mandatory exact fallback processes all work that the learning
-layer postpones or cannot evaluate. Environmental variation is represented by
-independently fixed mission-epoch instances. Applying the same solver
-separately to each instance enables comparisons among seasonal operating
-phases without adding departure-time-dependent path attributes to the
-optimization state. Importantly, exactness applies only to the path options
+layer postpones or cannot evaluate. In the experimental design, environmental
+variation will be represented by independently fixed mission-epoch instances.
+After implementation verification, the same revised solver will be applied
+separately to each instance to compare seasonal operating phases without
+adding departure-time-dependent path attributes to the optimization state.
+Importantly, exactness applies only to the path options
 declared for each fixed instance within its fixed logical-path solution space.
 It neither implies optimality over all continuous lunar-surface trajectories
 nor establishes a single route that remains robust across every environmental
-phase. The contributions are fourfold.
+phase. The contributions are threefold.
 
-1. Lunar water-ice prospecting is formulated as a multi-path, multi-trip
-   fleet-routing problem that incorporates lunar terrain, cumulative shadow
-   exposure, recharging, heterogeneous services, and science-weighted
-   completion time.
-2. An exact BPC framework is developed, together with a conditional proof
-   covering pricing, valid inequalities, branching, pruning, bounds, and
-   branch-tree closure.
-3. A proof-preserving learning interface is defined to guide the processing
-   order of pricing work and branch candidates without controlling cuts or
-   replacing any exact conclusion.
-4. A reproducible lunar benchmark and a correctness-first evaluation protocol
-   are provided, including a planned paired comparison across four seasonal
-   operating phases at the lunar south pole.
-
-The remainder of this paper is organized as follows. Section 2 reviews the
-related literature. Sections 3 and 4 present the formulation and exact
-algorithm, respectively. Sections 5 and 6 define the experiments and report
-the available evidence. Sections 7 and 8 discuss the implications,
-limitations, and conclusions.
+(1) Lunar water-ice prospecting is
+formulated as a multi-path, multi-trip fleet-routing problem that incorporates
+lunar terrain, cumulative shadow exposure, recharging, heterogeneous services,
+depot-only waiting, adjustable trip departures, and science-weighted
+completion time. (2) A learning-guided exact BPC algorithm is developed,
+together with a conditional proof covering pricing, root-only valid
+inequalities, branching, pruning, bounds, and branch-tree closure. Learning
+guides pricing order primarily and branch-candidate order secondarily, without
+controlling cuts or replacing any exact conclusion. (3) A reproducible lunar
+benchmark and a correctness-first evaluation package are provided. The frozen
+no-task-wait baseline establishes exact closure for 80 instances with 5--30
+tasks. Paired learning-guidance and four-phase seasonal results are specified
+by the evaluation protocol but remain pending. The remainder of this paper is
+organized as follows. Section 2 reviews the related literature. Sections 3 and
+4 present the formulation and exact algorithm, respectively. Sections 5 and 6
+define the experiments and report the available evidence. Sections 7 and 8
+discuss the implications, limitations, and conclusions.
 
 # 2. Related Work
 
@@ -296,7 +315,7 @@ a forward-looking benchmark scenario; they are not measurements of current
 rover performance or evidence of in-situ water-ice abundance.
 
 Three decision objects are separated. A path option is one precomputed way to
-traverse a directed logical edge. A trip leaves the support depot, serves one
+traverse a directed task-network edge. A trip leaves the support depot, serves one
 or more tasks, and returns. A multi-trip route is the time-compatible sequence
 of one or more such trips assigned to one rover, including the docking and
 recharge transitions between trips; it is the column selected by the master
@@ -307,19 +326,34 @@ Section 3.1 defines the fixed network and path options, Section 3.2 constructs
 feasible trips and multi-trip routes, and Section 3.3 gives the normalized
 objective and route-based master problem.
 
-## 3.1 Fixed logical network and path options
+## 3.1 Lunar task network and path options
 
 Let $\mathcal{T}$ be the set of prospecting tasks, $\mathcal{K}$ the rover
-set, and $0$ the depot. The mission-level network is a directed logical graph
+set, and $0$ the depot. The mission-level network is a directed task graph
 $\mathcal{G}=(\mathcal{V},\mathcal{E})$, where
 $\mathcal{V}=\{0\}\cup\mathcal{T}$. Each task $i\in\mathcal{T}$ has a
 location, operation mode, science weight $w_i$, load $q_i$, service duration
 $\sigma_i$, service energy $g_i$, service cost
-$c_i^{\mathrm{srv}}$, time window $[r_i,D_i]$, and recorded shadow and
-thermal-risk attributes. The operation mode identifies whether the declared
+$c_i^{\mathrm{srv}}$, time window $[r_i,D_i]$, local shadow score $\eta_i$,
+and frozen service-risk contribution $\rho_i^{\mathrm{srv}}$. The operation mode identifies whether the declared
 in-situ task is detection, sampling, or drilling. These quantities are frozen
-inputs. The optimization model neither estimates water-ice abundance nor
+inputs. Here $r_i$ is the earliest admissible service-start time and $D_i$ is
+the latest admissible service-completion time, so a task must start no later
+than $D_i-\sigma_i$. The service-risk contribution is computed before
+optimization from the recorded task thermal-risk metadata and prescribed
+service duration; its internal benchmark conversion is not a free model
+coefficient. The optimization model neither estimates water-ice abundance nor
 updates the environmental map during a solve.
+The admissible input domain is
+
+$$
+w_i,q_i,\sigma_i,g_i,c_i^{\mathrm{srv}},\rho_i^{\mathrm{srv}},\eta_i\ge0
+\quad(i\in\mathcal T),
+$$
+
+and the three normalization references defined in (9) are strictly positive.
+These sign conditions are part of the exact-model contract rather than
+empirical performance claims.
 
 Let $\mathcal{Q}$ contain the selected mission epochs used in environmental
 scenario construction, and let $\mathcal{I}^{\zeta}$ denote the independently
@@ -360,6 +394,10 @@ these alternatives at runtime; it does not generate a continuous surface
 trajectory. The distinction is operationally important: the lowest-time
 alternative need not be the lowest-shadow or lowest-risk alternative, so
 mission-level feasibility cannot be inferred from geometric distance alone.
+Every declared option satisfies
+$\tau_{uv}^{\omega},e_{uv}^{\omega},\rho_{uv}^{\omega},
+d_{uv}^{\omega},h_{uv}^{\omega}\ge0$. These input-domain conditions are
+checked before proof-bearing pricing.
 
 The stored quantities are constructed from lunar-surface layers before
 optimization. For a directed path option $\ell=(u,v,\omega)$ sampled at grid
@@ -399,18 +437,41 @@ displayed as model equations because the available materials do not establish
 their physical calibration or sensitivity. Reproducibility instead relies on
 the frozen generator source, configuration, and stored path-option records.
 
-Pricing removes a declared path option only when another option with the same
-endpoints is weakly better in travel time, energy, risk, distance, and shadow
-exposure, and strictly better in at least one of these five quantities. This
-same-endpoint dominance is exact for the present model. Replacing the dominated
-option preserves the task sequence and hence all task-cover, cut, and branch
-coefficients; it cannot delay service, increase any constrained resource, or
-increase the objective because all associated coefficients and science weights
-are nonnegative. Thus, every route using a removed option has a feasible
-retained counterpart with no greater cost.
+The no-task-wait rule restricts path-option preprocessing. A faster path cannot
+automatically dominate a slower path, because the additional travel time of
+the slower option may be needed to reach a task after its release time without
+waiting away from the depot. Delaying the whole trip at the depot does not
+make such a slower internal leg redundant: a common departure shift also
+delays every earlier task in that trip and can violate one of their due times.
+Pricing may therefore remove option
+$\omega_b\in\mathcal{A}_{uv}$ only if a retained option
+$\omega_a\in\mathcal{A}_{uv}$ has exactly the same travel time,
+
+$$
+\tau_{uv}^{\omega_a}=\tau_{uv}^{\omega_b},
+\qquad
+(e_{uv}^{\omega_a},\rho_{uv}^{\omega_a},d_{uv}^{\omega_a},
+h_{uv}^{\omega_a})
+\le
+(e_{uv}^{\omega_b},\rho_{uv}^{\omega_b},d_{uv}^{\omega_b},
+h_{uv}^{\omega_b}),
+$$
+
+componentwise, with at least one strict inequality. The substitution then
+preserves every task arrival and completion time while weakly reducing all
+other path resources and objective components. Options with unequal travel
+times remain in the proof-bearing path set even when one appears
+componentwise preferable under the remaining attributes. In the mathematical
+model, equality of travel time is exact. The executable uses recorded
+numerical tolerances for this comparison. The proof-bearing native completion
+uses $10^{-12}$, whereas the Python seed and reference constructor uses
+$10^{-9}$ and cannot establish the absence of a negative-reduced-cost route.
+The official closure claim is therefore bound to the native comparison and
+its recorded tolerance; a looser approximate comparison would not be proof
+preserving.
 
 Define $\mathcal{R}(\mathcal{I})$ as the set of feasible one-rover multi-trip
-routes induced by the frozen logical graph, path options, tasks, resources,
+routes induced by the frozen task graph, path options, tasks, resources,
 time windows, and objective parameters of instance $\mathcal{I}$. Define
 $\Omega(\mathcal{I})$ as the feasible fleet schedules formed by selecting at
 most $|\mathcal{K}|$ members of $\mathcal{R}(\mathcal{I})$ so that every task
@@ -424,7 +485,7 @@ window-aggregated instance; it does not prove that one route is robust or
 dynamically optimal across all $\zeta\in\mathcal{Q}$.
 
 > **Figure 1 placeholder (FIG01/FIG06, evidence available):** lunar south-pole
-> planning layers and one representative fixed logical graph with three
+> planning layers and one representative fixed task graph with three
 > declared path alternatives per directed edge. The final caption must
 > distinguish measured inputs, derived proxies, and visualization-only layers.
 
@@ -433,10 +494,23 @@ dynamically optimal across all $\zeta\in\mathcal{Q}$.
 In the benchmark, every trip leaves and returns to the support depot. Load
 capacity, usable energy, and the shadow-exposure allowance are enforced for
 each trip, whereas a later trip may begin only after the preceding return,
-docking, and recharge transition is complete. Accordingly, feasibility is
-enforced first within each depot-to-depot trip and then across the ordered
-trips assigned to the same rover. A trip $s$ starts at the depot, visits an
-ordered sequence of distinct tasks, and returns to the depot:
+docking, and recharge transition is complete. Waiting is prohibited at
+candidate task sites and en route. It is allowed only at the support depot,
+where the departure of any trip, including the first, may be delayed. Depot
+waiting contributes to elapsed mission time and the mission horizon. The
+support depot is modeled
+as a controlled holding environment with base-provided power and thermal
+control, so the rover does not accumulate trip load, travel energy, path risk,
+or off-depot shadow exposure during that delay. Base-supplied standby energy
+and thermal-control demand are outside the present system boundary. This
+supported-depot standby assumption is a forward-looking benchmark assumption
+rather than a claim about validated lunar infrastructure. The prohibition
+applies to idle loitering, not to the prescribed service duration of a
+detection, sampling, or drilling task.
+Accordingly, feasibility is enforced first within
+each depot-to-depot trip and then across the ordered trips assigned to the same
+rover. A trip $s$ starts at the depot, visits an ordered sequence of distinct
+tasks, and returns to the depot:
 
 $$
 s=(0,i_1,\ldots,i_m,0; \omega_0,\ldots,\omega_m;t_s^0),
@@ -446,24 +520,55 @@ $$
 
 where $M$ is the maximum number of tasks per trip, $t_s^0$ is its
 departure time, and each $\omega_j$, $j=0,\ldots,m$, selects the path option
-for the corresponding directed leg. Given the sequence and options, timing
-follows
+for the corresponding directed leg.
+
+For a fixed sequence and fixed path options, let
+$\delta_{j,s}$ be the elapsed travel-and-service time from the trip departure
+to the start of task $i_j$. Let $a_s$ be the earliest time at which the rover
+is available at the depot: $a_1=0$ and
+$a_s=t_{s-1}^{\mathrm{end}}$ for $s\ge2$. The fixed duration from departure
+through return, docking, and recharge is denoted by $\chi_s$. These quantities
+and the feasible interval for the trip departure are given below. Each task
+window is shifted backward by its fixed departure-to-service offset; their
+intersection gives all depot departures that require no later waiting.
 
 $$
 \begin{aligned}
-t_{js}^{\mathrm{arr}}
-&=t_{j-1,s}^{\mathrm{cmp}}
-  +\tau_{i_{j-1},i_j}^{\omega_{j-1}},\\
-t_{js}^{\mathrm{start}}
-&=\max\{t_{js}^{\mathrm{arr}},r_{i_j}\},\\
-t_{js}^{\mathrm{cmp}}
-&=t_{js}^{\mathrm{start}}+\sigma_{i_j},
+\delta_{1,s}
+&=\tau_{0,i_1}^{\omega_0},\\
+\delta_{j,s}
+&=\delta_{j-1,s}+\sigma_{i_{j-1}}
+  +\tau_{i_{j-1},i_j}^{\omega_{j-1}}
+&& (j=2,\ldots,m),\\
+\chi_s
+&=\delta_{m,s}+\sigma_{i_m}+\tau_{i_m,0}^{\omega_m}
+  +d^{\mathrm{dock}}+\frac{E_s}{P^{\mathrm{rch}}},\\
+\underline t_s^0
+&=\max\left\{a_s,\ \max_{j=1,\ldots,m}
+  \left(r_{i_j}-\delta_{j,s}\right)\right\},\\
+\overline t_s^0
+&=\min\left\{
+  \min_{j=1,\ldots,m}
+  \left(D_{i_j}-\sigma_{i_j}-\delta_{j,s}\right),\
+  H^{\mathrm{mis}}-\chi_s
+  \right\},\\
+\underline t_s^0&\le\overline t_s^0,\qquad
+t_s^0=\underline t_s^0,\qquad
+\Delta_s^{\mathrm{dep}}=t_s^0-a_s,\\
+t_{i_j,s}^{\mathrm{arr}}
+&=t_{i_j,s}^{\mathrm{start}}=t_s^0+\delta_{j,s},\qquad
+t_{i_j,s}^{\mathrm{cmp}}=t_{i_j,s}^{\mathrm{start}}+\sigma_{i_j}.
 \end{aligned}
 \tag{3}
 $$
 
-with $j=1,\ldots,m$, $i_0=0$, and
-$t_{0s}^{\mathrm{cmp}}=t_s^0$.
+The interval is nonempty exactly when the fixed trip can meet its temporal
+conditions—every task window, preceding-trip availability, and the mission
+horizon—without waiting at a task or en route. The canonical departure
+$t_s^0=\underline t_s^0$ places any necessary delay at the depot and gives
+the earliest feasible completion times for that fixed sequence and path
+choice. A later departure inside the interval is feasible but cannot improve
+the objective because every science weight is nonnegative.
 
 For exposition and independent verification, the following compact
 formulation defines the internal feasibility of a multi-trip route column; the
@@ -511,7 +616,8 @@ x_{\ell s}\in\{0,1\},\qquad
 y_{is}\in\{0,1\},\qquad
 z_s\in\{0,1\},\qquad
 t_{is}^{\mathrm{start}},t_{is}^{\mathrm{cmp}},
-t_s^0,t_s^{\mathrm{return}},t_s^{\mathrm{rch}},t_s^{\mathrm{end}}\ge 0
+t_s^0,t_s^{\mathrm{return}},t_s^{\mathrm{rch}},t_s^{\mathrm{end}},
+\Delta_s^{\mathrm{dep}}\ge 0
 \quad
 (\ell\in\mathcal{L},\ i\in\mathcal{T},\ s\in\mathcal{S}).
 \tag{4b}
@@ -537,9 +643,11 @@ constructively by carrying the visited-task set and rejecting a repeated-task
 extension. Thus, removing trip-level arc variables from the master does not
 remove flow conservation or subtour prevention from the algorithm.
 
-Time-window feasibility and temporal propagation are the next defining
-constraint family. Completion is linked linearly to service start, while
-selected path-option arcs activate the appropriate precedence relations:
+Time-window feasibility and no-wait temporal propagation are the next
+defining constraint family. Completion is linked linearly to service start,
+while every selected path-option arc activates a temporal equality. The
+equalities prevent unmodeled idle time from appearing at a candidate task or
+along a leg:
 
 $$
 \begin{aligned}
@@ -552,18 +660,18 @@ t_{is}^{\mathrm{cmp}}
 && (i\in\mathcal{T},\ s\in\mathcal{S}),\\
 x_{(0,j,\omega),s}=1
 &\Rightarrow
-t_{js}^{\mathrm{start}}\ge t_s^0+\tau_{0j}^{\omega}
+t_{js}^{\mathrm{start}}=t_s^0+\tau_{0j}^{\omega}
 && (j\in\mathcal{T},\ \omega\in\mathcal{A}_{0j},\
 s\in\mathcal{S}),\\
 x_{(i,j,\omega),s}=1
 &\Rightarrow
-t_{js}^{\mathrm{start}}\ge
+t_{js}^{\mathrm{start}}=
 t_{is}^{\mathrm{cmp}}+\tau_{ij}^{\omega}
 && (i,j\in\mathcal{T},\ \omega\in\mathcal{A}_{ij},\
 s\in\mathcal{S}),\\
 x_{(i,0,\omega),s}=1
 &\Rightarrow
-t_s^{\mathrm{return}}\ge
+t_s^{\mathrm{return}}=
 t_{is}^{\mathrm{cmp}}+\tau_{i0}^{\omega}
 && (i\in\mathcal{T},\ \omega\in\mathcal{A}_{i0},\
 s\in\mathcal{S}),\\
@@ -572,21 +680,28 @@ z_s=1
 0\le t_s^0\le t_s^{\mathrm{return}}
 \le t_s^{\mathrm{end}}\le H^{\mathrm{mis}}
 && (s\in\mathcal{S}),\\
+z_1=1
+&\Rightarrow
+t_1^0=\Delta_1^{\mathrm{dep}},\\
 z_{s+1}=1
 &\Rightarrow
-t_{s+1}^0\ge t_s^{\mathrm{end}}
+t_{s+1}^0=t_s^{\mathrm{end}}+\Delta_{s+1}^{\mathrm{dep}}
 && (s=1,\ldots,\bar S-1).
 \end{aligned}
 \tag{6a}
 $$
 
-The implications in (6a) are standard MILP indicator constraints. The compact
-implementation uses equivalent big-$M$ rows whose valid bounds are derived
-from the mission horizon, task time windows, and path travel times; they are
-not calibrated lunar-performance coefficients.
+The implications in (6a) are standard MILP indicator constraints. Each
+selected-arc equality can
+be represented by a pair of valid big-$M$ rows derived from the mission
+horizon, task time windows, and path travel times; those bounds are not
+calibrated lunar-performance coefficients. The variable
+$\Delta_s^{\mathrm{dep}}$ measures only waiting at the support depot. No
+task-site or en-route waiting variable is present. Service-start and
+completion times differ by the prescribed service duration, which is task
+execution rather than waiting.
 
-Let $\theta_i$ be the local thermal-risk score and $\eta_i$ the local shadow
-score of task $i$. The additive trip resources and objective components are
+The additive trip resources and objective components are
 reconstructed from the same arc and visit variables:
 
 $$
@@ -597,7 +712,7 @@ E_s&=\sum_{\ell\in\mathcal{L}}e_\ell x_{\ell s}
 H_s&=\sum_{\ell\in\mathcal{L}}h_\ell x_{\ell s}
      +\sum_{i\in\mathcal{T}}\eta_i\sigma_i y_{is},\\
 R_s&=\sum_{\ell\in\mathcal{L}}\rho_\ell x_{\ell s}
-     +0.01\sum_{i\in\mathcal{T}}\theta_i\sigma_i y_{is},\\
+     +\sum_{i\in\mathcal{T}}\rho_i^{\mathrm{srv}}y_{is},\\
 C_s&=\sum_{i\in\mathcal{T}}c_i^{\mathrm{srv}}y_{is}
      +\sum_{\ell\in\mathcal{L}}d_\ell x_{\ell s}+E_s,\\
 T_s^{\mathrm{w}}
@@ -606,11 +721,14 @@ T_s^{\mathrm{w}}
 \tag{6b}
 $$
 
-Thus, shadow exposure is accumulated across both movement and service within a
-trip, whereas integrated traversal and service risk enters the objective.
-The factor $0.01$ in $R_s$ is a frozen benchmark conversion from the
-task-level thermal score to the risk scale; it is a scenario parameter rather
-than a physical constant, and its sensitivity remains to be evaluated.
+Thus, $H_s$ is the cumulative off-depot shadow exposure accumulated across
+movement and service within a trip, whereas integrated traversal and service
+risk enters the objective. The task term $\rho_i^{\mathrm{srv}}$ is an
+immutable preprocessing input rather than a coefficient calibrated inside the
+optimization model.
+Depot waiting is excluded from $Q_s$, $E_s$, $H_s$, $R_s$, and $C_s$ but is
+included in all absolute task-completion times and in the mission horizon
+through $t_s^0$.
 After the return leg, the resource limits, recharge duration, trip end, and
 mission horizon are
 
@@ -633,19 +751,21 @@ $$
 Here $d^{\mathrm{dock}}$ is a docking overhead,
 $P^{\mathrm{rch}}$ is the recharge-power proxy, $Q$ is rover capacity, $B$
 the usable-energy limit, $H^{\max}$ the trip shadow-exposure limit, and
-$H^{\mathrm{mis}}$ the mission horizon.
+$H^{\mathrm{mis}}$ the mission horizon. Their input domain satisfies
+$d^{\mathrm{dock}}\ge0$ and
+$P^{\mathrm{rch}},Q,B,H^{\max},H^{\mathrm{mis}}>0$.
 
 The shadow limit and the risk term have deliberately different mathematical
 roles. A trip is infeasible when its cumulative shadow exposure exceeds
 $H^{\max}$ even if its energy, capacity, and time-window constraints would
 otherwise hold. By contrast, integrated risk discriminates among feasible
 routes through the objective and is not silently converted into a feasibility
-threshold. The compact inequalities admit later return and end-time values,
-but an earliest feasible assignment exists without loss. Replacing
-$t_s^{\mathrm{return}}$ and $t_s^{\mathrm{end}}$ by the earliest values allowed
-by the selected return leg and recharge relation cannot increase the objective
-or violate a later-trip or horizon constraint. The native SPPRC constructs
-these canonical earliest values directly.
+threshold. Although the horizon-ordering inequalities alone are weak, the
+selected-arc and recharge equalities uniquely determine return and trip-end
+times once $t_s^0$ is fixed. Equation (3) then chooses the earliest feasible
+depot departure. Earlier depot availability cannot harm a later trip because
+the rover may remain at the depot, whereas waiting at a task or en route is
+never admitted.
 
 Equations (4a)–(7) give the core trip-level MILP families that define a
 feasible multi-trip route column. Pairwise incompatibility cuts, cover
@@ -655,7 +775,8 @@ defining constraints. Their computational effects require separate evaluation.
 
 A multi-trip route $p=(s_1,\ldots,s_{m_p})$ is one rover's ordered schedule.
 Every constituent trip is feasible, the task sets are disjoint, and
-$t_{s_{j+1}}^0\ge t_{s_j}^{\mathrm{end}}$ for
+$t_{s_{j+1}}^0=t_{s_j}^{\mathrm{end}}+
+\Delta_{s_{j+1}}^{\mathrm{dep}}$ for
 $j=1,\ldots,m_p-1$. Let
 $\mathcal{T}_p$ be the tasks served by $p$, with
 $a_{ip}=1$ when $i\in\mathcal{T}_p$ and $0$ otherwise. One selected
@@ -710,7 +831,7 @@ c_p=
 \tag{10}
 $$
 
-Column construction, the restricted master, native pricing, objective closure,
+Column construction, the restricted master, proof-bearing pricing, objective closure,
 tables, and later translations must use (10). Makespan does not enter this
 objective. It is reported after selection as
 
@@ -783,8 +904,11 @@ whenever a node bound or tree conclusion is required.
 The proposed framework has two operational lanes but one mathematical model.
 The guidance lane assigns priorities to pricing work and to branch candidates
 constructed by the exact branching rule. The exact lane solves the restricted
-master, checks column addability, performs complete native pricing, constructs
-valid cuts and branch children, maintains bounds, and writes proof records.
+master, checks column addability, performs proof-bearing complete pricing,
+constructs valid cuts and branch children, maintains bounds, and writes proof
+records. For the revised timing model, complete pricing becomes proof-bearing
+only after implementation verification confirms every no-task-wait
+transition and state invariant.
 Figure 2 summarizes this asymmetric responsibility. Information moves from
 exact state records to the guidance layer and returns only as validated
 priority scores bound to the current solver state; no learned output is
@@ -794,13 +918,13 @@ records.
 > **Figure 2 placeholder (FIG09/FIG10, method evidence available):**
 > two-lane architecture. The learning lane contains pricing-work ordering and
 > valid branch-candidate ranking. The exact lane contains RMP optimization,
-> column validity, native exact completion, deterministic cuts, branch
+> column validity, proof-bearing exact completion, deterministic cuts, branch
 > construction and fallback, bounds, pruning, and proof records. No arrow is
 > permitted from learning to cut control or proof state.
 
 At a branch-tree node, the solver follows four phases. First, it solves the
 current RMP and extracts the true dual vector. Second, ordered or fast pricing
-searches for useful columns. Third, native exact completion is invoked whenever
+searches for useful columns. Third, proof-bearing exact completion is invoked whenever
 proof-producing closure is required. Finally, the solver adds columns,
 strengthens the root RMP with deterministic valid cuts, accepts an exact node
 bound, or branches. A resource limit ends this sequence as incomplete. In
@@ -961,23 +1085,28 @@ searches for a feasible route $p\in\mathcal{P}(n)$ with
 $\bar c_p<-\varepsilon_{\mathrm{rc}}$. A pricing decision cannot be reduced to
 choosing the next prospecting site. It must also choose one of the three
 declared path options, because the corresponding travel time, energy, risk, and
-shadow exposure affect different constraints and objective components. The
-native labeling state consequently records the visited-task set, current node,
-time, energy, load, cumulative shadow exposure, risk, science-weighted
-completion contribution, path signature, and reduced-cost terms. Each
-extension updates travel, waiting, service, load, exposure, risk, and
-completion before checking whether the partial route can remain feasible. A
-depot return then closes the current trip, introduces docking and recharge,
-and determines whether another task-disjoint trip can begin.
+shadow exposure affect different constraints and objective components. A
+proof-bearing labeling state consequently records the visited-task set, current node,
+depot availability, energy, load, cumulative shadow exposure, risk,
+science-weighted completion contribution, path signature, and reduced-cost
+terms. An open trip additionally carries the cumulative service-start offset
+of its last task and the current feasible interval for the trip's depot
+departure. Each task extension updates the offset and intersects that interval
+with the new task window. It never inserts waiting at the task. A depot return
+then selects the return option, tightens the interval by the mission-horizon
+bound in (3), closes the current trip, chooses its earliest feasible departure,
+reconstructs task completion times, introduces docking and recharge, and
+determines whether another task-disjoint trip can begin after any required
+depot wait.
 
 The pricing model does not repeat the compact MILP. Instead, each defining
 constraint family in Section 3 is realized by a label invariant or transition:
 
-| Section 3 condition | Exact realization in native pricing |
+| Section 3 condition | Exact realization in proof-bearing pricing |
 |---|---|
 | Depot degrees, task in/out balance, and trip activation in (4a) | A label starts at the depot, every task extension appends exactly one incoming and one outgoing continuation, and a depot return closes the active trip |
 | Route-level task uniqueness and elementarity in (4a)–(5) | The visited-task set rejects repeat visits both within and across trips of the same route |
-| Time windows, arc precedence, and trip sequencing in (6a) | The time resource applies travel, waiting, service, return, docking, and recharge transitions before any later trip starts |
+| Time windows, no-wait arc equalities, and trip sequencing in (3) and (6a) | An open-trip label updates the cumulative offset and feasible depot-departure interval; trip closure uses its earliest feasible endpoint, and any delay before a later trip occurs only at the depot |
 | Load, energy, and shadow limits in (6b)–(7) | Additive resource states are updated on every arc and task extension and are checked by exact feasibility pruning |
 | Operating cost, risk, and weighted completion in (6b) | Additive objective and reduced-cost accumulators are updated from the same stored path and service quantities used by the master |
 
@@ -985,20 +1114,21 @@ Flow conservation is therefore a transition invariant rather than an
 additional numeric resource. The master-level exact task cover and fleet limit
 remain RMP rows and are not reimplemented as SPPRC resource constraints.
 
-For a partial label $L$, resource infeasibility is a direct pruning condition.
-Writing $i(L)$ for the just-served task when applicable, the implemented test
-is
+For a partial label $L$, let
+$[\underline t_L^0,\overline t_L^0]$ be the feasible depot-departure interval
+of its open trip. Resource infeasibility is a direct pruning condition. The
+proof-bearing no-task-wait test is
 
 $$
 \begin{aligned}
 \operatorname{PRUNE}_{\mathrm{res}}(L)=1
 \quad\text{if}\quad
-t_{i(L)}^{\mathrm{start}}
-&>D_{i(L)}-\sigma_{i(L)}+\varepsilon_{\mathrm{res}},\\
+\underline t_L^0
+&>\overline t_L^0+\varepsilon_{\mathrm{res}},\\
 &\text{or}\quad Q_L>Q+\varepsilon_{\mathrm{res}},\\
 &\text{or}\quad E_L>B+\varepsilon_{\mathrm{res}},\\
 &\text{or}\quad H_L>H^{\max}+\varepsilon_{\mathrm{res}},\\
-&\text{or}\quad t_L^{\mathrm{end}}>
+&\text{or, after trip closure,}\quad t_L^{\mathrm{end}}>
 H^{\mathrm{mis}}+\varepsilon_{\mathrm{res}},\\[1mm]
 \operatorname{PRUNE}_{\mathrm{res}}(L)&=0
 \quad\text{otherwise}.
@@ -1006,57 +1136,84 @@ H^{\mathrm{mis}}+\varepsilon_{\mathrm{res}},\\[1mm]
 \tag{16}
 $$
 
-The last test is evaluated once the return and recharge terms are available.
-This pruning is an exact feasibility rejection under (6a)–(7), not a learned
+The last test is evaluated only after the return option and recharge terms are
+available. An empty departure interval means that no single depot departure
+can place every task in its window without task-site or en-route waiting. This pruning is
+an exact feasibility rejection under (3) and (6a)–(7), not a learned
 prediction.
 
-A return to the depot completes a trip and introduces docking and recharge
-time. The route label can continue with a later task-disjoint trip if the
-new departure is compatible with the previous trip end. Terminal acceptance
+A return to the depot completes a trip. The label sets
+$t_s^0=\underline t_L^0$, reconstructs
+$t_{i_j,s}^{\mathrm{cmp}}=t_s^0+\delta_{j,s}+\sigma_{i_j}$, and then introduces
+docking and recharge. For the weighted-completion term, an open trip can store
+the affine expression
+$\sum_j w_{i_j}(\delta_{j,s}+\sigma_{i_j})
++t_s^0\sum_j w_{i_j}$ until $t_s^0$ is fixed at closure. The route label can
+continue with a later task-disjoint trip; its new departure interval uses the
+previous trip end as the earliest depot availability. Terminal acceptance
 reconstructs the same operating-cost, risk, and weighted-completion quantities
-used in (10). This shared construction matters: a pricing objective that differs
-from the master objective can generate apparently attractive columns while
-invalidating the lower-bound argument.
+used in (10). This shared construction matters: a pricing objective that
+differs from the master objective can generate apparently attractive columns
+while invalidating the lower-bound argument.
 
 Dominance removes a label only under rules proved compatible with every
 resource and reduced-cost term retained by the active state. Branch
 same/different-route decisions act as feasibility filters. Active
 deterministic cuts contribute both state information and dual terms. If a
 completion bound or dominance rule has not been proved for a nonempty branch
-or cut context, it is disabled for that context. The conservative behavior may
-increase work, but it does not silently enlarge the set of proof-bearing
-pruning operations.
+or cut context, it is disabled for that context. In the current proof,
+completion-bound pruning admits branch restrictions but no active cut, whereas
+label dominance uses the explicit branch and cut guards below. The conservative
+behavior may increase work, but it does not silently enlarge the set of
+proof-bearing pruning operations.
 
-More precisely, labels $L^1$ and $L^2$ are compared only at the same graph
-state and with identical depot occupancy, meaning that both labels are either
-at the depot or away from it. Let $V_L$ be the visited-task set,
-$K_L$ the vector of active-cut resources, $m_L$ the number of tasks in the
-open trip, and
-$\operatorname{BC}(L^1,L^2)$ the exact branch-subset compatibility predicate.
-Under these comparison preconditions, $L^1$ is allowed to dominate and remove
-$L^2$ only when all of the following conditions hold:
+More precisely, the current proof-bearing implementation compares route labels
+for dominance only when both are at the depot and under the same active
+branch-and-cut context; open-trip dominance is disabled. Let $V_L$ be the
+route-level visited-task set, $K_L$ the vector of active-cut resources, and
+$a_L$ the depot-availability time of a depot label. Let
+$\operatorname{BC}(L^1,L^2)=1$ only when the active Ryan--Foster decisions
+preserve continuation: every branch-feasible continuation of $L^2$ is also
+branch feasible from $L^1$. The no-wait comparability predicate is
+
+$$
+\operatorname{NW}(L^1,L^2)=
+\begin{cases}
+1, &
+\begin{aligned}
+&L^1,L^2\text{ are at the depot},\quad
+a_{L^1}\le a_{L^2}+\varepsilon_{\mathrm{res}},\\
+&\varnothing\ne V_{L^1}\subseteq V_{L^2};
+\end{aligned}\\[2mm]
+0, & \text{otherwise}.
+\end{cases}
+$$
+
+Under these preconditions, $L^1$ may dominate and remove $L^2$ only when
 
 $$
 \begin{aligned}
 L^1\preceq L^2\quad\text{only if}\quad&
-\Big[
-V_{L^1}=V_{L^2}\ \lor\
-\big(z^{\mathrm{sub}}=1,\ V_{L^1}\subset V_{L^2},\
-K_{L^1}=K_{L^2},\ \operatorname{BC}(L^1,L^2)=1\big)
-\Big]\\
-&{}\land\ t_{L^1}\le t_{L^2}+\varepsilon_{\mathrm{res}}
-\land Q_{L^1}\le Q_{L^2}+\varepsilon_{\mathrm{res}}\\
-&{}\land\ E_{L^1}\le E_{L^2}+\varepsilon_{\mathrm{res}}
-\land H_{L^1}\le H_{L^2}+\varepsilon_{\mathrm{res}}\\
-&{}\land\ m_{L^1}\le m_{L^2}
-\land \bar c(L^1)\le\bar c(L^2)+\varepsilon_{\mathrm{dom}} .
+\operatorname{NW}(L^1,L^2)=1
+\land K_{L^1}=K_{L^2}
+\land \operatorname{BC}(L^1,L^2)=1\\
+&{}\land \bar c(L^1)\le\bar c(L^2)+\varepsilon_{\mathrm{dom}} .
 \end{aligned}
 \tag{17}
 $$
 
-Here $z^{\mathrm{sub}}$ is one only when subset dominance is enabled. Equality
-of active-cut state and branch compatibility are therefore mandatory whenever
-the visited masks differ.
+The nonempty-set condition prevents the initial empty-route label from
+removing a completed depot label. If $L^1$ has visited a subset of the tasks
+visited by $L^2$, every continuation retained by
+$\operatorname{BC}(L^1,L^2)$ remains available to $L^1$; equality of the
+active-cut state preserves future cut increments, and the reduced-cost test
+ensures that the corresponding completion from $L^1$ is no worse. Thus, a
+negative completion removed with $L^2$ has a no-worse negative counterpart
+from $L^1$. The compatibility test is evaluated explicitly for active
+same-route branch decisions. Open-trip labels are never compared because a
+later task can force a retroactive common departure shift, and an earlier raw
+arrival alone does not preserve the feasible-departure interval when
+task-site waiting is forbidden.
 
 The guarded completion bound uses only positive uncollected task-dual reward.
 Let $\bar c(L)$ be the partial reduced cost stored by label $L$, and let
@@ -1079,20 +1236,25 @@ $$
 \tag{18}
 $$
 
-All future objective/resource increments are treated optimistically as zero in
-(18), so the bound can only underestimate a completion's reduced cost. The
-current exact policy enables this pruning only in the proved empty
-branch-and-cut context; it is forced off when an active branch or cut context
-falls outside that proof scope.
+All future operating-cost and resource increments are nonnegative by the input
+domain in Section 3.1, all completion-time weights are nonnegative, and the
+normalization references in (9) are strictly positive. Treating those future
+increments optimistically as zero in (18) can therefore only underestimate a
+completion's reduced cost. Branch restrictions only remove otherwise feasible
+continuations and introduce no additional negative reduced-cost term, so this
+lower bound remains optimistic under an active branch context. By contrast,
+an active cut can add a cut-dual contribution that is absent from (18). The
+proof-bearing implementation therefore enables this pruning only when the
+active-cut context is empty and forces it off whenever a cut is active.
 
 Fast pricing and exact completion serve different purposes. The former may
 use dual ordering, learned priorities, active-support task sets, or limited
 path profiles to find negative columns quickly. A local failure to find one is
-not a proof. The native true-dual completion pass searches an exact
+not a proof. The proof-bearing true-dual completion pass must search an exact
 dominance-reduced representation of the complete multi-trip route space
-induced by the fixed graph and active context. The same-endpoint substitution
-in Section 3.1 and Lemma 1 accounts for path options removed before labeling.
-Only that pass can support
+induced by the fixed graph and active context. The equal-travel-time
+same-endpoint substitution in Section 3.1 and Lemma 1 accounts for the limited
+set of path options removed before labeling. Only such a pass can support
 
 $$
 \min_{p\in\mathcal{P}(n)}\bar c_p\ge -\varepsilon_{\mathrm{rc}}.
@@ -1101,6 +1263,16 @@ $$
 
 If completion reaches a time, memory, label, or coverage limit, the node
 remains incomplete.
+
+The frozen implementation realizes this rule in two equivalent forms. The
+fixed-route constructor intersects the task-induced departure intervals
+directly. The native pricing state stores the current common trip departure
+and its latest feasible value; when a later release time requires a delay, it
+shifts the common departure and every earlier completion contribution by the
+same amount rather than inserting task-site waiting. The compact formulation
+uses paired selected-arc temporal inequalities, so arrival and service start
+coincide. The timing policy, instance content, native engine, objective, and
+proof context are hash-bound in every accepted result row.
 
 > **Figure 3 placeholder (FIG11, method evidence available):** exact node
 > workflow from RMP solve through ordered pricing, exact completion,
@@ -1201,8 +1373,8 @@ active when a root cut is inherited by a descendant.
 
 Cut-aware Phase I and proof binding prevent a stale or partial context from
 being used to accept a node bound. The proof record identifies the active-cut
-set and the dual/context fingerprint seen by native pricing. Exact nonzero-dual
-projection may omit a cut from the native pricing state only when its dual is
+set and the dual/context fingerprint seen by proof-bearing pricing. Exact nonzero-dual
+projection may omit a cut from the pricing state only when its dual is
 exactly $0.0$, while preserving the full RMP and proof context; that projection
 is an implementation optimization, not a relaxation of cut validity.
 
@@ -1218,7 +1390,7 @@ Fractional task co-occurrence in the RMP solution supplies Ryan–Foster
 same/different-route candidates. For a selected pair $(i,j)$, one child
 requires $i$ and $j$ to occur in the same route and the other forbids
 that co-occurrence. The branch context is carried into route feasibility and
-native pricing, so generated columns satisfy every decision on the path from
+proof-bearing pricing, so generated columns satisfy every decision on the path from
 the root to the node. The disjunction concerns whether two prospecting tasks
 share a complete one-rover multi-trip route; it does not prescribe their local
 path geometry or require them to occur in the same depot-to-depot trip.
@@ -1270,7 +1442,7 @@ framework.
 
 ### 4.6.1 Graph representation
 
-The planned guidance representation preserves the directed logical graph and
+The planned guidance representation preserves the directed task graph and
 the distinction among path alternatives. Task nodes contain depot/task type,
 location, operation mode, science weight, demand, service quantities, time
 windows, and shadow/thermal indicators. Directed pair and path-option features
@@ -1373,15 +1545,15 @@ $\mathcal{P}(n)$; or termination without a pricing-closure proof.
 | 4 | Run ordered fast pricing and reconstruct each returned route's true reduced cost using (13). |
 | 5 | **if** an exact-feasible, exact-addable route has $\bar c_p<-\varepsilon_{\mathrm{rc}}$ **then return** the audited batch of negative-reduced-cost routes. |
 | 6 | Recheck every due item in $\mathcal{D}$ by true-reduced-cost reconstruction and exact processing; leave any unresolved item recorded. |
-| 7 | Run native SPPRC exact completion over $\mathcal{P}(n)$ with the true duals and the complete active context; clear a remaining item from $\mathcal{D}$ only when this pass covers its bound context. |
+| 7 | Run the verified exact SPPRC completion over $\mathcal{P}(n)$ with the true duals and the complete active context; clear a remaining item from $\mathcal{D}$ only when this pass covers its bound context. |
 | 8 | **if** exact completion finds an addable negative-reduced-cost route **then return** the audited batch containing that route. |
 | 9 | **if** exact completion exhausts the frontier, all reduced-cost and context audits pass, and $\mathcal{D}=\varnothing$ **then conclude** that no negative-reduced-cost route exists in $\mathcal{P}(n)$. |
 | 10 | **otherwise terminate** without a pricing-closure proof. |
 
 Lines 1–3 convert learned output into a permutation with bounded delay rather
 than a filter. Lines 4–6 retain true-reduced-cost admission and deferred-work
-accounting. Lines 7–10 form the exact completion tail: only exhaustive native
-pricing with no unresolved deferred-pricing obligation can prove the absence
+accounting. Lines 7–10 form the exact completion tail: only exhaustive
+proof-bearing pricing with no unresolved deferred-pricing obligation can prove the absence
 of a negative-reduced-cost route. The algorithm defines the permitted learned
 interface; it does not imply that the
 TBD pricing checkpoint in M002 has been trained or evaluated.
@@ -1438,6 +1610,14 @@ proof-bearing operation. It proves the correctness of a returned exact
 conclusion; it does not assert that every instance must reach such a conclusion
 within finite computational limits.
 
+For the revised formulation, this is both a mathematical and an implementation
+contract. A solver may invoke the theorem only after an audit verifies that
+its column constructor and exhaustive pricing procedure implement the
+depot-departure logic, no-wait transitions, restricted path-option
+preprocessing, and guarded label dominance stated below. The frozen revised
+implementation satisfies that activation condition; predecessor
+wait-permitted runs do not.
+
 Unless stated otherwise, Lemmas 1–5 and Theorem 1 use exact arithmetic and set
 all numerical comparison tolerances to zero. The positive tolerances used by
 the executable solver are qualified separately after the proof.
@@ -1460,37 +1640,64 @@ with $z^*(n)=+\infty$ when $\mathcal{F}(n)$ is empty.
 
 **Lemma 1 (completeness of the canonical route representation).** Suppose
 that the path travel, energy, risk, and shadow quantities are independent of
-absolute departure time; all completion-time weights are nonnegative; waiting
-has no reward; recharge duration depends only on the energy used; and
-same-endpoint path-option dominance is applied as defined in Section 3.1. For
-every feasible multi-trip route allowed by (4a)–(7), there is a route searched
-by the native SPPRC with the same task sequence, no larger resource
-consumption, and no larger cost (10). Consequently, an optimal solution over
-the fixed logical-path solution space has a representative in the searched
-route set.
+absolute departure time; the stored resource and cost quantities and all
+completion-time weights are nonnegative; waiting is permitted only at the
+depot and has no negative cost; recharge duration depends only on the energy
+used; and path-option dominance is restricted to the equal-travel-time rule in
+Section 3.1. For every feasible multi-trip route
+allowed by (4a)–(7), there is a canonical route with the same task sequence,
+the same task-site and en-route no-wait policy, no larger resource consumption, and no
+larger cost (10). Consequently, an optimal solution over the fixed
+logical-path solution space has a representative in the route set searched by
+any exact pricing procedure that implements Eqs. (3), (6a), and (16)–(19).
 
-*Proof.* Fix a feasible task sequence and its path-option choices. If a
-selected option was removed by same-endpoint dominance, replace it by the
-retained option that is weakly better in travel time, energy, risk, distance,
-and shadow exposure. The replacement leaves the visited tasks and their order
-unchanged, and therefore preserves all master, cut, and branch coefficients.
-It cannot violate a time window, energy limit, shadow limit, or mission
-horizon, and nonnegative objective coefficients make the route cost weakly
-smaller. Apply this substitution until all selected options are retained.
+*Proof.* Fix one feasible multi-trip route, including its task sequences and
+path-option choices. If a selected path option was removed under Section 3.1,
+replace it by its retained equal-travel-time counterpart. Every task time
+within the affected trip remains unchanged, while energy, risk, distance, and
+shadow exposure weakly decrease. Keeping the current and subsequent trip
+departures unchanged, any reduction in recharge duration is absorbed as
+additional depot waiting. Hence all task arrival and completion times can be
+preserved, while depot availability weakly improves. The replacement
+preserves all task-cover, cut, and branch coefficients and cannot violate a
+resource or temporal constraint.
 
-Starting from the first trip, replace each service start by the earliest value
-allowed by its arrival time and ready time, and start every later trip no
-earlier than the preceding return, docking, and recharge completion. Induction
-over task visits and trip boundaries shows that no resulting arrival, service
-completion, return, or trip-end time is later than in the preceding feasible
-schedule. The replacement therefore preserves all release times and cannot
-violate an upper time window or the mission horizon. Load is unchanged. By the
-stated time-independence assumptions, the retained path attributes do not
-change with the earlier departure, and nonnegative completion-time weights
-make the objective weakly smaller. Thus neither a dominated option nor
-intentional delay is required by an optimal route. The numbers of tasks,
-retained path options, and trip slots are finite, so the resulting canonical
-route set is finite and contains an optimal representative. $\square$
+Consider trip $s$ after all earlier trips have been fixed canonically, and let
+$a_s$ be the resulting earliest depot-availability time. For the fixed task
+sequence and path choices, the offsets $\delta_{j,s}$ and duration $\chi_s$ in
+(3) are constants. No waiting is allowed after departure, so task $i_j$ meets
+its time window exactly when
+
+$$
+r_{i_j}-\delta_{j,s}
+\le t_s^0
+\le D_{i_j}-\sigma_{i_j}-\delta_{j,s}.
+$$
+
+The depot-availability and mission-horizon requirements add
+$t_s^0\ge a_s$ and
+$t_s^0\le H^{\mathrm{mis}}-\chi_s$. Their intersection is precisely
+$[\underline t_s^0,\overline t_s^0]$ in (3). The original trip is feasible,
+so this interval is nonempty. Choosing
+$t_s^0=\underline t_s^0$ therefore preserves every release time, due time,
+return, recharge, and horizon constraint without creating task-site or
+en-route waiting. It also gives the earliest completion of every task in that
+fixed trip.
+
+For $s=1$, $a_1=0$. Suppose trips $1,\ldots,s-1$ have been replaced by their
+canonical schedules. Their final depot availability is no later than under
+any later feasible choice. If the next trip would otherwise need to start
+later, the rover can wait at the depot. More specifically, the departure used
+by the original feasible trip remains in the revised interval because its
+lower availability bound has only decreased; hence the interval for trip $s$
+is not lost. Induction over the ordered trips gives a feasible canonical
+multi-trip route. Load and path resources are unchanged apart from
+the weak improvements caused by equal-travel-time option substitution. Depot
+waiting adds no trip resource or operating cost, and nonnegative science
+weights make the earliest feasible completion vector weakly preferable.
+Finally, the numbers of tasks, retained path options, and trip slots are
+finite. The canonical route set is therefore finite and contains an optimal
+representative. $\square$
 
 **Lemma 2 (equivalence of route selection and feasible fleet schedules).**
 At the root node, every vector in $\mathcal{F}(n_0)$ defines a member of
@@ -1513,7 +1720,7 @@ represented without loss. $\square$
 
 **Lemma 3 (exact node-LP closure).** Assume that the RMP at node $n$ is solved
 to LP optimality, Eq. (13) is used by the RMP, pricing, and reduced-cost audit,
-and native exact completion explores all retained labels not removed by a
+and proof-bearing exact completion explores all retained labels not removed by a
 proved extension-preserving feasibility, dominance, or completion-bound rule
 under the current branch-and-cut context. If exact completion proves
 nonnegative reduced cost over this dominance-reduced representation, then
@@ -1528,11 +1735,12 @@ z_{\mathrm{RMP}}(n)
 $$
 
 *Proof.* Let $(\boldsymbol{\pi},\mu,\boldsymbol{\gamma})$ be the audited optimal
-RMP dual solution. A same-endpoint path substitution leaves task, fleet, cut,
-and branch coefficients unchanged and weakly decreases $c_p$; it therefore
-weakly decreases the reduced cost in (13). By Lemma 1, a negative-reduced-cost
-route using a removed option would have a retained feasible counterpart with
-no greater reduced cost. Exact completion and (19) thus imply, in exact
+RMP dual solution. An equal-travel-time same-endpoint path substitution leaves
+task, fleet, cut, branch, and timing coefficients unchanged and weakly
+decreases $c_p$; it therefore weakly decreases the reduced cost in (13). By
+Lemma 1, a negative-reduced-cost route using a safely removed option would
+have a retained feasible counterpart with no greater reduced cost. Exact
+completion and (19) thus imply, in exact
 arithmetic, that $\bar c_p\ge0$ for every
 $p\in\mathcal{P}(n)$. Hence the RMP dual vector
 satisfies the dual constraint associated with every column of the full node
@@ -1549,13 +1757,17 @@ integer solution in $\mathcal{F}(n)$, exists. $\square$
 
 The extension-preserving qualification in Lemma 3 is essential. Resource
 pruning in (16) removes only labels that already violate a defining
-constraint. Same-endpoint path-option dominance is covered by the substitution
-argument in Lemma 1. Label dominance in (17) may be used by a proof-bearing completion pass
-only when each removed label has a retained label capable of reproducing
-every feasible continuation with no larger reduced cost. The completion bound
-in (18) may be used only in its proved context. Any unsupported pruning rule
-must be disabled. If a time, memory, label, or frontier-coverage limit prevents
-exhaustive completion, the node remains unresolved and Lemma 3 does not apply.
+constraint, including an empty feasible depot-departure interval. The
+equal-travel-time path-option rule is covered by the substitution argument in
+Lemma 1. Label dominance in (17) may be used by a proof-bearing completion
+pass only when each removed label has a retained label capable of reproducing
+every feasible continuation with no larger reduced cost. The implemented rule
+therefore compares only depot labels, excludes the empty initial visited set,
+and requires the active-cut and branch-continuation guards in (17);
+open-trip dominance is disabled. The completion bound in (18) may be used only
+in its proved context. Any unsupported pruning rule must be disabled. If a
+time, memory, label, or frontier-coverage limit prevents exhaustive
+completion, the node remains unresolved and Lemma 3 does not apply.
 
 **Lemma 4 (preservation under cuts and branching).** Admitting a root-node
 SRI-3 cut defined by (20) does not remove an integer solution of (12). For an
@@ -1669,7 +1881,7 @@ computationally reported conclusion is tolerance-qualified rather than the
 exact-arithmetic equality itself. This numerical qualification is distinct
 from the combinatorial exactness established by Lemmas 1–5. It is also
 distinct from physical-model validity: Eq. (27) applies only to the frozen
-logical graph and declared path alternatives.
+task graph and declared path alternatives.
 
 The do-no-harm audit operationalizes the theorem's conditions by checking
 incumbent feasibility, consistency of the objective and proof scope,
@@ -1713,7 +1925,7 @@ The benchmark manifest contains 120 accepted instances, with 20 instances at
 each task scale $5$, $10$, $20$, $30$, $50$, and $100$. All instances use the
 same $50\,\mathrm{km}\times50\,\mathrm{km}$ base map and forward-looking
 mobility scenario; scale changes task density rather than spatial extent. Each
-directed logical edge follows the recorded three-path policy, and the instances
+directed task-graph edge follows the recorded three-path policy, and the instances
 contain detect, drill, and sample operations. Fleet size and mission horizon
 increase with scale according to the manifest. Specifically, task scales
 $5$, $10$, $20$, $30$, $50$, and $100$ use fleet sizes
@@ -1723,6 +1935,15 @@ planning windows range from $16$ to $76$ h rather than one lunation. The corpus
 count is not an exact-solve count: the frozen exact baseline reported in
 Section 6 covers the 80 instances at scales 5–30, whereas scales 50 and 100
 currently have bounded fail-closed evidence only.
+
+The current route constructor, compact formulations, Python pricing path, and
+native exact pricer implement the no-task-wait rule. Their shared policy is
+bound to generated instances, cached pricing graphs, solver payloads, and
+proof records. A completed 80-instance run at scales 5--30 supplies new exact
+evidence for this formulation. Earlier experiments that permitted
+early-arrival waiting remain a separate historical evidence class. Their
+runtime, pricing workload, cut-effect, state-size, and scalability
+measurements are not transferred to the revised model.
 
 The map-source catalog records locally available LOLA-derived slope,
 roughness, permanently shadowed region, and illumination-related inputs and
@@ -1812,8 +2033,8 @@ Three exact variants isolate the two learned actions:
 
 - **L0 — Exact control:** exact BPC without learned ordering.
 - **L1 — Pricing guidance:** L0 plus learned pricing order, with the same RMP,
-  objective, native completion, deterministic cuts, branch logic, and proof
-  records.
+  objective, verified no-task-wait exact completion, deterministic cuts, branch logic,
+  and proof records.
 - **L2 — Pricing and branch guidance:** L1 plus branch-candidate ranking over
   the same exact-valid candidate sets.
 
@@ -1828,6 +2049,32 @@ that its project implementation already exists.
 
 ## 5.5 Implementation details
 
+The no-task-wait implementation is bound by an immutable manifest covering
+the route constructor, compact formulations, Python and native pricing paths,
+configuration, native binary, tests, and instance contents. For a fixed trip,
+the constructor computes a common feasible-departure interval. The native
+state represents its lower endpoint by the current trip departure and retains
+the latest feasible departure explicitly; a later task release shifts the
+whole trip and its previously accumulated weighted-completion contribution.
+Service begins on arrival, and no task-site or en-route waiting variable is
+created. Path-option preprocessing requires equal travel time within the
+recorded proof-bearing native tolerance, active-trip dominance is disabled, and depot
+subset dominance is admitted only for a nonempty visited set with identical
+cut state and continuation-preserving branch compatibility.
+The optional completion bound is disabled in the frozen 80-instance baseline;
+therefore, its branch-context scope does not affect the results in Section 6.1.
+
+Targeted tests verify policy/hash binding, rejection of a route that would be
+feasible only through task waiting, and agreement between direct pricing and
+the compact model. The native test suite independently checks the same timing
+semantics. The frozen 80-instance package contains one fresh strict-cold
+runtime per instance, records no solver resume or external pool, binds a
+single source bundle and native engine, and passes its independent freeze
+verification. These artifacts activate the revised-model baseline in Section
+6.1. New runs remain necessary before any historical cut-effect,
+state-refinement, or scale-50/100 resource measurement is attributed to the
+no-task-wait model.
+
 [[TBD-M002: Insert pricing model input dimensions, architecture, targets,
 training loss, optimizer, selection criterion, checkpoint hash, calibration,
 and inference hardware/software.]]
@@ -1841,8 +2088,12 @@ that affect the evidence lineage.
 
 ## 5.6 Exactness verification
 
-Safety is evaluated before workload. The zero-tolerance endpoints cover four
-failure groups: (i) an unsupported exact conclusion, an unsupported claim that
+Safety is evaluated before workload. The frozen implementation baseline has passed the
+implementation-verification gate for the no-task-wait formulation. Before
+learning variants are compared, each variant must bind the same timing policy,
+instance content, objective, pricing semantics, and proof context, and no task
+extension may insert a task-site or en-route delay. The zero-tolerance
+endpoints then cover four failure groups: (i) an unsupported exact conclusion, an unsupported claim that
 no negative-reduced-cost route exists, or invalid node pruning; (ii) objective
 or reduced-cost mismatches; (iii)
 unresolved deferred-pricing obligations or permanent loss of a required
@@ -1888,51 +2139,65 @@ frequency, OOD definition, held-out rows, and frozen summaries.]]
 
 # 6. Computational Results
 
-The results are ordered by evidence maturity. Sections 6.1 and 6.2 report
-frozen exact experiments, Section 6.3 reports diagnostic evidence without
-promotion claims, Section 6.4 reserves the pending learning evaluation,
-Section 6.5 reserves the paired seasonal operating-phase analysis, and
-Section 6.6 states the current resource-limited boundary.
+The results are ordered by evidence maturity. Section 6.1 reports the frozen
+exact baseline for the no-task-wait formulation. Sections 6.2 and 6.3 retain
+historical deterministic-cut and exact-state evidence under the predecessor
+wait-permitted timing rule. Section 6.4 reserves the pending learning
+evaluation, Section 6.5 reserves the paired seasonal operating-phase
+analysis, and Section 6.6 states the current historical resource-limited
+boundary.
 
 ## 6.1 Exact baseline
 
-The frozen no-cut baseline establishes the current exact framework before
-learning is evaluated. All 80 instances at scales 5, 10, 20, and 30 reached
-exact termination and passed the recorded correctness and integrity checks
-under the bound build and native engine. Each scale contains 20 instances.
-This result does not extend to scales 50 or 100.
+The frozen implementation baseline uses the no-task-wait timing rule and deterministic
+root-only SRI-3. All 80 instances at scales 5, 10, 20, and 30 reached exact
+termination and passed the recorded correctness and integrity checks under
+the bound source bundle, configuration, native engine, and instance hashes.
+Each scale contains 20 instances and one fresh strict-cold run per instance;
+solver resume and external column pools were disabled. This result does not
+extend to scales 50 or 100 and does not measure a learning effect.
 
-**Table 1. Frozen strict-cold no-cut baseline. Times are descriptive for the
-bound build and 20 instances per scale.**
+**Table 1. Frozen strict-cold exact baseline under the no-task-wait timing rule
+and root-only SRI-3. Times are descriptive for the bound build and 20
+instances per scale.**
 
 | Tasks | Exact / total | Mean time (s) | Median time (s) | Maximum time (s) |
 |---:|---:|---:|---:|---:|
-| 5 | 20 / 20 | 0.396 | 0.394 | 0.438 |
-| 10 | 20 / 20 | 0.821 | 0.754 | 1.266 |
-| 20 | 20 / 20 | 32.352 | 18.391 | 129.719 |
-| 30 | 20 / 20 | 493.045 | 346.038 | 1736.859 |
+| 5 | 20 / 20 | 0.442 | 0.446 | 0.479 |
+| 10 | 20 / 20 | 1.461 | 0.988 | 5.178 |
+| 20 | 20 / 20 | 39.820 | 17.106 | 201.125 |
+| 30 | 20 / 20 | 177.358 | 77.281 | 716.426 |
 
 Runtime increases sharply across these recorded scales, and the distributions
 are skewed at scales 20 and 30 because their means exceed their medians. The
 table is descriptive. It does not identify an asymptotic law or prove that one
-solver component alone causes the growth.
+solver component alone causes the growth. The predecessor wait-permitted
+control is not used as a speed comparator because prohibiting task waiting
+changes the feasible set and, for most instances, the optimum. In the paired
+instance audit, the revised objective never decreased: it was unchanged for
+17 scale-5 instances and increased for the remaining 63 instances. This
+monotonicity is a model-consistency check, not an algorithmic performance
+claim.
 
 > **Figure 4 placeholder (FIG12, evidence available):** distribution-aware
-> strict-cold baseline time by scale, preferably on a logarithmic time axis.
+> strict-cold no-task-wait baseline time by scale, preferably on a logarithmic
+> time axis.
 > The caption must bind the figure to the frozen build and state 20 instances
 > per scale.
 
 ## 6.2 SRI-3 evaluation
 
 The formal study evaluated deterministic root-only SRI-3, not a learned
-policy. Its 1040 strict-cold slots used fresh runtimes and AB/BA alternation.
+policy, under the legacy wait-permitted timing rule. Its 1040 strict-cold slots
+used fresh runtimes and AB/BA alternation.
 Every slot passed the recorded correctness gate, and scales 5, 10, and 20
 passed their promotion gates. Scale 30 did not. The candidate was therefore
 not promoted, and the production configuration continued to omit this cut
 family.
 
-**Table 2. Formal deterministic root-only SRI-3 promotion decision. A ratio
-below one favors SRI-3, but promotion follows the complete predefined gate.**
+**Table 2. Formal deterministic root-only SRI-3 promotion decision under the
+legacy wait-permitted timing rule. A ratio below one favors SRI-3, but
+promotion follows the complete predefined gate.**
 
 | Tasks | Correctness | Live/base mean | Paired point estimate | Paired 95% interval | Promotion |
 |---:|---|---:|---:|---:|---|
@@ -1946,11 +2211,13 @@ meet the required threshold, and the interval crossed one. Reporting the
 favorable median alone would therefore contradict the formal decision.
 Deterministic cut evidence is included to document the exact engine and its
 negative promotion result; it is not evidence that learned pricing or branch
-ranking is effective.
+ranking is effective, and it is not a validation of the revised no-task-wait
+formulation.
 
-## 6.3 Exact-state refinements
+## 6.3 Legacy exact-state refinements
 
-Two exact state optimizations were audited after the formal SRI-3 decision.
+Two exact state optimizations were audited after the formal SRI-3 decision
+within the same legacy timing model.
 Exact nonzero-dual projection retained the full RMP and proof context while
 binding a projected nonzero context separately. Packed exact-overlap state
 reduced cut-state storage from 17 to 8 bytes and label-state storage from 168
@@ -1971,6 +2238,9 @@ non-promotion evidence.
 The learning-result structure is present, but no learning result is currently
 claimed. All values remain deliberately empty until the corresponding frozen
 artifacts pass the exactness gates in Section 5.6.
+The implementation baseline in Table 1 verifies the revised timing semantics
+and exact closure, but it is not a substitute for the still-pending,
+strictly paired L0 rows in Table 3.
 
 **Table 3. Exact-safety audit for learning variants.**
 
@@ -2003,9 +2273,10 @@ figure only after M001 defines the split and M005 supplies frozen safety/OOD
 rows.]]
 
 These placeholders identify the evidence required to test the paper's central
-guidance claim. Their position after exact-framework validation preserves the
-intended evidence sequence without converting an unfinished experiment into a
-result.
+guidance claim. Their position after the explicitly labeled legacy-engine
+evidence preserves the intended evidence sequence without converting an
+unfinished experiment into a result. Every activated L0/L1/L2 row must use
+the verified no-task-wait implementation.
 
 ## 6.5 Seasonal operating phases
 
@@ -2033,14 +2304,16 @@ epochs, or the performance of an online replanning policy.
 
 ## 6.6 Scalability limits
 
-Bounded strict-cold runs were performed on instance 001 at scales 50 and 100
-under an effective 8 GiB host-memory limit. Both runs terminated with
+Bounded strict-cold runs were performed with the legacy wait-permitted
+implementation on instance 001 at scales 50 and 100 under an effective 8 GiB
+host-memory limit. Both runs terminated with
 incomplete pricing searches after reaching the memory limit. Because the
 search frontier was nonempty, the solver correctly withheld any exact
 conclusion. Both records passed all checks designed to detect an unsupported
 proof or pruning decision.
 
-**Table 4. Bounded resource-limit evidence.**
+**Table 4. Bounded resource-limit evidence under the legacy wait-permitted
+timing rule.**
 
 | Tasks | Wall time (s) | Peak RSS (GiB) | Terminal class | Exact conclusion |
 |---:|---:|---:|---|---|
@@ -2055,13 +2328,16 @@ either scale.
 
 ## 7.1 Established evidence
 
-The available evidence establishes the prerequisite exact framework. The
-framework closes the frozen 80-instance scale-5–30 set, preserves one normalized objective
-across master and pricing, records a failed deterministic cut promotion
-without selective omission, and terminates fail-closed when resource limits
-prevent exact completion. It does not yet establish whether learned guidance
-preserves all L0 outcomes in a frozen run package or reduces work after
-overhead and fallback are counted.
+The available evidence establishes both the proof discipline and exact
+closure of the no-task-wait baseline on the frozen 80-instance scale-5--30 set.
+The revised implementation preserves one normalized objective across master
+and pricing, binds the timing policy and instance contents to each proof
+record, and passes the compact/native timing checks. Historical experiments
+also record a failed deterministic cut promotion without selective omission
+and fail-closed termination when resource limits prevented exact completion,
+but those measurements used the predecessor wait-permitted model. No evidence
+yet establishes whether learned guidance preserves all revised L0 outcomes or
+reduces work after overhead and fallback are counted.
 
 [[TBD-DISC-RQ1-RQ5: After EXP-L0/L1/L2/G and EXP-EPOCH are frozen, answer
 RQ1–RQ5 in order. Each answer must state the measured effect, uncertainty,
@@ -2089,7 +2365,11 @@ action control over proof.
 
 The model treats prospecting as fleet-level movement and resource allocation:
 which rover serves each task, how tasks are sequenced across trips, which
-precomputed path option is chosen, and when a rover returns and recharges.
+precomputed path option is chosen, when each trip departs after any depot wait,
+and when a rover returns and recharges. Prohibiting candidate-site waiting
+avoids schedules that deliberately arrive early and remain at a prospecting
+location solely to satisfy a later opening time; temporal flexibility is
+concentrated at the support depot.
 If future learning experiments show lower exact-solver effort under unchanged
 proof conditions, the direct implication will be the ability to evaluate more
 instances, or the same instances under tighter computational budgets, within
@@ -2115,6 +2395,15 @@ validity, branch construction, or the complete pricing problem. Every delayed
 negative candidate must be released or covered by exact repricing, and every
 proof-bearing node bound must bind the active branch/cut context. Removing any
 of those conditions invalidates the theorem's conclusion.
+
+For the no-task-wait formulation, the unchanged exact path also includes the
+departure interval in (3), the temporal equalities in (6a), the pruning rule
+in (16), and the guarded state comparison in (17). The frozen revised
+implementation realizes this contract. Theorem 1 may therefore be invoked
+only for rows that additionally pass the recorded pricing-completion,
+node-bound, branch-tree, and proof-ledger conditions; all 80 rows in Table 1
+did so. An exact status from a predecessor wait-permitted run is not
+transferable.
 
 Exactness is also conditional on the fixed logical-path solution space. The
 solver may prove an optimum over all feasible multi-trip routes built from the
@@ -2150,6 +2439,11 @@ Independent epoch-conditioned instances expose environmental sensitivity
 without introducing an unsupported within-route light-evolution model. The
 formulation does not model online map revision, stochastic traction,
 unexpected hardware faults, or adaptive scientific task creation.
+It also treats depot standby as supported by base-provided power and thermal
+control. If that infrastructure cannot be assumed, depot waiting would require
+explicit standby-energy and thermal-exposure accounting, and the departure
+interval, recharge coupling, pricing state, and exactness proof would need to
+be revised.
 
 The three path options per directed edge create a tractable and auditable
 interface between path preprocessing and exact fleet routing. They also bound
@@ -2159,12 +2453,13 @@ and proof audit.
 
 ## 7.6 Computational limitations
 
-The frozen exact baseline closes scales 5–30 but encounters the recorded
-memory boundary on the tested 50- and 100-task instances. Legal
-incompleteness confirms that the proof boundary is respected; it does not
-remove the scalability problem. Pricing-state growth, branch-tree workload,
-and memory consumption therefore remain practical limits of the present exact
-framework.
+The no-task-wait exact baseline closes scales 5--30, with the scale-30
+distribution still showing substantial computational variation. The only
+available scale-50 and scale-100 resource-bound runs used the predecessor
+wait-permitted model. Their legal incompleteness confirms fail-closed behavior
+for that implementation but does not quantify the revised model at those
+scales. New no-task-wait runs are required before drawing a revised-model
+scalability conclusion.
 
 The principal empirical limitation is more immediate: no frozen training
 split, selected checkpoint, L0/L1/L2 ablation, or held-out learning package is
@@ -2175,7 +2470,8 @@ implied result.
 
 ## 7.7 Future work
 
-The next empirical steps are to freeze M001–M005 for the correctness-first
+The no-task-wait implementation and its scale-5--30 verification package are
+complete. The next empirical steps are to freeze M001–M005 for the correctness-first
 learning protocol and M006 for the paired seasonal operating-phase analysis. The
 multi-epoch construction also supplies a conservative route toward operational
 updating: a rolling-horizon system could refresh the illumination layer,
@@ -2192,8 +2488,10 @@ models, heterogeneous rover capabilities, and transfer across map regions.
 
 This paper develops a pricing-led, branching-assisted learning-guided exact
 Branch-Price-and-Cut framework for multi-trip lunar water-ice exploration
-routing. The formulation selects one-rover multi-trip route columns over a fixed
-logical-path solution space and applies the normalized sum of operating cost,
+routing. The formulation selects one-rover multi-trip route columns over a
+fixed logical-path solution space, prohibits waiting at candidate tasks and en
+route, and places all schedule adjustment at the support depot through
+trip-departure intervals. It applies the normalized sum of operating cost,
 risk, and $0.4$ times science-weighted completion time. Learning is restricted
 to ordering pricing work and ranking exact-valid branch candidates;
 deterministic cuts, exact pricing completion, exact branch construction,
@@ -2201,12 +2499,13 @@ fail-closed incomplete handling, bounds, pruning, and proof records remain on
 the exact path.
 
 Current evidence establishes exact closure for the frozen 80-instance
-scale-5–30 no-cut baseline, a formal non-promotion decision for the
-deterministic root-only SRI-3 candidate, and fail-closed resource-limit
-behavior on the tested scale-50 and scale-100 instances. It does not establish
-a learning benefit or a seasonal operating-phase result. The L0/L1/L2 safety,
-workload, overhead, and held-out result slots remain empty until M001–M005 are
-supplied, and the paired phase result remains empty until M006 is supplied.
+scale-5--30 no-task-wait baseline. Historical evidence additionally records a
+formal non-promotion decision for a deterministic root-only SRI-3 candidate
+and fail-closed resource-limit behavior on the tested scale-50 and scale-100
+instances, but those experiments used the predecessor wait-permitted timing
+rule and are not transferred to the revised model. The L0/L1/L2 learning
+safety, workload, overhead, and held-out evidence and the paired
+seasonal-phase result are not yet available.
 
 The framework provides a controlled way to test computational guidance without
 letting an unfinished learned component redefine the transportation problem or
@@ -2220,18 +2519,23 @@ whether learned ordering changes exact-solver effort in practice.
 The proof in Section 4.7 uses the fixed route and master notation of
 Eqs. (1)–(13) and the exact-component conditions in Eqs. (14)–(23). Lemma 1
 requires time-independent path/resource quantities, nonnegative
-completion-time weights, no reward for waiting, and time-independent recharge
-duration. Independently solving several epoch-conditioned instances preserves
-these assumptions because hourly environmental states are summarized before
-optimization and each resulting instance freezes its path quantities. The
-claim is model-level exactness for that window-aggregated instance, not
-physical equivalence to every hourly light state. In contrast, a future model
-with departure-time-dependent illumination, thermal risk, travel, or recharge
-inside one solve can invalidate earliest-feasible canonical-route completeness
-and therefore requires a new pricing state and proof.
+completion-time weights, task-site and en-route waiting to be prohibited,
+depot waiting to be allowed without a negative cost, and recharge duration to
+depend only on trip energy. For a fixed task sequence and fixed path options,
+each task window is translated into an interval for the common trip departure;
+the intersection with depot availability and the mission horizon must be
+nonempty. The proof selects its lower endpoint. Independently solving several
+epoch-conditioned instances preserves these assumptions because hourly
+environmental states are summarized before optimization and each resulting
+instance freezes its path quantities. The claim is model-level exactness for
+that window-aggregated instance, not physical equivalence to every hourly light
+state. In contrast, a future model with departure-time-dependent illumination,
+thermal risk, travel, or recharge inside one solve can invalidate this
+departure-interval construction and therefore requires a new pricing state and
+proof.
 
 Lemma 3 requires an optimal RMP, one audited reduced-cost definition,
-extension-preserving pricing reductions, exhaustive native pricing under the
+extension-preserving pricing reductions, exhaustive proof-bearing pricing under the
 active branch/cut context, and no unresolved deferred-pricing obligation.
 Lemma 4 requires only valid
 root SRI-3 rows and exact same-route/different-route child construction. If a
@@ -2242,8 +2546,15 @@ valid node bounds, verified proof records, and no open or unresolved node.
 The mathematical equalities (25) and (27) use exact arithmetic. Executable
 conclusions are interpreted within their recorded LP, reduced-cost, bound,
 integrality, and feasibility tolerances. These tolerances, together with the
-frozen logical graph, path alternatives, objective schema, branch/cut context,
+frozen task graph, path alternatives, objective schema, branch/cut context,
 and audited proof records, form part of the reported proof scope.
+
+The frozen revised executable prohibits early-arrival waiting at candidate
+tasks. Its proof scope binds the displayed no-wait transitions,
+depot-departure logic, path preprocessing, label dominance, exact-completion
+coverage, numerical tolerances, instance content, and engine hash. The
+predecessor wait-permitted executable and its historical runs remain outside
+that scope.
 
 # Appendix B. Scope of Root-Only SRI-3 Evidence
 
@@ -2252,7 +2563,11 @@ predefined experimental separation and retention policy used in this paper.
 Descendant nodes inherit admitted root cuts but perform no new SRI separation.
 Existing correctness evidence does not by itself establish a runtime benefit,
 and later projection, packing, replay, or benchmark-only evidence cannot be
-promoted without its own frozen design and acceptance manifest.
+promoted without its own frozen design and acceptance manifest. The
+deterministic cut-effect and state-refinement experiments reported in Sections
+6.2 and 6.3 used the legacy wait-permitted timing rule. The revised baseline
+in Section 6.1 uses root-only SRI-3 as a fixed control component but is not a
+paired estimate of that cut family's effect.
 
 # Appendix C. Exploratory Evidence for the Optimized Candidate
 
@@ -2263,16 +2578,22 @@ Paired geometric-mean SRI-3/base ratios were approximately 0.9912, 0.9860,
 as benchmark-only: the formal design was incomplete, not all scales satisfied
 the promotion criterion, and a change to the default production policy was
 not permitted. These values are therefore exploratory, not formal promotion
-or learning results.
+or learning results, and not evidence for the no-task-wait formulation.
 
 # Appendix D. Resource-Limited Runs
 
 The scale-50 and scale-100 bounded rows in Table 4 are legal incomplete records
-under the effective 8 GiB host limit. Their proof blockers are the resource
-limit, not a claim of infeasibility. No mature pool, external probe, manual
-column, or resume was used, and the recorded false-exact count is zero.
+under the effective 8 GiB host limit and the legacy wait-permitted timing rule.
+Their proof blockers are the resource limit, not a claim of infeasibility. No
+mature pool, external probe, manual column, or resume was used, and the
+recorded false-exact count is zero.
 
 # Appendix E. Pending Learning Artifacts
+
+[[TBD-ABS-RESULT: After the paired L0/L1/L2 evidence and every exact-safety
+gate are frozen, replace the abstract's pending-validation sentence with one
+evidence-bounded result sentence covering the learning effect, inference
+overhead, exact-fallback frequency, and uncertainty.]]
 
 [[TBD-M001: Dataset, split, target, and leakage manifest.]]
 
@@ -2283,6 +2604,8 @@ column, or resume was used, and the recorded false-exact count is zero.
 [[TBD-M004: L0/L1/L2 paired run manifests, rows, summaries, and uncertainty.]]
 
 [[TBD-M005: Exact-safety, overhead, fallback, held-out, and OOD package.]]
+
+[[TBD-M006: Paired mission-epoch instance and four-phase comparison package.]]
 
 # Editorial Reference-Key Map (Working Draft Only)
 

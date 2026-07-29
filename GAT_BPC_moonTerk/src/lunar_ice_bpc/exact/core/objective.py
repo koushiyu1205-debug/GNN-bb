@@ -8,6 +8,7 @@ from typing import Iterable, Mapping
 import weakref
 
 from lunar_ice_bpc.domain.scenario import PATH_TYPES
+from lunar_ice_bpc.exact.core.columns import build_timed_sortie
 from lunar_ice_bpc.exact.core.data import LunarIceData
 
 
@@ -308,39 +309,23 @@ def _single_task_reference(data: LunarIceData, task_id: str) -> dict[str, float]
     best_risk = float("inf")
     best_completion = float("inf")
     for out_type in PATH_TYPES:
-        out = data.option("depot", str(task_id), out_type)
-        arrival = float(out.travel_time_min)
-        service_start = max(arrival, float(task.ready_time))
-        if service_start > float(task.due_time) - float(task.service_time) + _EPS:
-            continue
-        completion = service_start + float(task.service_time)
         for back_type in PATH_TYPES:
-            back = data.option(str(task_id), "depot", back_type)
-            energy = float(out.energy_proxy) + float(task.service_energy) + float(back.energy_proxy)
-            shadow = (
-                float(out.shadow_exposure_min)
-                + float(task.local_shadow_score) * float(task.service_time)
-                + float(back.shadow_exposure_min)
+            sortie = build_timed_sortie(
+                data,
+                (str(task_id),),
+                (str(out_type), str(back_type)),
+                start_time=0.0,
             )
-            return_time = completion + float(back.travel_time_min)
-            end_time = return_time + float(data.dock_overhead_min) + energy / max(_EPS, float(data.recharge_power_proxy_per_min))
-            if float(task.demand) > float(data.capacity) + _EPS:
+            if not sortie.feasible:
                 continue
-            if energy > float(data.energy_limit) + _EPS:
-                continue
-            if shadow > float(data.max_shadow_exposure_per_sortie) + _EPS:
-                continue
-            if end_time > float(data.horizon) + _EPS:
-                continue
-            risk = float(out.risk_integral) + service_risk_value(task) + float(back.risk_integral)
-            distance = float(out.distance_km) + float(back.distance_km)
+            completion = float(sortie.task_completion_times[str(task_id)])
             cost = operating_cost_value(
-                service_cost=float(task.service_cost),
-                distance_km=distance,
-                energy_proxy=energy,
+                service_cost=float(sortie.service_cost),
+                distance_km=float(sortie.distance_km),
+                energy_proxy=float(sortie.energy_proxy),
             )
             best_cost = min(best_cost, cost)
-            best_risk = min(best_risk, risk)
+            best_risk = min(best_risk, float(sortie.risk_integral))
             best_completion = min(best_completion, completion)
     if not all(isfinite(value) for value in (best_cost, best_risk, best_completion)):
         return None

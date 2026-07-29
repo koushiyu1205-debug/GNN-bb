@@ -1,0 +1,29 @@
+{
+  "exact_safe": false,
+  "expanded_node_count": 1,
+  "global_lower_bound": null,
+  "guidance_lifecycle_overhead_sec": 0.0,
+  "incomplete_node_count": 0,
+  "matched_end_to_end_wall_sec": 151.677618,
+  "node_count": 1,
+  "objective": null,
+  "requested_rank_index": 0,
+  "root_wall_sec": 57.478326,
+  "target_fallback_to_p0": false,
+  "target_legal_branch_shortlist_hash_after_sort": null,
+  "target_legal_branch_shortlist_hash_before_sort": null,
+  "target_node_id": "node_000",
+  "target_path_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "target_path_reached_once": true,
+  "target_path_signature": [],
+  "target_selected_candidate_id": null,
+  "target_selected_rank_index": null,
+  "target_top3_candidate_ids": [
+    "branch_pair:ice_site_020|ice_site_021",
+    "branch_pair:ice_site_020|ice_site_022",
+    "branch_pair:ice_site_021|ice_site_022"
+  ],
+  "tree_result_sha256": "edf9b37294bc74f92553f9a376d8fefebdff7a807c47afae8dffcdd9ffa1bb75",
+  "tree_wall_sec": 94.199293,
+  "universe_safe": true
+}

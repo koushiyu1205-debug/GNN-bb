@@ -1,0 +1,320 @@
+{
+  "active_column_count": 695,
+  "baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "deployable": false,
+  "development_only": true,
+  "guidance_branch_pair_drop_count": 0,
+  "guidance_filter_count": 0,
+  "instance_content_hash": "03b93358f5f4974f",
+  "instance_id": "lunar_ice_020_058_seed202807308",
+  "is_branch_training_label": false,
+  "is_certificate": false,
+  "is_exact_opportunity_decision": false,
+  "is_natural_opportunity_rate_evidence": false,
+  "may_permanently_filter_development_instance": false,
+  "note": "Restricted-RMP fractionality is a collection scheduler only. At least 25% of development attempts remain content-hash-first to measure screen false negatives.",
+  "priority_key": [
+    0,
+    -1.5,
+    32,
+    -695,
+    "03b93358f5f4974f"
+  ],
+  "priority_key_fields": [
+    "missing_top3_proxy",
+    "negative_top3_fractionality_sum",
+    "final_round_added_column_count",
+    "negative_active_column_count",
+    "instance_content_hash"
+  ],
+  "priority_key_is_training_target": false,
+  "proxy_candidate_count": 3,
+  "proxy_top3_candidates": [
+    {
+      "different_child_column_count": 585,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_013",
+            "task_b": "ice_site_020"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.5,
+      "same_child_column_count": 486,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_013",
+            "task_b": "ice_site_020"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.5,
+      "support_column_count": 1,
+      "task_a": "ice_site_013",
+      "task_b": "ice_site_020"
+    },
+    {
+      "different_child_column_count": 554,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_004",
+            "task_b": "ice_site_015"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.5,
+      "same_child_column_count": 433,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_004",
+            "task_b": "ice_site_015"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.5,
+      "support_column_count": 1,
+      "task_a": "ice_site_004",
+      "task_b": "ice_site_015"
+    },
+    {
+      "different_child_column_count": 673,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_007",
+            "task_b": "ice_site_014"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.5,
+      "same_child_column_count": 552,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_007",
+            "task_b": "ice_site_014"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.5,
+      "support_column_count": 1,
+      "task_a": "ice_site_007",
+      "task_b": "ice_site_014"
+    }
+  ],
+  "proxy_top3_fractionality_sum": 1.5,
+  "required_hash_order_exploration_quota": 0.25,
+  "restricted_rmp_objective_bound": 1.444904,
+  "restricted_rmp_primal_column_count": 6,
+  "restricted_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+  "root_prefix_added_column_count": 672,
+  "root_prefix_certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+  "root_prefix_exact_safe": false,
+  "root_prefix_history": [
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.063196,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 1
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.036603,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 2
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.038226,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 3
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.052522,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 4
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.041127,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 5
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.031082,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 6
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.032748,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 7
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.031596,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 8
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.046806,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 9
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.094998,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 10
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.261816,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 11
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.159224,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 12
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.039374,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 13
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.316022,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 14
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 1.070394,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 15
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 3.055033,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 16
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.933265,
+      "node_lp_bound": 1.568632,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 17
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.322297,
+      "node_lp_bound": 1.457231,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 18
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 1.760972,
+      "node_lp_bound": 1.457231,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 19
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 10.67069,
+      "node_lp_bound": 1.444904,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 20
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 10.699941,
+      "node_lp_bound": 1.444904,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 21
+    }
+  ],
+  "root_prefix_pricing_state": "INCOMPLETE_LIMIT",
+  "root_prefix_round_count": 21,
+  "scale": 20,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_priority_screen.v1",
+  "screen_budget_sec": 30.0,
+  "screen_wall_sec": 30.429572,
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "split_manifest_hash": "dd76b57d4618663c789d8c4dc2cfc4939597fc7900f8159ebc45b9aab8a68bca",
+  "training_authorized": false
+}

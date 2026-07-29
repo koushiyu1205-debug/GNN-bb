@@ -90,6 +90,7 @@ class LabelingPricingConfig:
     max_candidate_sets: int | None = 160
     harvest_target: int = 16
     exact_negative_harvest_target: int = 1
+    harvest_max_processed_labels: int = 0
     completion_bound_enabled: bool = True
     ng_neighborhood_size: int = 8
     ng_neighborhood_sizes: tuple[int, ...] | None = (3, 5, 8)
@@ -128,6 +129,11 @@ class LabelingPricingConfig:
             self,
             "exact_negative_harvest_target",
             max(1, int(self.exact_negative_harvest_target)),
+        )
+        object.__setattr__(
+            self,
+            "harvest_max_processed_labels",
+            max(0, int(self.harvest_max_processed_labels)),
         )
         ng_size = max(1, int(self.ng_neighborhood_size))
         object.__setattr__(self, "ng_neighborhood_size", ng_size)
@@ -326,6 +332,9 @@ def run_bpc_labeling_pricer(
     payload["max_label_task_count"] = int(cfg.max_label_task_count)
     payload["harvest_target"] = int(cfg.harvest_target)
     payload["exact_negative_harvest_target"] = int(cfg.exact_negative_harvest_target)
+    payload["harvest_max_processed_labels"] = int(
+        cfg.harvest_max_processed_labels
+    )
     payload["active_task_sets_for_exact_harvest_count"] = len(cfg.active_task_sets_for_exact_harvest)
     payload["completion_bound_requested"] = bool(cfg.completion_bound_enabled)
     payload["branch_context_active"] = not branch.empty
@@ -387,6 +396,11 @@ def _run_native_exact_backend(
             branch_context=branch_context,
             cut_context=cut_context,
             harvest_target=cfg.exact_negative_harvest_target,
+            harvest_max_processed_labels=(
+                cfg.harvest_max_processed_labels
+                if cfg.stop_at_first_negative
+                else 0
+            ),
             wall_time_limit_sec=cfg.wall_time_limit_sec,
             memory_limit_gb=memory_limit_gb,
             negative_eps=cfg.negative_eps,
@@ -424,6 +438,9 @@ def _native_exact_backend_payload(
     cut_context: CutContext,
 ) -> tuple[dict, tuple[JourneyColumn, ...]]:
     negative_columns = tuple(result.columns)
+    dssr_enabled = bool(
+        (result.telemetry or {}).get("dssr_enabled")
+    )
     proof_only_blockers = {
         "native_exact_search_incomplete",
         "native_frontier_not_empty",
@@ -465,9 +482,17 @@ def _native_exact_backend_payload(
             "status": result.engine_status,
             "native_backend_id": backend_id,
             "native_backend_result": result.to_payload(),
-            "labeling_algorithm": "native_rcspp_forward_elementary_multi_sortie",
+            "labeling_algorithm": (
+                "native_rcspp_forward_dssr_multi_sortie"
+                if dssr_enabled
+                else "native_rcspp_forward_elementary_multi_sortie"
+            ),
             "resource_label_algorithm": "lab_core_rcspp_project_local_journey_resource",
-            "resource_label_core_mode": "native_exact_elementary_full_space",
+            "resource_label_core_mode": (
+                "native_exact_dssr_counterexample_refinement"
+                if dssr_enabled
+                else "native_exact_elementary_full_space"
+            ),
             "resource_dimensions": [
                 "global_time",
                 "sortie_demand",
@@ -479,8 +504,23 @@ def _native_exact_backend_payload(
                 "raw_weighted_completion",
                 "task_dual_reward",
             ],
-            "dominance_policy": "same_visited_conservative_resource_and_true_rc",
-            "elementarity_policy": "global_journey_visited_bitset_not_reset_between_sorties",
+            "dominance_policy": (
+                "dssr_critical_branch_mask_same_cut_state_resource_true_rc"
+                if dssr_enabled
+                else "same_visited_conservative_resource_and_true_rc"
+            ),
+            "elementarity_policy": (
+                "dssr_global_critical_memory_counterexample_refinement"
+                if dssr_enabled
+                else "global_journey_visited_bitset_not_reset_between_sorties"
+            ),
+            "exact_pricing_certificate_method": (
+                "DSSR_RELAXATION_LOWER_BOUND"
+                if dssr_enabled and certified
+                else "ELEMENTARY_FRONTIER_EXHAUSTION"
+                if certified
+                else ""
+            ),
             "pricing_state": state.value,
             "pricing_proof_kind": proof_kind,
             "can_certify_no_negative": certified,

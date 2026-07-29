@@ -45,6 +45,7 @@ from lunar_ice_bpc.exact.core.cuts import (
     true_dual_binding_hash,
     validate_live_sri_context,
 )
+from lunar_ice_bpc.domain.scenario import SERVICE_TIMING_POLICY_ID
 from lunar_ice_bpc.exact.core.columns import build_timed_sortie
 from lunar_ice_bpc.exact.core.journey import build_journey_column
 from lunar_ice_bpc.exact.core.objective import objective_references
@@ -57,7 +58,20 @@ from lunar_ice_bpc.exact.master.journey_rmp import (
 
 NATIVE_INPROCESS_BACKEND_ID = "native_rcspp_inprocess"
 NATIVE_HOST_BACKEND_ID = "native_rcspp_host"
-NATIVE_HOST_PROTOCOL = "lunar_spprc_host.v2"
+NATIVE_DSSR_INPROCESS_BACKEND_ID = "native_rcspp_dssr_inprocess"
+NATIVE_DSSR_HOST_BACKEND_ID = "native_rcspp_dssr_host"
+NATIVE_HOST_PROTOCOL = "lunar_spprc_host.v3"
+DSSR_POLICY_VERSION = "multi_sortie_counterexample_refinement_v1"
+_GIB = 1024**3
+_MIB = 1024**2
+# The request limit is enforced cooperatively inside the native labeling loop,
+# which can then return an audited MEMORY_LIMIT result.  The host-side RSS
+# check is only a last-resort guard for a wedged or incompatible native
+# extension.  Giving it bounded headroom prevents it from racing the native
+# check and killing the process before the legal incomplete result is sent.
+_HOST_MEMORY_WATCHDOG_MIN_HEADROOM_BYTES = 128 * _MIB
+_HOST_MEMORY_WATCHDOG_MAX_HEADROOM_BYTES = 2 * _GIB
+_HOST_MEMORY_WATCHDOG_HEADROOM_FRACTION = 0.25
 _NATIVE_CUT_STATE_BUILD_SCHEMA = (
     "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2"
 )
@@ -90,6 +104,7 @@ class NativeRcsppInprocessBackend:
         binding_blockers = _binding_blockers(request)
         if binding_blockers:
             return _empty_result(self.backend_id, "HASH_MISMATCH", blockers=binding_blockers)
+        _maybe_record_pre_solve_exact_snapshot(request)
         try:
             native = importlib.import_module("lunar_spprc_native")
         except Exception as exc:
@@ -128,9 +143,19 @@ class NativeRcsppHostBackend:
                 "UNSUPPORTED_FEATURE",
                 blockers=capability_blockers,
             )
+        binding_blockers = _binding_blockers(request)
+        if binding_blockers:
+            return _empty_result(
+                self.backend_id,
+                "HASH_MISMATCH",
+                blockers=binding_blockers,
+            )
+        _maybe_record_pre_solve_exact_snapshot(request)
         with self._lock:
             if self.__class__._runtime is None:
-                self.__class__._runtime = _PersistentHostRuntime()
+                self.__class__._runtime = _PersistentHostRuntime(
+                    backend_id=self.backend_id
+                )
             return self.__class__._runtime.solve(request)
 
     @classmethod
@@ -141,8 +166,148 @@ class NativeRcsppHostBackend:
                 cls._runtime = None
 
 
+def _dssr_request(request: BackendPricingRequest) -> BackendPricingRequest:
+    dssr_eligible = bool(request.exact_proof_mode)
+    return replace(
+        request,
+        dssr_enabled=dssr_eligible,
+        completion_bound_enabled=(
+            False
+            if request.exact_proof_mode
+            else request.completion_bound_enabled
+        ),
+        subset_dominance_enabled=(
+            False
+            if request.exact_proof_mode
+            else request.subset_dominance_enabled
+        ),
+    )
+
+
+def _with_dssr_policy_telemetry(
+    result: BackendResult,
+    *,
+    exact_proof_mode: bool,
+    boundary_fallback_used: bool = False,
+    dssr_attempt: BackendResult | None = None,
+) -> BackendResult:
+    telemetry = dict(result.telemetry or {})
+    telemetry.update(
+        {
+            "dssr_exact_proof_eligible": bool(exact_proof_mode),
+            "dssr_policy_attempted": bool(exact_proof_mode),
+            "dssr_non_exact_bypassed": bool(not exact_proof_mode),
+            "dssr_bypass_reason": (
+                "negative_harvest_preserves_p0"
+                if not exact_proof_mode
+                else ""
+            ),
+            "dssr_boundary_audit_fallback_used": bool(
+                boundary_fallback_used
+            ),
+        }
+    )
+    if dssr_attempt is not None:
+        attempt_telemetry = dict(dssr_attempt.telemetry or {})
+        telemetry["dssr_boundary_attempt"] = {
+            "engine_status": dssr_attempt.engine_status,
+            "search_exhaustive": dssr_attempt.search_exhaustive,
+            "frontier_empty": dssr_attempt.frontier_empty,
+            "labels_dropped": dssr_attempt.labels_dropped,
+            "public_column_count": len(dssr_attempt.columns),
+            "native_raw_best_found_rc": attempt_telemetry.get(
+                "native_raw_best_found_rc"
+            ),
+            "processed_labels": attempt_telemetry.get(
+                "processed_labels"
+            ),
+            "extended_labels": attempt_telemetry.get(
+                "extended_labels"
+            ),
+            "wall_time_seconds": attempt_telemetry.get(
+                "wall_time_seconds"
+            ),
+            "reconstruction_audit": attempt_telemetry.get(
+                "reconstruction_audit"
+            )
+            or [],
+        }
+    return replace(result, telemetry=telemetry)
+
+
+def _dssr_boundary_audit_requires_elementary_fallback(
+    result: BackendResult,
+) -> bool:
+    telemetry = dict(result.telemetry or {})
+    reconstruction_rows = list(
+        telemetry.get("reconstruction_audit") or []
+    )
+    return bool(
+        result.engine_status == "MAX_SOLUTIONS"
+        and not result.columns
+        and not result.labels_dropped
+        and bool(telemetry.get("dssr_elementary_witness_returned"))
+        and reconstruction_rows
+        and all(bool(row.get("accepted")) for row in reconstruction_rows)
+    )
+
+
+class NativeDssrInprocessBackend(NativeRcsppInprocessBackend):
+    """In-process exact-safe DSSR backend for scales whose P0 is in-process."""
+
+    backend_id = NATIVE_DSSR_INPROCESS_BACKEND_ID
+
+    def solve(self, request: BackendPricingRequest) -> BackendResult:
+        exact_proof_mode = bool(request.exact_proof_mode)
+        result = super().solve(_dssr_request(request))
+        if _dssr_boundary_audit_requires_elementary_fallback(result):
+            fallback = super().solve(request)
+            return _with_dssr_policy_telemetry(
+                fallback,
+                exact_proof_mode=exact_proof_mode,
+                boundary_fallback_used=True,
+                dssr_attempt=result,
+            )
+        return _with_dssr_policy_telemetry(
+            result,
+            exact_proof_mode=exact_proof_mode,
+        )
+
+
+class NativeDssrHostBackend(NativeRcsppHostBackend):
+    """Host-isolated exact-safe DSSR backend for every supported scale.
+
+    Harvest calls deliberately retain the ordinary Native implementation.
+    Every exact-proof call uses the same counterexample-guided state-space
+    relaxation, irrespective of instance scale.  The distinct backend ID is
+    part of the engine hash, so P0 and DSSR evidence cannot share a solve
+    binding accidentally.
+    """
+
+    backend_id = NATIVE_DSSR_HOST_BACKEND_ID
+    _runtime: _PersistentHostRuntime | None = None
+    _lock = threading.RLock()
+
+    def solve(self, request: BackendPricingRequest) -> BackendResult:
+        exact_proof_mode = bool(request.exact_proof_mode)
+        result = super().solve(_dssr_request(request))
+        if _dssr_boundary_audit_requires_elementary_fallback(result):
+            fallback = super().solve(request)
+            return _with_dssr_policy_telemetry(
+                fallback,
+                exact_proof_mode=exact_proof_mode,
+                boundary_fallback_used=True,
+                dssr_attempt=result,
+            )
+        return _with_dssr_policy_telemetry(
+            result,
+            exact_proof_mode=exact_proof_mode,
+        )
+
+
 class _PersistentHostRuntime:
-    def __init__(self) -> None:
+    def __init__(self, *, backend_id: str = NATIVE_HOST_BACKEND_ID) -> None:
+        self.backend_id = str(backend_id)
         self.context = multiprocessing.get_context("spawn")
         self.process = None
         self.connection = None
@@ -152,7 +317,7 @@ class _PersistentHostRuntime:
         self.next_request_id = 1
 
     def solve(self, request: BackendPricingRequest) -> BackendResult:
-        expected_hash = _host_build_hash()
+        expected_hash = _host_build_hash(self.backend_id)
         stale_restarted = False
         if not self._ready() or self.build_hash != expected_hash:
             stale = bool(self._ready() and self.build_hash != expected_hash)
@@ -161,7 +326,7 @@ class _PersistentHostRuntime:
             start_error = self._start(expected_hash)
             if start_error:
                 return _empty_result(
-                    NATIVE_HOST_BACKEND_ID,
+                    self.backend_id,
                     "HASH_MISMATCH" if stale else "BACKEND_UNAVAILABLE",
                     blockers=(
                         "stale_host_build_hash" if stale else "host_startup_failed",
@@ -191,7 +356,7 @@ class _PersistentHostRuntime:
             exitcode = None if self.process is None else self.process.exitcode
             self.close()
             return _empty_result(
-                NATIVE_HOST_BACKEND_ID,
+                self.backend_id,
                 "BACKEND_CRASH",
                 blockers=("host_send_failed",),
                 telemetry={"error": repr(exc), "host_exitcode": exitcode},
@@ -202,7 +367,12 @@ class _PersistentHostRuntime:
             if request.wall_time_limit_sec is not None
             else None
         )
-        rss_limit_bytes = int(float(request.memory_limit_gb) * (1024**3))
+        native_memory_limit_bytes = int(
+            float(request.memory_limit_gb) * _GIB
+        )
+        rss_limit_bytes = int(
+            host_memory_watchdog_limit_gb(request.memory_limit_gb) * _GIB
+        )
         peak_rss = 0
         stop_reason = ""
         try:
@@ -222,12 +392,14 @@ class _PersistentHostRuntime:
         if stop_reason:
             exitcode = self._terminate()
             return _empty_result(
-                NATIVE_HOST_BACKEND_ID,
+                self.backend_id,
                 stop_reason,
                 blockers=(f"host_{stop_reason.lower()}",),
                 telemetry={
                     "host_exitcode": exitcode,
                     "host_peak_rss_bytes": peak_rss,
+                    "native_memory_limit_bytes": native_memory_limit_bytes,
+                    "host_memory_watchdog_limit_bytes": rss_limit_bytes,
                     "host_partial_result_received": False,
                     "host_proof_state_discarded": True,
                 },
@@ -236,7 +408,7 @@ class _PersistentHostRuntime:
             exitcode = None if self.process is None else self.process.exitcode
             self.close()
             return _empty_result(
-                NATIVE_HOST_BACKEND_ID,
+                self.backend_id,
                 "BACKEND_CRASH",
                 blockers=("host_crashed_without_result",),
                 telemetry={
@@ -251,7 +423,7 @@ class _PersistentHostRuntime:
             exitcode = None if self.process is None else self.process.exitcode
             self.close()
             return _empty_result(
-                NATIVE_HOST_BACKEND_ID,
+                self.backend_id,
                 "BACKEND_CRASH",
                 blockers=("host_response_failed",),
                 telemetry={"error": repr(exc), "host_exitcode": exitcode},
@@ -264,14 +436,14 @@ class _PersistentHostRuntime:
         ):
             self.close()
             return _empty_result(
-                NATIVE_HOST_BACKEND_ID,
+                self.backend_id,
                 "HASH_MISMATCH",
                 blockers=("stale_host_response_binding",),
                 telemetry={"response": repr(response)[:1000]},
             )
         if response.get("kind") != "ok":
             return _empty_result(
-                NATIVE_HOST_BACKEND_ID,
+                self.backend_id,
                 "BACKEND_ERROR",
                 blockers=("host_backend_exception",),
                 telemetry={"error": response.get("error")},
@@ -289,6 +461,8 @@ class _PersistentHostRuntime:
                 "host_request_kind": request_kind,
                 "host_request_count": self.request_count,
                 "host_peak_rss_bytes": peak_rss,
+                "native_memory_limit_bytes": native_memory_limit_bytes,
+                "host_memory_watchdog_limit_bytes": rss_limit_bytes,
                 "host_build_hash": expected_hash,
                 "host_stale_restarted": stale_restarted,
                 "host_partial_result_received": bool(result.columns),
@@ -297,7 +471,7 @@ class _PersistentHostRuntime:
         )
         return replace(
             result,
-            backend_id=NATIVE_HOST_BACKEND_ID,
+            backend_id=self.backend_id,
             telemetry=telemetry,
         )
 
@@ -305,7 +479,7 @@ class _PersistentHostRuntime:
         parent, child = self.context.Pipe(duplex=True)
         process = self.context.Process(
             target=_persistent_host_main,
-            args=(child,),
+            args=(child, self.backend_id),
             daemon=True,
         )
         process.start()
@@ -457,14 +631,19 @@ def _request_from_ipc_payload(
     return BackendPricingRequest(**values)
 
 
-def _host_build_hash() -> str:
+def _host_build_hash(
+    backend_id: str = NATIVE_HOST_BACKEND_ID,
+) -> str:
     from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import spprc_engine_build_hash
 
-    return spprc_engine_build_hash(NATIVE_HOST_BACKEND_ID)
+    return spprc_engine_build_hash(backend_id)
 
 
-def _persistent_host_main(connection) -> None:
-    build_hash = _host_build_hash()
+def _persistent_host_main(
+    connection,
+    backend_id: str = NATIVE_HOST_BACKEND_ID,
+) -> None:
+    build_hash = _host_build_hash(backend_id)
     base_request = None
     loaded_instance_hash = ""
     connection.send(
@@ -507,7 +686,31 @@ def _persistent_host_main(connection) -> None:
                 )
             else:
                 raise RuntimeError(f"unsupported host request kind {message.get('kind')!r}")
-            result = NativeRcsppInprocessBackend().solve(base_request)
+            capability_blockers = _capability_blockers(base_request)
+            if capability_blockers:
+                result = _empty_result(
+                    backend_id,
+                    "UNSUPPORTED_FEATURE",
+                    blockers=capability_blockers,
+                )
+            else:
+                binding_blockers = _binding_blockers(base_request)
+                if binding_blockers:
+                    result = _empty_result(
+                        backend_id,
+                        "HASH_MISMATCH",
+                        blockers=binding_blockers,
+                    )
+                else:
+                    native = importlib.import_module("lunar_spprc_native")
+                    raw = dict(
+                        native.solve(_native_request_payload(base_request))
+                    )
+                    result = _audit_native_result(
+                        base_request,
+                        raw,
+                        backend_id=backend_id,
+                    )
             response.update({"kind": "ok", "result": result})
         except BaseException as exc:  # pragma: no cover - protects the parent process
             response.update({"kind": "error", "error": repr(exc)})
@@ -516,6 +719,7 @@ def _persistent_host_main(connection) -> None:
 
 
 atexit.register(NativeRcsppHostBackend.close)
+atexit.register(NativeDssrHostBackend.close)
 
 
 def _maybe_attach_environment_guidance(
@@ -893,7 +1097,10 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
     guidance_effective = bool(
         accepted_guidance is not None
         and request.guidance_mode == GUIDANCE_MODE_TASK_ARC
-        and not request.exact_proof_mode
+        and (
+            not request.exact_proof_mode
+            or request.proof_queue_policy_id == "QG1"
+        )
     )
     task_priorities = (
         accepted_guidance.priorities_for("task")
@@ -978,6 +1185,9 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
         "mode": request.mode,
         "objective_mode": request.objective_mode,
         "harvest_target": request.harvest_target,
+        "harvest_max_processed_labels": (
+            request.harvest_max_processed_labels
+        ),
         "wall_time_limit_sec": request.wall_time_limit_sec,
         "memory_limit_gb": request.memory_limit_gb,
         "negative_eps": request.negative_eps,
@@ -989,18 +1199,38 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
             int(os.getenv("LUNAR_ICE_SPPRC_GRAPH_CACHE_ENTRIES", "1")),
         ),
         "completion_bound_enabled": bool(
-            request.completion_bound_enabled and request.cut_context.empty
+            request.completion_bound_enabled
+            and request.cut_context.empty
+            and not request.dssr_enabled
         ),
         # Preserve the candidate-column surface in negative-harvest calls.
         # Subset dominance is a proof accelerator: it preserves the optimum
         # and no-negative result, but can intentionally omit dominated
         # negative task-set variants.
         "subset_dominance_enabled": bool(
-            request.subset_dominance_enabled and request.exact_proof_mode
+            request.subset_dominance_enabled
+            and request.exact_proof_mode
+            and not request.dssr_enabled
+        ),
+        "proof_queue_potential_trace_enabled": bool(
+            request.exact_proof_mode
+            and str(
+                os.getenv(
+                    "LUNAR_ICE_PROOF_QUEUE_POTENTIAL_TRACE",
+                    "0",
+                )
+            ).strip().lower()
+            in {"1", "true", "yes", "on"}
+        ),
+        "proof_queue_guidance_bucket_width": float(
+            request.proof_queue_guidance_bucket_width
         ),
         "proof_queue_policy_id": request.proof_queue_policy_id,
+        "dssr_enabled": bool(request.dssr_enabled),
+        "dssr_policy_version": DSSR_POLICY_VERSION,
         "config_hash": request.config_hash,
         "engine_hash": request.engine_hash,
+        "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
         "canonical_solve_binding_v2": canonical_binding.to_payload(),
         "canonical_solve_binding_v2_schema": canonical_binding.schema_version,
         "canonical_solve_binding_v2_hash": canonical_binding.binding_hash,
@@ -1039,7 +1269,9 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
 def _native_static_payload(data) -> dict:
     from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import spprc_instance_hash
 
-    cache_key = spprc_instance_hash(data)
+    cache_key = (
+        f"{spprc_instance_hash(data)}:{SERVICE_TIMING_POLICY_ID}"
+    )
     with _STATIC_PAYLOAD_CACHE_LOCK:
         cached = _STATIC_PAYLOAD_CACHE.get(cache_key)
         if cached is not None:
@@ -1084,6 +1316,7 @@ def _native_static_payload(data) -> dict:
     value = {
         "instance_id": data.instance_id,
         "instance_hash": spprc_instance_hash(data),
+        "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
         "tasks": tasks,
         "arcs": arcs,
         "max_tasks_per_trip": data.max_tasks_per_trip,
@@ -1121,7 +1354,10 @@ def _audit_native_result(
     guidance_effective = bool(
         accepted_guidance is not None
         and request.guidance_mode == GUIDANCE_MODE_TASK_ARC
-        and not request.exact_proof_mode
+        and (
+            not request.exact_proof_mode
+            or request.proof_queue_policy_id == "QG1"
+        )
     )
     legal_task_universe_hash = canonical_universe_hash(
         request.data.task_ids,
@@ -1139,6 +1375,7 @@ def _audit_native_result(
         "instance_hash": request.instance_hash or _native_static_payload(request.data)["instance_hash"],
         "config_hash": request.config_hash,
         "engine_hash": request.engine_hash,
+        "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
         "canonical_solve_binding_v2": canonical_binding.to_payload(),
         "canonical_solve_binding_v2_schema": canonical_binding.schema_version,
         "canonical_solve_binding_v2_hash": canonical_binding.binding_hash,
@@ -1170,6 +1407,13 @@ def _audit_native_result(
         "legal_task_universe_hash_before_sort": legal_task_universe_hash,
         "legal_arc_universe_hash_before_sort": legal_arc_universe_hash,
     }
+    if request.dssr_enabled:
+        expected_bindings.update(
+            {
+                "dssr_enabled": True,
+                "dssr_policy_version": DSSR_POLICY_VERSION,
+            }
+        )
     binding_mismatches = []
     for key, expected in expected_bindings.items():
         if key not in raw_bindings or raw_bindings.get(key) != expected:
@@ -1184,6 +1428,28 @@ def _audit_native_result(
     native_engine_build_hash = _stable_hash(build_info) if build_info else ""
     if not native_engine_build_hash:
         blockers.append("native_engine_build_hash_missing")
+    raw_telemetry = dict(raw.get("telemetry") or {})
+    if request.dssr_enabled:
+        if (
+            build_info.get("large_scale_exact_pricer")
+            != DSSR_POLICY_VERSION
+        ):
+            blockers.append("native_dssr_engine_policy_mismatch")
+        if not bool(raw_telemetry.get("dssr_enabled")):
+            blockers.append("native_dssr_telemetry_disabled")
+        if (
+            str(raw_telemetry.get("dssr_policy_version") or "")
+            != DSSR_POLICY_VERSION
+        ):
+            blockers.append("native_dssr_telemetry_policy_mismatch")
+        if int(
+            raw_telemetry.get("completion_bound_evaluated_labels") or 0
+        ) != 0:
+            blockers.append("native_dssr_completion_bound_was_active")
+        if int(
+            raw_telemetry.get("subset_dominance_candidate_checks") or 0
+        ) != 0:
+            blockers.append("native_dssr_subset_dominance_was_active")
     columns = []
     audited_rcs = []
     reconstruction_rows = []
@@ -1195,6 +1461,26 @@ def _audit_native_result(
     ).strip().lower() in {"1", "true", "yes", "on"}
     for route_index, route in enumerate(raw.get("routes", []) or []):
         try:
+            if request.dssr_enabled:
+                raw_task_ids = [
+                    str(task_id)
+                    for sortie in route.get("sorties", [])
+                    for task_id in sortie.get("tasks", [])
+                ]
+                if len(raw_task_ids) != len(set(raw_task_ids)):
+                    blockers.append(
+                        "native_dssr_non_elementary_route_leaked"
+                    )
+                    reconstruction_rows.append(
+                        {
+                            "accepted": False,
+                            "error": (
+                                "DSSR returned a non-elementary route "
+                                "to the public audit"
+                            ),
+                        }
+                    )
+                    continue
             column = _reconstruct_column(request, route)
             manual_rc = float(_manual_backend_reduced_cost(column, request))
             native_rc = float(route["reduced_cost"])
@@ -1266,6 +1552,21 @@ def _audit_native_result(
         blockers.append("native_exact_search_incomplete")
     if request.exact_proof_mode and not frontier_empty:
         blockers.append("native_frontier_not_empty")
+    if request.dssr_enabled:
+        if raw.get("routes") and not bool(
+            raw_telemetry.get("dssr_elementary_witness_returned")
+        ):
+            blockers.append("native_dssr_elementary_witness_flag_missing")
+        if (
+            exhaustive
+            and not raw.get("routes")
+            and not bool(
+                raw_telemetry.get(
+                    "dssr_relaxation_no_negative_certificate"
+                )
+            )
+        ):
+            blockers.append("native_dssr_relaxation_certificate_missing")
 
     if not request.exact_proof_mode and columns:
         best_by_task_set = {}
@@ -1296,7 +1597,7 @@ def _audit_native_result(
         if exhaustive and frontier_empty and not audited_rcs and not blockers
         else None
     )
-    telemetry = dict(raw.get("telemetry") or {})
+    telemetry = raw_telemetry
     native_event_audit = _validate_native_best_rc_events(
         telemetry.get("best_reduced_cost_events"),
         exact_proof_mode=request.exact_proof_mode,
@@ -1359,15 +1660,29 @@ def _audit_native_result(
             "objective_mode": request.objective_mode,
             "rmp_iteration_id": request.rmp_iteration_id,
             "completion_bound_requested": request.completion_bound_enabled,
+            "dssr_enabled": bool(request.dssr_enabled),
+            "dssr_policy_version": DSSR_POLICY_VERSION,
+            "harvest_max_processed_labels": (
+                request.harvest_max_processed_labels
+            ),
             "completion_bound_effective": bool(
-                request.completion_bound_enabled and request.cut_context.empty
+                request.completion_bound_enabled
+                and request.cut_context.empty
+                and not request.dssr_enabled
             ),
             "completion_bound_forced_off": bool(
-                request.completion_bound_enabled and not request.cut_context.empty
+                request.completion_bound_enabled
+                and (
+                    not request.cut_context.empty
+                    or request.dssr_enabled
+                )
             ),
             "completion_bound_forced_off_reason": (
-                "active_cut_context"
-                if request.completion_bound_enabled and not request.cut_context.empty
+                "dssr_relaxation"
+                if request.completion_bound_enabled and request.dssr_enabled
+                else "active_cut_context"
+                if request.completion_bound_enabled
+                and not request.cut_context.empty
                 else ""
             ),
             "request_bindings": raw_bindings,
@@ -1600,33 +1915,7 @@ def _maybe_record_guidance_snapshot(
             save_pricing_snapshot,
         )
 
-        candidates = [
-            {
-                "candidate_id": str(task_id),
-                "candidate_kind": "task",
-                "p0_position": index,
-            }
-            for index, task_id in enumerate(request.data.task_ids)
-        ]
-        arc_position_offset = len(candidates)
-        candidates.extend(
-            {
-                "candidate_id": canonical_arc_candidate_id(
-                    source, target, path_type
-                ),
-                "candidate_kind": "arc",
-                "p0_position": arc_position_offset + index,
-            }
-            for index, ((source, target), by_type, path_type) in enumerate(
-                (
-                    ((source, target), by_type, path_type)
-                    for (source, target), by_type in sorted(
-                        request.data.arcs.items()
-                    )
-                    for path_type in sorted(by_type)
-                )
-            )
-        )
+        candidates = _guidance_snapshot_candidates(request)
         _attach_snapshot_training_observations(
             candidates,
             request=request,
@@ -1669,6 +1958,78 @@ def _maybe_record_guidance_snapshot(
             }
         )
         return replace(result, telemetry=telemetry)
+
+
+def _guidance_snapshot_candidates(
+    request: BackendPricingRequest,
+) -> list[dict]:
+    candidates = [
+        {
+            "candidate_id": str(task_id),
+            "candidate_kind": "task",
+            "p0_position": index,
+        }
+        for index, task_id in enumerate(request.data.task_ids)
+    ]
+    arc_position_offset = len(candidates)
+    candidates.extend(
+        {
+            "candidate_id": canonical_arc_candidate_id(
+                source, target, path_type
+            ),
+            "candidate_kind": "arc",
+            "p0_position": arc_position_offset + index,
+        }
+        for index, ((source, target), by_type, path_type) in enumerate(
+            (
+                ((source, target), by_type, path_type)
+                for (source, target), by_type in sorted(
+                    request.data.arcs.items()
+                )
+                for path_type in sorted(by_type)
+            )
+        )
+    )
+    return candidates
+
+
+def _maybe_record_pre_solve_exact_snapshot(
+    request: BackendPricingRequest,
+) -> None:
+    root_value = str(
+        os.getenv("LUNAR_ICE_PRE_SOLVE_EXACT_SNAPSHOT_DIR", "")
+    ).strip()
+    if not root_value or not request.exact_proof_mode:
+        return
+    try:
+        from lunar_ice_bpc.exact.bpc.guidance.replay import (
+            build_pricing_snapshot,
+            save_pricing_snapshot,
+        )
+
+        snapshot = build_pricing_snapshot(
+            request,
+            candidates=_guidance_snapshot_candidates(request),
+            result=None,
+            queue_policy_id=request.proof_queue_policy_id,
+            engine_hash=request.engine_hash,
+            feature_schema_version=(
+                request.guidance_feature_schema_version
+            ),
+            normalization_version=request.guidance_normalization_version,
+            checkpoint_id=request.guidance_checkpoint_id,
+            ood_policy_version=request.guidance_ood_policy_version,
+        )
+        target = (
+            Path(root_value)
+            / request.data.instance_content_hash
+            / f"{snapshot.snapshot_hash}.json"
+        )
+        save_pricing_snapshot(snapshot, target)
+    except Exception:
+        # Snapshot collection is diagnostic-only and must never change exact
+        # pricing control flow or certificate semantics.
+        return
 
 
 def _attach_snapshot_training_observations(
@@ -1803,6 +2164,28 @@ def _process_rss_bytes(pid: int | None) -> int:
     except (FileNotFoundError, PermissionError, ProcessLookupError, ValueError):
         return 0
     return 0
+
+
+def host_memory_watchdog_limit_gb(native_limit_gb: float) -> float:
+    """Return the emergency host limit above the native cooperative limit.
+
+    A zero native limit keeps both layers disabled.  For a positive limit the
+    bounded margin is large enough for the native loop to observe its own
+    threshold, construct the partial result, release label memory, and reply.
+    It is deliberately capped so a broken native worker still fails closed.
+    """
+
+    native_limit_bytes = max(0, int(float(native_limit_gb) * _GIB))
+    if native_limit_bytes == 0:
+        return 0
+    headroom_bytes = int(
+        native_limit_bytes * _HOST_MEMORY_WATCHDOG_HEADROOM_FRACTION
+    )
+    headroom_bytes = max(
+        _HOST_MEMORY_WATCHDOG_MIN_HEADROOM_BYTES,
+        min(_HOST_MEMORY_WATCHDOG_MAX_HEADROOM_BYTES, headroom_bytes),
+    )
+    return float(native_limit_bytes + headroom_bytes) / float(_GIB)
 
 
 def effective_memory_limit_gb(nominal_gb: float) -> float:

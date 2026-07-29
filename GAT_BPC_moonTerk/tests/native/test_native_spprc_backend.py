@@ -13,9 +13,12 @@ from unittest.mock import patch
 
 from lunar_ice_bpc.domain.scheduling import generate_instance
 from lunar_ice_bpc.exact.bpc.pricing.backends import (
+    BACKEND_MODE_EXACT_PROOF,
     BACKEND_MODE_NEGATIVE_HARVEST,
     BACKEND_OBJECTIVE_PHASE_ONE,
     BackendPricingRequest,
+    NativeDssrHostBackend,
+    NativeDssrInprocessBackend,
     NativeRcsppInprocessBackend,
     NativeRcsppHostBackend,
     native_spprc_scale_profile,
@@ -31,6 +34,7 @@ from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
     LabelingPricingConfig,
     run_bpc_labeling_pricer,
 )
+from lunar_ice_bpc.exact.bpc.guidance.replay import load_pricing_snapshot
 from lunar_ice_bpc.exact.core.branching import (
     DIFFERENT_JOURNEY,
     SAME_JOURNEY,
@@ -67,6 +71,14 @@ class NativeSpprcBackendTests(unittest.TestCase):
                 ).read_text(encoding="utf-8")
             )
         )
+        cls.data20 = load_lunar_ice_data(
+            json.loads(
+                (
+                    project_root
+                    / "data/instances/lunar_ice_sp50_020/instance_001_logical_graph.json"
+                ).read_text(encoding="utf-8")
+            )
+        )
 
     def test_zero_dual_exact_proves_threshold_without_fake_global_minimum(self) -> None:
         result = NativeRcsppInprocessBackend().solve(
@@ -79,12 +91,31 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertEqual(result.proved_no_rc_below, -1.0e-6)
         self.assertIsNone(result.global_min_rc)
 
+    def test_processed_label_budget_is_harvest_only(self) -> None:
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(cover={}),
+            mode=BACKEND_MODE_NEGATIVE_HARVEST,
+            harvest_max_processed_labels=17,
+        )
+        self.assertEqual(request.harvest_max_processed_labels, 17)
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot truncate exact proof",
+        ):
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=JourneyDuals(cover={}),
+                mode=BACKEND_MODE_EXACT_PROOF,
+                harvest_max_processed_labels=17,
+            )
+
     def test_proof_queue_policies_preserve_exact_result_and_report_policy(self) -> None:
         results = {}
         for policy_id in ("Q0", "QC0", "QD1", "QB1"):
             results[policy_id] = NativeRcsppInprocessBackend().solve(
                 BackendPricingRequest(
-                    data=self.data,
+                    data=self.data20,
                     true_duals=JourneyDuals(cover={}),
                     proof_queue_policy_id=policy_id,
                 )
@@ -1179,6 +1210,236 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertEqual(result.engine_status, "COMPLETE")
         self.assertTrue(result.can_enter_certificate_audit)
 
+    def test_dssr_host_is_independent_and_certifies_relaxed_no_negative(self) -> None:
+        NativeDssrHostBackend.close()
+        try:
+            result = NativeDssrHostBackend().solve(
+                BackendPricingRequest(
+                    data=self.data20,
+                    true_duals=JourneyDuals(cover={}),
+                    wall_time_limit_sec=10.0,
+                    memory_limit_gb=1.0,
+                    completion_bound_enabled=True,
+                    subset_dominance_enabled=True,
+                )
+            )
+        finally:
+            NativeDssrHostBackend.close()
+
+        self.assertEqual(result.backend_id, "native_rcspp_dssr_host")
+        self.assertEqual(result.engine_status, "COMPLETE")
+        self.assertTrue(result.can_enter_certificate_audit)
+        self.assertEqual(result.proved_no_rc_below, -1.0e-6)
+        self.assertTrue(result.telemetry["dssr_enabled"])
+        self.assertEqual(
+            result.telemetry["dssr_policy_version"],
+            "multi_sortie_counterexample_refinement_v1",
+        )
+        self.assertTrue(
+            result.telemetry[
+                "dssr_relaxation_no_negative_certificate"
+            ]
+        )
+        self.assertEqual(
+            result.telemetry["completion_bound_evaluated_labels"], 0
+        )
+        self.assertEqual(
+            result.telemetry["subset_dominance_candidate_checks"], 0
+        )
+        self.assertTrue(result.telemetry["request_bindings_match"])
+
+    def test_dssr_exact_negative_returns_only_audited_elementary_column(self) -> None:
+        for data in (self.data, self.data10, self.data20):
+            with self.subTest(scale=data.scale):
+                NativeDssrHostBackend.close()
+                try:
+                    result = NativeDssrHostBackend().solve(
+                        BackendPricingRequest(
+                            data=data,
+                            true_duals=JourneyDuals(
+                                cover={
+                                    task_id: 10.0
+                                    for task_id in data.task_ids
+                                }
+                            ),
+                            wall_time_limit_sec=10.0,
+                            memory_limit_gb=1.0,
+                        )
+                    )
+                finally:
+                    NativeDssrHostBackend.close()
+
+                self.assertEqual(result.engine_status, "MAX_SOLUTIONS")
+                self.assertFalse(result.search_exhaustive)
+                self.assertTrue(result.partial_columns_valid)
+                self.assertTrue(result.columns)
+                self.assertLess(result.best_found_rc, -1.0e-6)
+                self.assertTrue(
+                    result.telemetry["dssr_elementary_witness_returned"]
+                )
+                for column in result.columns:
+                    task_ids = [
+                        task_id
+                        for sortie in column.sorties
+                        for task_id in sortie.tasks
+                    ]
+                    self.assertEqual(len(task_ids), len(set(task_ids)))
+                self.assertIn(
+                    "native_exact_search_incomplete",
+                    result.certificate_blockers,
+                )
+
+    def test_old_native_backend_keeps_dssr_off(self) -> None:
+        result = NativeRcsppInprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=JourneyDuals(cover={}),
+            )
+        )
+        self.assertFalse(result.telemetry["dssr_enabled"])
+        self.assertFalse(
+            result.telemetry[
+                "dssr_relaxation_no_negative_certificate"
+            ]
+        )
+
+    def test_dssr_backend_runs_on_small_scales(self) -> None:
+        NativeDssrHostBackend.close()
+        try:
+            result = NativeDssrHostBackend().solve(
+                BackendPricingRequest(
+                    data=self.data,
+                    true_duals=JourneyDuals(cover={}),
+                    wall_time_limit_sec=10.0,
+                    memory_limit_gb=1.0,
+                )
+            )
+        finally:
+            NativeDssrHostBackend.close()
+        self.assertTrue(result.can_enter_certificate_audit)
+        self.assertTrue(result.telemetry["dssr_enabled"])
+        self.assertTrue(result.telemetry["dssr_exact_proof_eligible"])
+        self.assertFalse(result.telemetry["dssr_non_exact_bypassed"])
+        self.assertEqual(result.telemetry["dssr_bypass_reason"], "")
+        self.assertTrue(
+            result.telemetry["dssr_relaxation_no_negative_certificate"]
+        )
+
+    def test_dssr_inprocess_backend_runs_same_policy_without_host(self) -> None:
+        result = NativeDssrInprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=JourneyDuals(cover={}),
+                wall_time_limit_sec=10.0,
+                memory_limit_gb=1.0,
+            )
+        )
+        self.assertEqual(
+            result.backend_id,
+            "native_rcspp_dssr_inprocess",
+        )
+        self.assertTrue(result.can_enter_certificate_audit)
+        self.assertTrue(result.telemetry["dssr_enabled"])
+        self.assertTrue(result.telemetry["dssr_exact_proof_eligible"])
+        self.assertTrue(
+            result.telemetry["dssr_relaxation_no_negative_certificate"]
+        )
+
+    def test_pre_solve_exact_snapshot_survives_without_result(self) -> None:
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(
+                cover={
+                    task_id: 0.0
+                    for task_id in self.data.task_ids
+                }
+            ),
+            wall_time_limit_sec=10.0,
+            memory_limit_gb=1.0,
+            config_hash="pre-solve-snapshot-config",
+            engine_hash="pre-solve-snapshot-engine",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(
+                os.environ,
+                {"LUNAR_ICE_PRE_SOLVE_EXACT_SNAPSHOT_DIR": directory},
+            ):
+                result = NativeDssrInprocessBackend().solve(request)
+
+            snapshot_paths = sorted(Path(directory).glob("**/*.json"))
+            self.assertEqual(len(snapshot_paths), 1)
+            snapshot = load_pricing_snapshot(snapshot_paths[0])
+
+        self.assertEqual(result.engine_status, "COMPLETE")
+        self.assertEqual(
+            snapshot.instance_content_hash,
+            self.data.instance_content_hash,
+        )
+        self.assertEqual(
+            snapshot.true_duals["cover"],
+            dict(request.true_duals.cover),
+        )
+        self.assertEqual(
+            snapshot.result_summary["status"],
+            "NOT_OBSERVED",
+        )
+        self.assertFalse(snapshot.result_summary["search_exhaustive"])
+        self.assertFalse(snapshot.censored)
+        self.assertEqual(
+            snapshot.binding.config_hash,
+            request.config_hash,
+        )
+        self.assertEqual(
+            snapshot.binding.engine_hash,
+            request.engine_hash,
+        )
+        self.assertFalse(
+            snapshot.to_payload()["can_certify"],
+        )
+
+    def test_dssr_backend_integrates_with_official_labeling_pricer(self) -> None:
+        NativeDssrHostBackend.close()
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "LUNAR_ICE_SPPRC_EXACT_BACKEND": (
+                        "native_rcspp_dssr_host"
+                    ),
+                    "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB": "1",
+                },
+            ):
+                payload, columns = run_bpc_labeling_pricer(
+                    self.data20,
+                    JourneyDuals(cover={}),
+                    config=LabelingPricingConfig(
+                        mode=EXACT_ELEMENTARY_MODE,
+                        max_exact_tasks=20,
+                        wall_time_limit_sec=10.0,
+                    ),
+                )
+        finally:
+            NativeDssrHostBackend.close()
+
+        self.assertFalse(columns)
+        self.assertEqual(
+            payload["native_backend_id"],
+            "native_rcspp_dssr_host",
+        )
+        self.assertEqual(
+            payload["pricing_state"],
+            "CERTIFIED_NO_NEGATIVE",
+        )
+        self.assertTrue(payload["can_certify_no_negative"])
+        self.assertEqual(
+            payload["exact_pricing_certificate_method"],
+            "DSSR_RELAXATION_LOWER_BOUND",
+        )
+        self.assertEqual(
+            payload["resource_label_core_mode"],
+            "native_exact_dssr_counterexample_refinement",
+        )
+
     def test_host_ipc_normalizes_read_only_dual_mappings(self) -> None:
         NativeRcsppHostBackend.close()
         try:
@@ -1279,7 +1540,7 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertNotEqual(first.telemetry["host_pid"], second.telemetry["host_pid"])
         self.assertTrue(second.telemetry["host_stale_restarted"])
 
-    def test_host_memory_kill_discards_proof_and_restarts_cleanly(self) -> None:
+    def test_host_native_memory_limit_returns_without_watchdog_kill(self) -> None:
         NativeRcsppHostBackend.close()
         backend = NativeRcsppHostBackend()
         limited = backend.solve(
@@ -1306,6 +1567,11 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertFalse(limited.can_enter_certificate_audit)
         self.assertTrue(limited.telemetry["host_proof_state_discarded"])
         self.assertTrue(limited.telemetry["host_partial_result_received"])
+        self.assertGreater(
+            limited.telemetry["host_memory_watchdog_limit_bytes"],
+            limited.telemetry["native_memory_limit_bytes"],
+        )
+        self.assertNotIn("host_exitcode", limited.telemetry)
         self.assertTrue(limited.partial_columns_valid)
         self.assertEqual(recovered.engine_status, "COMPLETE")
         self.assertTrue(recovered.can_enter_certificate_audit)

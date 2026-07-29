@@ -1,0 +1,142 @@
+{
+  "active_column_count": 368,
+  "baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "baseline_registry_sha256": "bb0513a72f1a32e6714a25dd6ef79e1483371365736e3dfa7337c39bc434ed5c",
+  "deployable": false,
+  "development_only": true,
+  "engine_hash": "439e12be8bf04208",
+  "guidance_branch_pair_drop_count": 0,
+  "guidance_filter_count": 0,
+  "instance_content_hash": "0a65acad05c86091",
+  "instance_id": "lunar_ice_020_043_seed202807293",
+  "is_branch_training_label": false,
+  "is_certificate": false,
+  "is_exact_opportunity_decision": false,
+  "is_natural_opportunity_rate_evidence": false,
+  "may_permanently_filter_development_instance": false,
+  "note": "Restricted-RMP fractionality is a collection scheduler only. At least 25% of development attempts remain content-hash-first to measure screen false negatives.",
+  "priority_key": [
+    1,
+    0,
+    25,
+    -368,
+    "0a65acad05c86091"
+  ],
+  "priority_key_fields": [
+    "missing_top3_proxy",
+    "negative_top3_fractionality_sum",
+    "final_round_added_column_count",
+    "negative_active_column_count",
+    "instance_content_hash"
+  ],
+  "priority_key_is_training_target": false,
+  "proxy_candidate_count": 0,
+  "proxy_top3_candidates": [],
+  "proxy_top3_fractionality_sum": 0,
+  "required_hash_order_exploration_quota": 0.25,
+  "restricted_rmp_objective_bound": 1.325066,
+  "restricted_rmp_primal_column_count": 3,
+  "restricted_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+  "root_prefix_added_column_count": 345,
+  "root_prefix_certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+  "root_prefix_exact_safe": false,
+  "root_prefix_history": [
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.077808,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 1
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.063008,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 2
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.066634,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 3
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.082022,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 4
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.399812,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 5
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.044827,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 6
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.048527,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 7
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.411439,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 8
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 10.72804,
+      "node_lp_bound": 1.373252,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 9
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 10.638066,
+      "node_lp_bound": 1.347206,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 10
+    },
+    {
+      "addable_negative_count": 25,
+      "added_column_count": 25,
+      "final_judge_wall_time": 7.754034,
+      "node_lp_bound": 1.325066,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 11
+    }
+  ],
+  "root_prefix_pricing_state": "INCOMPLETE_LIMIT",
+  "root_prefix_round_count": 11,
+  "scale": 20,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_priority_screen.v1",
+  "screen_budget_sec": 30.0,
+  "screen_wall_sec": 30.717258,
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "split_manifest_hash": "dd76b57d4618663c789d8c4dc2cfc4939597fc7900f8159ebc45b9aab8a68bca",
+  "training_authorized": false
+}

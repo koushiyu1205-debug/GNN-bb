@@ -30,6 +30,9 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (  # noqa: E402
     solve_node_pricing_with_b2b_r3,
 )
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data  # noqa: E402
+from lunar_ice_bpc.exact.core.journey import (  # noqa: E402
+    journey_column_from_solution_payload,
+)
 from lunar_ice_bpc.runners.b4_1_true_dual_proof_tail import (  # noqa: E402
     _diagnostic_b0_placeholder,
 )
@@ -211,6 +214,14 @@ def main() -> int:
     )
     parser.add_argument("--output-dir", required=True)
     parser.add_argument(
+        "--reuse-root-source",
+        default="",
+        help=(
+            "Reuse a root_source.json produced by this script. The instance "
+            "content hash and exact-safe source status are revalidated."
+        ),
+    )
+    parser.add_argument(
         "--ranks",
         nargs="+",
         type=int,
@@ -247,34 +258,91 @@ def main() -> int:
         )
     _configure_environment(scale=int(data.scale), profile=profile)
 
-    root_started = perf_counter()
-    root_result = solve_node_pricing_with_b2b_r3(
-        data,
-        node_id="root",
-        max_direct_tasks=len(data.task_ids),
-        max_rounds=int(profile["root_max_rounds"]),
-        wall_time_limit_sec=float(args.root_wall_time_limit_sec),
-        max_columns_per_round=int(profile["root_harvest_target"]),
-        b0_direct=_diagnostic_b0_placeholder(data),
-        tail_dual_stabilization_enabled=True,
-        tail_dual_stabilization_alpha=0.7,
-        tail_dual_stabilization_window=5,
-        worker_pricer_kind=RELAXED_LABELING_WORKER,
-        labeling_final_judge_enabled=True,
-        labeling_final_judge_max_exact_tasks=len(data.task_ids),
-        labeling_final_judge_exact_harvest_target=int(
-            profile["root_harvest_target"]
-        ),
-        return_active_columns_payload=True,
-    )
-    root_wall = perf_counter() - root_started
-    active_columns = tuple(root_result.get("_active_columns") or ())
-    root_exact_safe = bool(
-        root_result.get("certificate_scope") == "BPC_NODE_LP_CERTIFIED"
-        and root_result.get("pricing_state") == "CERTIFIED_NO_NEGATIVE"
-        and root_result.get("uses_true_dual_bpc_certificate")
-        and root_result.get("pricing_rc_audit_pass")
-    )
+    if args.reuse_root_source:
+        source_path = (ROOT / args.reuse_root_source).resolve()
+        reused_source = _load_json(source_path)
+        supplied_hash = str(
+            reused_source.get("instance_content_hash") or ""
+        )
+        if supplied_hash:
+            if supplied_hash != data.instance_content_hash:
+                raise SystemExit(
+                    "reused root source instance hash mismatch"
+                )
+        else:
+            source_instance_path = Path(
+                str(reused_source.get("instance_path") or "")
+            )
+            if (
+                not source_instance_path.is_file()
+                or load_lunar_ice_data(
+                    _load_json(source_instance_path)
+                ).instance_content_hash
+                != data.instance_content_hash
+            ):
+                raise SystemExit(
+                    "reused stage probe cannot prove the instance hash"
+                )
+        root_result = dict(
+            reused_source.get("result") or reused_source
+        )
+        root_wall = float(
+            reused_source.get("root_wall_sec")
+            or reused_source.get("elapsed_sec")
+            or 0.0
+        )
+        active_columns = tuple(
+            journey_column_from_solution_payload(data, row)
+            for row in root_result.get("active_columns") or ()
+        )
+        root_exact_safe = bool(
+            reused_source.get("root_exact_safe")
+            or (
+                root_result.get("certificate_scope")
+                == "BPC_NODE_LP_CERTIFIED"
+                and root_result.get("pricing_state")
+                == "CERTIFIED_NO_NEGATIVE"
+                and (
+                    root_result.get("uses_true_dual_bpc_certificate")
+                    or (
+                        root_result.get("final_judge") or {}
+                    ).get("uses_true_dual_bpc_certificate")
+                )
+            )
+        )
+    else:
+        root_started = perf_counter()
+        root_result = solve_node_pricing_with_b2b_r3(
+            data,
+            node_id="root",
+            max_direct_tasks=len(data.task_ids),
+            max_rounds=int(profile["root_max_rounds"]),
+            wall_time_limit_sec=float(args.root_wall_time_limit_sec),
+            max_columns_per_round=int(profile["root_harvest_target"]),
+            b0_direct=_diagnostic_b0_placeholder(data),
+            tail_dual_stabilization_enabled=True,
+            tail_dual_stabilization_alpha=0.7,
+            tail_dual_stabilization_window=5,
+            worker_pricer_kind=RELAXED_LABELING_WORKER,
+            labeling_final_judge_enabled=True,
+            labeling_final_judge_max_exact_tasks=len(data.task_ids),
+            labeling_final_judge_exact_harvest_target=int(
+                profile["root_harvest_target"]
+            ),
+            return_active_columns_payload=True,
+        )
+        root_wall = perf_counter() - root_started
+        active_columns = tuple(
+            root_result.get("_active_columns") or ()
+        )
+        root_exact_safe = bool(
+            root_result.get("certificate_scope")
+            == "BPC_NODE_LP_CERTIFIED"
+            and root_result.get("pricing_state")
+            == "CERTIFIED_NO_NEGATIVE"
+            and root_result.get("uses_true_dual_bpc_certificate")
+            and root_result.get("pricing_rc_audit_pass")
+        )
     if not root_exact_safe or not active_columns:
         raise SystemExit(
             "common root source did not close exactly with active columns"

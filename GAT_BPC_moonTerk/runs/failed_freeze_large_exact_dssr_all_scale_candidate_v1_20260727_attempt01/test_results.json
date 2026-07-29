@@ -1,0 +1,33 @@
+{
+  "all_passed": false,
+  "commands": [
+    {
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-large-exact",
+        "--output-on-failure"
+      ],
+      "returncode": 0,
+      "stderr": "runs/frozen_large_exact_dssr_all_scale_candidate_v1_20260727/test_01_stderr.txt",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "runs/frozen_large_exact_dssr_all_scale_candidate_v1_20260727/test_01_stdout.txt",
+      "stdout_sha256": "843a2e5190b3bc938a081fe93f38576bcda8bca148e61e8699c7a3a2a29e5760"
+    },
+    {
+      "command": [
+        "/home/kai/miniconda3/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/native/test_native_spprc_backend.py"
+      ],
+      "returncode": 1,
+      "stderr": "runs/frozen_large_exact_dssr_all_scale_candidate_v1_20260727/test_02_stderr.txt",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout": "runs/frozen_large_exact_dssr_all_scale_candidate_v1_20260727/test_02_stdout.txt",
+      "stdout_sha256": "8d6a91a1f7974546bf4db84142c4d6c6b93086b60633f06f1d41bfaa3eab7902"
+    }
+  ],
+  "skipped": false
+}

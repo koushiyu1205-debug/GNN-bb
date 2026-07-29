@@ -46,7 +46,7 @@ formula may appear in a manuscript-facing visual.
 | TAB01 | Model/design contracts and `objective.py` | Sets, variables, objective components, constraints and fixed logical-path solution-space scope | EV002, EV003, EV009 | READY_FOR_LAYOUT |
 | TAB02 | `lunar_ice_sp50_real_benchmark_manifest.json` | Corpus counts, scales, fleet/task settings and generation policies | EV010 | READY_FOR_LAYOUT |
 | TAB03 | `lunar_real_map_source_catalog.json` | Map layers, roles, native resolution and local availability | EV011 | READY_FOR_LAYOUT |
-| TAB04 | Frozen no-cut baseline summary | Exact counts and scale-wise mean/p50/max cold-start time | EV012–EV014 | READY_FOR_LAYOUT |
+| TAB04 | Frozen no-task-wait exact-control summary | Exact counts and scale-wise mean/p50/max strict-cold time under root-only SRI-3 | EV036–EV037 | READY_FOR_LAYOUT |
 | TAB05 | Formal P0 promotion decision | Correctness, performance gates, paired estimates and final status by scale | EV015–EV017 | READY_FOR_LAYOUT |
 | TAB06 | State-optimization summary | Projection rule, state bytes and replay-equivalence audit | EV018–EV020 | READY_FOR_LAYOUT |
 | TAB07 | Bounded scale-50/100 summary | Resource limit, terminal status and proof blockers | EV025 | READY_FOR_LAYOUT |

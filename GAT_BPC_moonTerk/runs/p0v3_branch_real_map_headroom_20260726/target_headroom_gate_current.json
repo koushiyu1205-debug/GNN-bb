@@ -1,0 +1,88 @@
+{
+  "bounded_target_expansion_authorized": true,
+  "calibration_used": false,
+  "census_bindings": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_census/opportunity_census_progress.json",
+      "scale": 20,
+      "sha256": "91affe0e6205ed33bd6d3f7704533d400b99e98f59e104c58104c8c98ac83e04"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_census/opportunity_census_progress.json",
+      "scale": 30,
+      "sha256": "eb5b1fda231fdca7a086c124419f7d56b4dcab3c044421f8de8d186f05f553ad"
+    }
+  ],
+  "deployment_authorized": false,
+  "formal_feature_aux_collection_authorized": false,
+  "gat_training_authorized": false,
+  "gold_label_bindings": [
+    {
+      "branch_e2e_cost_semantics": "p0_control_raw_wall_vs_all_guided_actions_uniform_lifecycle_overhead.v1",
+      "branch_e2e_gold_net_gain_sec": 0.6962169999999999,
+      "branch_e2e_gold_rank_index": 2,
+      "branch_e2e_p0_control_wall_sec": 3.834803,
+      "branch_e2e_wall_sec_by_rank": {
+        "0": 3.854803,
+        "1": 37.261259,
+        "2": 3.138586
+      },
+      "branch_guidance_lifecycle_overhead_sec": 0.02,
+      "e2e_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_instance_001_e2e/state_oracle_report.json",
+      "e2e_report_sha256": "3cf48ce2c27a2baa65c74f44b45d6172077dc9ea91b48304647d402a759439e8",
+      "instance_content_hash": "37037d48065d317b",
+      "label_sha256": "2936c57fe348c1badabddebb9c98b97d2ed6dddac29306a20d753b4863c935ef",
+      "path_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "scale": 20
+    }
+  ],
+  "linear_training_authorized": false,
+  "matched_e2e_collection_authorized": false,
+  "note": "This gate consumes census and matched E2E summaries only. Passing authorizes feature/aux materialization, never model training or online branch guidance.",
+  "observed": {
+    "actionable_count_by_scale": {
+      "20": 1,
+      "30": 0
+    },
+    "census_count_by_scale": {
+      "20": 3,
+      "30": 3
+    },
+    "exact_screen_count_by_scale": {
+      "20": 3,
+      "30": 3
+    },
+    "gold_count_by_scale": {
+      "20": 1,
+      "30": 0
+    },
+    "headroom_denominator": "all_exact_precommitted_census_instances;exact_nonactionable_gain_zero",
+    "missing_actionable_instance_hashes": [],
+    "perfect_policy_instance_cluster_count": 6,
+    "perfect_policy_net_gain_sec_bootstrap_95ci": [
+      0.0,
+      0.34810849999999993
+    ],
+    "perfect_policy_net_gain_sec_mean_after_overhead": 0.11603616666666665,
+    "positive_gold_count": 1
+  },
+  "protected_final_test_used": false,
+  "schema_version": "lunar_ice_bpc.branch_target_headroom_gate.v1",
+  "split_manifest_hash": "96916449f9ff3e5ed96f7e6d1fb0649f598e8a7b7c9789496814d06dad7cfff7",
+  "split_manifest_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_branch_cross_domain_pilot_20260726_grouped_split_manifest.json",
+  "target_actionable_gold_complete": true,
+  "target_domain": "real_lunar_south_pole_sp50_benchmark_v1",
+  "target_headroom_passed": false,
+  "target_instance_cap_reached": false,
+  "target_sample_threshold_reached": false,
+  "target_screen_exact_complete": true,
+  "target_screen_threshold_reached": true,
+  "terminate_target_direction": false,
+  "thresholds": {
+    "guidance_lifecycle_overhead_sec": 0.02,
+    "maximum_target_instance_count_per_scale": 6,
+    "minimum_target_gold_count_per_scale": 2,
+    "minimum_target_instance_count_per_scale": 3,
+    "minimum_target_positive_gold_count": 1
+  }
+}

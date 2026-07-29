@@ -13,24 +13,25 @@ with a generic learning-guided optimization story.
 | Remote/sample evidence versus in-situ prospecting need | Section 1 and draft reference map | C061--C062 support heterogeneous lunar-water host materials and formation/retention factors, while the text explicitly withholds any inference about abundance or accessibility at south-pole benchmark sites | `PASS` |
 | Common real-map regional scenario | Abstract, Sections 1, 3.1 and 5.2 | The 50 km by 50 km extent, common base map, task-density scaling and configured higher-mobility regime are transferred as forward-looking benchmark assumptions rather than current rover performance | `PASS` |
 | Static prospecting-service window interpretation | Section 1 and model assumptions | EV034 and CL040 transfer direct-sunlight independence and static task windows as bounded representations of externally specified operating restrictions; communication dynamics do not become a separate resource or departure-time-dependent path state | `PASS` |
+| No-task-wait timing policy | Abstract, Sections 1, 3.1--3.2, 4.3, 4.7, 5--8 and Appendix A | EV035--EV037 and CL041--CL042 require arrival equals service start, no waiting at candidate tasks or en route, depot-only waiting, adjustable trip departures, feasible-departure logic, and a strict boundary between the revised baseline and historical wait-permitted runs | `PASS WITH FROZEN IMPLEMENTATION BINDING` |
 | Mission-epoch environmental representation | Sections 1, 3.1, 5.1--5.2, 6.5, 7.3--7.7 and Appendix A | C063 supports hourly full-cycle and equinox/solstice-linked polar-shadow analysis; C064 supports season-conditioned illumination for landing, power and traverse design; the manifest supplies 16–76 h horizons; four equal phase groups remain the present experiment's stratification; path attributes stay fixed within each solve; M006 and EXP-EPOCH remain empty | `PASS` |
 | Lunar candidate-site and path-resource structure | Abstract, Sections 1, 2.1, 3.1--3.2 and 4.1--4.3 | PSR interiors/rims and surrounding access terrain motivate detect/sample/drill tasks, time/energy/risk path alternatives and cumulative shadow exposure without exclusive-water or proxy-as-ground-truth claims | `PASS` |
 | Fixed directed logical graph with three declared path options per directed edge | Sections 3.1, 5.2, 7.4, and 7.5 | Exactness is scoped to the fixed logical-path solution space and excludes continuous terrain | `PASS` |
 | Lunar path-metric preprocessing | Section 3.1, Eq. (1) and adjacent scope paragraph | Path distance is displayed; slope, roughness, shadow, PSR, crater-edge, steep-slope and directional-elevation summaries are traced to immutable stored attributes without elevating uncalibrated mixing coefficients to scientific model equations | `PASS` |
 | Trip-level MILP semantics | Section 3.2, Eqs. (4a)--(7) | Flow, activation, task count and uniqueness, binary domains, elementarity, time propagation, resources, recharge and trip sequencing are explicit, then traced to feasible columns and native label enforcement | `PASS` |
 | Multi-trip route columns | Sections 3.2 and 3.3 | Trip, route, compatibility, incidence, and route-master roles remain distinct | `PASS` |
-| Trip service/resource reconstruction | Section 3.2, Eqs. (3)--(8) | Timing, service energy, local shadow, 0.01 thermal-risk, operating cost, weighted completion, recharge and all implemented defining feasibility limits survive | `PASS` |
+| Trip service/resource reconstruction | Section 3.2, Eqs. (3)--(8) | The revised timing model replaces task-site and en-route waiting by depot departure intervals while preserving service energy, local shadow, the precomputed service-risk contribution, operating cost, weighted completion, recharge and all other defining limits; prescribed service is distinguished from idle waiting, and the internal risk conversion is not exposed as an optimization coefficient | `PASS WITH IMPLEMENTATION BOUNDARY` |
 | Executed P0V2 objective | Abstract, Sections 1, 3.3, and 8 | Only normalized operating cost + normalized risk + 0.4 times normalized science-weighted completion time appears as the objective | `PASS` |
 | Implemented objective references | Section 3.3, equation (9) | Componentwise feasible singleton references, positive floor and tracked fallback survive without being described as external physical calibration | `PASS` |
 | Makespan implementation/reporting boundary | Section 3.3 | Makespan is explicitly reporting-only | `PASS` |
 | HiGHS RMP and persistent column lifecycle | Sections 3.3 and 4.2, equations (12)--(15) | Master variables, constraints, duals, objective closure, column identity and addability-aware true-negative harvest survive | `PASS` |
-| Native exact SPPRC | Sections 4.3 and 4.7, equations (16)--(19), (23), and (25) | Resource pruning, guarded dominance, context-limited completion pruning, true-dual completion, conservative handling of limits, deferred-pricing obligations, and the full-dual closure argument survive | `PASS` |
+| Native exact SPPRC | Sections 4.3 and 4.7, equations (16)--(19), (23), and (25) | The proof-bearing implementation shifts a common depot departure, stores its latest feasible value, disables active-trip dominance, guards depot subset dominance, disables completion-bound pruning under active cuts, retains true-dual completion, and fails closed | `PASS AS IMPLEMENTED AND TESTED` |
 | Deterministic live SRI | Sections 4.4, 6.2, 6.3, Appendices B--C, and Eqs. (20)--(21) | Root-only SRI-3 under P0 retains its divisor-two coefficient, integer-validity derivation, complete triple enumeration, deterministic retention and evidence boundaries | `PASS` |
 | Ryan--Foster branching and fail-closed no-pair handling | Sections 4.5, 4.6.3, and 4.7, equations (22) and (26) | Co-occurrence, fractionality, deterministic order, exact child partition and no-pair incompleteness precede learned ranking | `PASS` |
 | Typed guidance shadow/safety shell | Sections 4.6--4.7 | Context binding, uncertainty, fail-closed behavior, no-model state, and absent checkpoint are retained | `PASS` |
 | Overall exactness proof chain | Section 4.7, Lemmas 1--5, Theorem 1 and Eqs. (24)--(27) | Canonical-route completeness, route-master equivalence, node-LP dual closure, valid cuts, exact child partitions, guidance invariance, tree induction and numerical scope are transferred without claiming unconditional completion | `PASS` |
 | Pricing-led, branching-assisted mainline | Title, Abstract, Sections 1, 4, 5, 7, and 8 | Pricing is primary, branch ranking secondary, and no learned cut variant exists | `PASS` |
-| Frozen no-cut baseline | Section 6.1 | All four scale summaries and exact-closure scope are retained | `PASS` |
+| Frozen no-task-wait baseline | Section 6.1 | The new root-only-SRI-3 control reports 80/80 exact and correctness outcomes with scale-wise descriptive timing | `PASS` |
 | Formal P0 SRI promotion study | Section 6.2 | Correctness success and the scale-30 performance failure jointly show that the candidate does not satisfy the complete promotion criterion | `PASS` |
 | State projection/packing audit | Section 6.3 | State sizes, replay equivalence, and one diagnostic pair retain their distinct evidence classes | `PASS` |
 | Scale-50/100 bounded runs | Section 6.6 and Appendix D | Memory-limit, legal incomplete, zero proof leak, and absence of exact conclusion survive | `PASS` |
@@ -53,6 +54,9 @@ with a generic learning-guided optimization story.
 - No route-local topology, temporal, resource, or elementarity condition was
   mistaken for a missing route-master row; the Section 4.3 mapping identifies
   its exact pricing implementation.
+- Only the frozen revised scale-5--30 control is attributed to the
+  no-task-wait formulation; every historical wait-permitted result retains
+  its model qualifier.
 - No nonroot SRI separation or alternative subset size entered the paper
   scope.
 - No implementation scaffold was promoted to a trained-model result.
@@ -72,7 +76,8 @@ with a generic learning-guided optimization story.
 
 ## Verdict
 
-**PASS.** The working draft preserves the repository's central algorithmic
-logic and its evidence boundaries. Remaining empty learning blocks are
-traceable omissions governed by the placeholder ledger, not missing argument
-structure.
+**PASS WITH AN EXPLICIT EVIDENCE BOUNDARY.** The no-task-wait decision has
+been transferred to timing, path-option preprocessing, label dominance, proof
+assumptions, terminology, implementation evidence, and the frozen scale-5--30
+baseline. Historical cut, state-refinement, and scale-50/100 measurements
+remain outside the revised-model evidence class.

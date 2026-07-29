@@ -1,0 +1,21 @@
+{
+  "completed_probe_count": 0,
+  "completed_probes": {},
+  "control_tree_sha256": "797abd70f331d76a103f590413b436fe9fb08bf8df4027c62a0f1bb8684bd94d",
+  "deployable": false,
+  "development_only": true,
+  "instance_content_hash": "03b93358f5f4974f",
+  "lifecycle_overhead_sec": 0.02,
+  "p0_parent_source_sha256": "",
+  "parent_reconstruction_budget_sec": 600.0,
+  "parent_snapshot_policy": "exact_reconstruct_bound_top3_before_child_v1",
+  "planned_probe_count": 6,
+  "preference_margin_sec": 2.0,
+  "probe_budget_sec": 60.0,
+  "progress_binding_hash": "e8d984f5d674c24fd03500bd42bbdcd63929090c739a28b88c23046aab688434",
+  "root_source_sha256": "159bb7d63bb719d0871efcc72f7965a9ba33b6fc4e702acbec746ed94b32d700",
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_child_trajectory_progress.v1",
+  "split_manifest_hash": "dd76b57d4618663c789d8c4dc2cfc4939597fc7900f8159ebc45b9aab8a68bca",
+  "status": "RUNNING",
+  "training_authorized": false
+}

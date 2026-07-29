@@ -1,5 +1,6 @@
 /build/native-spprc/
 /build/native-spprc-asan/
+/build/native-spprc-large-exact/
 /.venv-native-spprc/
 /src/*.egg-info/
 /data/gat_p0v2/development_instances/scale_*/instance_*_logical_graph.json

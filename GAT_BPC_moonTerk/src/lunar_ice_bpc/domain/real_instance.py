@@ -27,6 +27,7 @@ from lunar_ice_bpc.domain.scenario import (
     OPERATION_MODE_SPECS,
     PATH_OPTION_POLICY_ID,
     RISK_SCHEMA_VERSION,
+    SERVICE_TIMING_POLICY_ID,
     SHADOW_CAP_BY_SCALE,
     TIME_WINDOW_POLICY_ID,
     WINDOW_WIDTH_CAP_BY_SCALE,
@@ -243,6 +244,7 @@ def generate_real_map_instance(
             "horizon_min": HORIZON_BY_SCALE[scale],
             "time_bucket_size": config.time_bucket_size,
             "time_window_policy_id": TIME_WINDOW_POLICY_ID,
+            "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
             "time_window_mode": time_mode,
             "time_window_mode_split": "outer_to_inner:7, inner_to_outer:7, easy_to_hard:6 per 20 seeds",
             "operation_modes": list(OPERATION_MODE_SPECS.keys()),
@@ -268,6 +270,7 @@ def generate_real_map_instance(
             "accepted": False,
             "reason": "reference_solution_infeasible",
             "time_window_policy_id": TIME_WINDOW_POLICY_ID,
+            "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
             "time_window_mode": time_mode,
             "risk_schema_version": RISK_SCHEMA_VERSION,
         }
@@ -547,6 +550,7 @@ def _real_validation_payload(instance: dict[str, Any], config: LunarIceConfig, s
         "windows_meet_min_width": bool(windows_meet_min_width),
         "windows_within_effective_cap": bool(windows_within_effective_cap),
         "time_window_policy_id": TIME_WINDOW_POLICY_ID,
+        "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
         "time_window_mode": instance["scheduling"].get("time_window_mode"),
         "risk_schema_version": RISK_SCHEMA_VERSION,
     }

@@ -4,6 +4,8 @@
 
 - Schema status: **FROZEN**
 - Current learning-result status: **ALL BLOCKED / TBD**
+- No-task-wait implementation status: **ACTIVATED FOR THE FROZEN
+  SCALE-5--30 EXACT CONTROL**
 - Purpose: allow later experiments to be inserted without inventing values or
   changing the paper's mainline after outcomes are known.
 - Objective lock: every objective value, equality audit, table, figure, and
@@ -31,6 +33,11 @@
 | G | Held-out/OOD evaluation of L0/L1/L2 | Same exact fallback and proof rules | `TBD` experiment |
 
 There is no learned-cut variant.
+
+All L0/L1/L2/G rows must bind the activated no-task-wait timing policy, the
+same objective, and the complete proof context. A legacy wait-permitted row is
+not an L0 row for the no-task-wait formulation. Legacy timing and search-work
+records are not revised L0 performance rows.
 
 ## EXP-L0/L1/L2 Required Row Schema
 
@@ -131,3 +138,7 @@ A safety-gate failure blocks a performance conclusion even if runtime is lower.
    phase summaries, and uncertainty-aware paired contrasts.
 8. A missing or failed artifact remains `TBD`; it is never replaced by an
    expectation, deterministic-SRI result, or diagnostic.
+9. Only the frozen scale-5--30 control may currently support a no-task-wait
+   computational claim. Legacy wait-permitted results remain only with that
+   qualifier, and new revised-model runs are required for every historical
+   cut-effect, state-size, or scale-50/100 claim.

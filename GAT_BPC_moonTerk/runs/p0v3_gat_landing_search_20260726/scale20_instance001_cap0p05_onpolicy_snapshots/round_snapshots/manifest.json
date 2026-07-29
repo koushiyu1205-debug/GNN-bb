@@ -1,0 +1,135 @@
+{
+  "can_certify": false,
+  "column_catalog_hash": "9ecadba02b3db14dbd5707891edc2120430bde51e5b9e87afe776cfa4a7e9d8e",
+  "column_catalog_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/column_catalog.json",
+  "deployable": false,
+  "development_only": true,
+  "instance_content_hash": "348fca29db1913f6",
+  "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+  "manifest_hash": "f69cb25eccf70430eddc585fc1aa3d88cc233279d1ada46985debb7659a38420",
+  "schema_version": "lunar_ice_bpc.p0v3_root_policy_state_snapshot_manifest.v1",
+  "snapshot_count": 20,
+  "snapshots": [
+    {
+      "active_column_count": 23,
+      "round": 1,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0001_e47ffb56ca8de8a8.json",
+      "state_hash": "e47ffb56ca8de8a8682a8a6951332dda860c7127074bc7fc42259eb2d92ed2ee"
+    },
+    {
+      "active_column_count": 55,
+      "round": 2,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0002_9d88439c31ad0e89.json",
+      "state_hash": "9d88439c31ad0e89154eff72c7deed818d298405e7889a12620cb44b7d3bdb71"
+    },
+    {
+      "active_column_count": 87,
+      "round": 3,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0003_e2b63df48f79c8ac.json",
+      "state_hash": "e2b63df48f79c8acfedb420088798b7b9081eedc372387a73aba06aa9499195d"
+    },
+    {
+      "active_column_count": 119,
+      "round": 4,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0004_e92eccedb56d06ad.json",
+      "state_hash": "e92eccedb56d06ad54b16ab2028c37d827592157b84b39bcbdd3052095621228"
+    },
+    {
+      "active_column_count": 151,
+      "round": 5,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0005_3bcefa232e1ca95f.json",
+      "state_hash": "3bcefa232e1ca95fb2b35980ee66c3561b052bca30c8c967fe2fa04bdb425a1a"
+    },
+    {
+      "active_column_count": 183,
+      "round": 6,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0006_6342b26899ef748a.json",
+      "state_hash": "6342b26899ef748a77505f5396773882129c196fa84b51bc718135f5eaceec68"
+    },
+    {
+      "active_column_count": 215,
+      "round": 7,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0007_e33c9998b8005479.json",
+      "state_hash": "e33c9998b80054797246320f863b255e8891a37ea8d0ba6b3317ea199a1b523a"
+    },
+    {
+      "active_column_count": 247,
+      "round": 8,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0008_f3bcdf69b10ecf61.json",
+      "state_hash": "f3bcdf69b10ecf61d0bf7dfac65da92c4ff7acb724d309c60dc16769fcdf220a"
+    },
+    {
+      "active_column_count": 279,
+      "round": 9,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0009_22c415da2d88710d.json",
+      "state_hash": "22c415da2d88710db744177959dd792ae3512cd0cc2a54be13f89f9ee6ec5495"
+    },
+    {
+      "active_column_count": 311,
+      "round": 10,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0010_1f0350e6c527d487.json",
+      "state_hash": "1f0350e6c527d48739a4a66ea24c4a3cda59a5d75a6ff16bed24aa7e675c7c2b"
+    },
+    {
+      "active_column_count": 343,
+      "round": 11,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0011_9b88c8548ed4f9ce.json",
+      "state_hash": "9b88c8548ed4f9cebd727749b01c0f64211aca5c2aa511d517d7f6dbdb20aa01"
+    },
+    {
+      "active_column_count": 375,
+      "round": 12,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0012_f1963d7c2b8586cc.json",
+      "state_hash": "f1963d7c2b8586ccee29fb4f64ccf43d4ed54a69210cc4dfa75d4f986594d15d"
+    },
+    {
+      "active_column_count": 407,
+      "round": 13,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0013_645f90a4a2479922.json",
+      "state_hash": "645f90a4a24799227f7f22108d2612ab228465880893a466c60dbd90be183aed"
+    },
+    {
+      "active_column_count": 415,
+      "round": 14,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0014_7039972d20dddff2.json",
+      "state_hash": "7039972d20dddff2a78b605cb3b2239804be147e3cbb43f3ed1d398db3eb7dba"
+    },
+    {
+      "active_column_count": 447,
+      "round": 15,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0015_29329b7ae2a049cc.json",
+      "state_hash": "29329b7ae2a049cca40a3d80f2942b1bca5a33f201a5585480e51e52a92d31c9"
+    },
+    {
+      "active_column_count": 459,
+      "round": 16,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0016_6f8df22ddc6b5e2e.json",
+      "state_hash": "6f8df22ddc6b5e2e72146c57c9fa71dbfae97314ca24007ec375afe34a3d44da"
+    },
+    {
+      "active_column_count": 474,
+      "round": 17,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0017_4d24a20e29ed4c8a.json",
+      "state_hash": "4d24a20e29ed4c8a7ae1f507e29c32a761ad6bf3f1b3b559df49401963571be4"
+    },
+    {
+      "active_column_count": 489,
+      "round": 18,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0018_5cb208af8544f32e.json",
+      "state_hash": "5cb208af8544f32e6c32029917b9a29bf8df9148d47ef5ece01bce9bbfd07564"
+    },
+    {
+      "active_column_count": 492,
+      "round": 19,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0019_f81293d42edcef44.json",
+      "state_hash": "f81293d42edcef4460e18da0c9986e5ff3a13c0ac58ef3c717d2b6b32edbd3eb"
+    },
+    {
+      "active_column_count": 493,
+      "round": 20,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance001_cap0p05_onpolicy_snapshots/round_snapshots/round_0020_be0fbc1a9c73b312.json",
+      "state_hash": "be0fbc1a9c73b312176beada54b47d0527f57472632f24b1a85ecd3e862684d8"
+    }
+  ],
+  "source_solver_binding_hash": "ec33eef3efe59b152f8abfa9683169fff0b4bb22480bba6ba622183cbc5e7e0b"
+}

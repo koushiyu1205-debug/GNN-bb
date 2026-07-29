@@ -125,6 +125,7 @@ from lunar_ice_bpc.exact.core.cuts import (
     fleet_lower_bound_cut,
     subset_row_cut,
 )
+from lunar_ice_bpc.domain.scenario import SERVICE_TIMING_POLICY_ID
 from lunar_ice_bpc.exact.core.columns import build_timed_sortie
 from lunar_ice_bpc.exact.core.journey import build_journey_column, journey_column_from_solution_payload
 import lunar_ice_bpc.exact.core.objective as objective_module
@@ -1250,6 +1251,161 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertGreater(sortie.distance_km, 0.0)
             self.assertGreater(sortie.energy_proxy, 0.0)
             self.assertGreater(sortie.risk_integral, 0.0)
+
+    def test_timed_sortie_delays_departure_at_depot_and_never_waits_at_tasks(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        first_task_id, second_task_id = tuple(instance["tasks"])[:2]
+        instance["tasks"][first_task_id].update({"r": 20.0, "sigma": 5.0, "D": 35.0})
+        instance["tasks"][second_task_id].update({"r": 35.0, "sigma": 5.0, "D": 50.0})
+        travel_by_arc = {
+            ("depot", first_task_id): 10.0,
+            (first_task_id, second_task_id): 5.0,
+            (second_task_id, "depot"): 10.0,
+        }
+        for edge in instance["logical_graph"]["edges"]:
+            arc_key = (str(edge["from"]), str(edge["to"]))
+            if arc_key not in travel_by_arc:
+                continue
+            for option in edge["path_options"]:
+                option["travel_time_min"] = travel_by_arc[arc_key]
+
+        data = load_lunar_ice_data(instance)
+        sortie = build_timed_sortie(
+            data,
+            (first_task_id, second_task_id),
+            ("low_time", "low_time", "low_time"),
+            start_time=0.0,
+        )
+
+        self.assertEqual(SERVICE_TIMING_POLICY_ID, "no_task_wait_base_departure_shift_v1")
+        self.assertTrue(sortie.feasible)
+        self.assertAlmostEqual(sortie.start_time, 15.0, places=6)
+        elapsed = float(sortie.start_time)
+        current = "depot"
+        for task_id, path_type in zip(sortie.tasks, ("low_time", "low_time")):
+            elapsed += float(data.option(current, task_id, path_type).travel_time_min)
+            self.assertAlmostEqual(sortie.service_starts[task_id], elapsed, places=6)
+            elapsed += float(data.tasks[task_id].service_time)
+            current = task_id
+
+    def test_service_timing_policy_is_hash_bound_and_old_explicit_policy_fails_closed(self) -> None:
+        explicit = generate_instance(5, seed=629001, index=1)
+        legacy_missing_field = json.loads(json.dumps(explicit))
+        legacy_missing_field["scheduling"].pop("service_timing_policy_id")
+
+        explicit_data = load_lunar_ice_data(explicit)
+        legacy_data = load_lunar_ice_data(legacy_missing_field)
+        self.assertEqual(
+            explicit_data.instance_content_hash,
+            legacy_data.instance_content_hash,
+        )
+
+        unsupported = json.loads(json.dumps(explicit))
+        unsupported["scheduling"]["service_timing_policy_id"] = (
+            "task_waiting_allowed_legacy"
+        )
+        with self.assertRaisesRegex(ValueError, "unsupported service timing policy"):
+            load_lunar_ice_data(unsupported)
+
+    def test_timed_sortie_rejects_route_that_only_task_waiting_could_repair(self) -> None:
+        instance = generate_instance(5, seed=629001, index=1)
+        first_task_id, second_task_id = tuple(instance["tasks"])[:2]
+        instance["tasks"][first_task_id].update({"r": 20.0, "sigma": 5.0, "D": 30.0})
+        instance["tasks"][second_task_id].update({"r": 50.0, "sigma": 5.0, "D": 60.0})
+        travel_by_arc = {
+            ("depot", first_task_id): 10.0,
+            (first_task_id, second_task_id): 5.0,
+            (second_task_id, "depot"): 10.0,
+        }
+        for edge in instance["logical_graph"]["edges"]:
+            arc_key = (str(edge["from"]), str(edge["to"]))
+            if arc_key not in travel_by_arc:
+                continue
+            for option in edge["path_options"]:
+                option["travel_time_min"] = travel_by_arc[arc_key]
+
+        data = load_lunar_ice_data(instance)
+        sortie = build_timed_sortie(
+            data,
+            (first_task_id, second_task_id),
+            ("low_time", "low_time", "low_time"),
+            start_time=0.0,
+        )
+
+        self.assertFalse(sortie.feasible)
+        self.assertEqual(sortie.infeasible_reason, "time_window")
+
+    def test_direct_dp_and_highs_compact_share_no_task_wait_semantics(self) -> None:
+        try:
+            import highspy  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"optional highspy dependency unavailable: {exc}")
+
+        instance = json.loads(
+            json.dumps(generate_instance(5, seed=629001, index=1))
+        )
+        first_task_id, second_task_id = tuple(instance["tasks"])[:2]
+        kept_nodes = {"depot", first_task_id, second_task_id}
+        instance["tasks"] = {
+            task_id: task
+            for task_id, task in instance["tasks"].items()
+            if task_id in kept_nodes
+        }
+        instance["logical_graph"]["nodes"] = [
+            node
+            for node in instance["logical_graph"]["nodes"]
+            if node["id"] in kept_nodes
+        ]
+        instance["logical_graph"]["edges"] = [
+            edge
+            for edge in instance["logical_graph"]["edges"]
+            if edge["from"] in kept_nodes and edge["to"] in kept_nodes
+        ]
+        instance["reference_solution"] = None
+        instance["vehicle"]["fleet_size"] = 1
+        instance["vehicle"]["max_tasks_per_trip"] = 2
+        instance["tasks"][first_task_id].update(
+            {"r": 20.0, "sigma": 5.0, "D": 35.0}
+        )
+        instance["tasks"][second_task_id].update(
+            {"r": 35.0, "sigma": 5.0, "D": 50.0}
+        )
+        travel_by_arc = {
+            ("depot", first_task_id): 10.0,
+            (first_task_id, second_task_id): 5.0,
+            (second_task_id, "depot"): 10.0,
+        }
+        for edge in instance["logical_graph"]["edges"]:
+            travel = travel_by_arc.get(
+                (str(edge["from"]), str(edge["to"])),
+                50.0,
+            )
+            for option in edge["path_options"]:
+                option["travel_time_min"] = travel
+
+        data = load_lunar_ice_data(instance)
+        direct = solve_direct_journey_baseline(data, max_exact_tasks=2)
+        compact = gurobi_compact_module.solve_highs_compact_fixed_graph(
+            data,
+            time_limit_sec=30.0,
+            threads=1,
+        )
+
+        self.assertEqual(direct.status, "DIRECT_DP_BASELINE_OPTIMAL")
+        self.assertEqual(compact["algorithm_status"], "HIGHS_COMPACT_OPTIMAL")
+        self.assertAlmostEqual(
+            float(direct.objective),
+            float(compact["objective"]),
+            places=6,
+        )
+        sortie = compact["journeys"][0].sorties[0]
+        self.assertAlmostEqual(sortie.start_time, 15.0, places=6)
+        self.assertAlmostEqual(
+            sortie.service_starts[first_task_id],
+            sortie.start_time
+            + data.option("depot", first_task_id, sortie.legs[0].path_type).travel_time_min,
+            places=6,
+        )
 
     def test_exact_bpc_modules_do_not_import_guidance_or_ml_stack(self) -> None:
         bpc_root = Path(__file__).resolve().parents[1] / "src" / "lunar_ice_bpc" / "exact" / "bpc"
@@ -3184,7 +3340,14 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertEqual(set(direct_by_tasks), set(template_by_tasks))
         for task_set, objective in direct_by_tasks.items():
             self.assertAlmostEqual(objective, template_by_tasks[task_set], delta=2.0e-6)
-        self.assertLessEqual(direct.route_template_count, template.route_template_count)
+        # The remaining-aware DP re-evaluates feasible route completions from
+        # multiple vehicle-availability times, so its context-level
+        # ``route_template_count`` need not be smaller.  The comparable search
+        # effort is the number of generated path extensions.
+        self.assertLessEqual(
+            direct.generated_sortie_count,
+            template.generated_sortie_count,
+        )
 
     def test_partial_direct_pricing_keeps_multi_sortie_seed_task_sets(self) -> None:
         instance = generate_instance(10, seed=729001, index=1)

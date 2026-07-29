@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from lunar_ice_bpc.domain.scenario import SERVICE_TIMING_POLICY_ID
 from lunar_ice_bpc.exact.core.data import LunarIceData
+
+
+_TIME_EPS = 1.0e-9
 
 
 @dataclass(frozen=True)
@@ -47,15 +51,25 @@ def build_timed_sortie(
     *,
     start_time: float,
 ) -> TimedSortie:
-    """Build the earliest feasible timed sortie for a fixed sequence and path choices."""
+    """Build the earliest feasible sortie with waiting allowed only at the depot.
+
+    ``start_time`` is the earliest time at which the vehicle is available at
+    the depot.  The actual departure may be delayed there.  Once the sortie
+    leaves the depot, every task must start service exactly on arrival; a
+    route that would require waiting at any task is feasible only when one
+    common departure-time shift makes every task arrival fall inside its
+    service-start window.
+    """
 
     if len(path_types) != len(sequence) + 1:
         raise ValueError("path_types must have one entry per sortie leg including return")
     if len(sequence) > data.max_tasks_per_trip:
         return _infeasible(sequence, path_types, start_time, "max_tasks_per_trip")
 
+    earliest_departure = max(0.0, float(start_time))
+    latest_departure = float(data.horizon)
     current = "depot"
-    elapsed = float(start_time)
+    elapsed_from_departure = 0.0
     travel_time = 0.0
     distance = 0.0
     energy = 0.0
@@ -64,45 +78,53 @@ def build_timed_sortie(
     demand = 0.0
     service_cost = 0.0
     completion_term = 0.0
-    task_completion_times: dict[str, float] = {}
-    service_starts: dict[str, float] = {}
     legs: list[SortieLeg] = []
+    arrival_offsets: dict[str, float] = {}
 
     for index, task_id in enumerate(sequence):
         option = data.option(current, task_id, path_types[index])
-        elapsed += option.travel_time_min
+        elapsed_from_departure += option.travel_time_min
         travel_time += option.travel_time_min
         distance += option.distance_km
         energy += option.energy_proxy
         risk += option.risk_integral
         shadow += option.shadow_exposure_min
         task = data.tasks[task_id]
-        service_start = max(elapsed, task.ready_time)
-        if service_start > task.due_time - task.service_time + 1.0e-9:
+        arrival_offsets[task_id] = elapsed_from_departure
+        earliest_departure = max(
+            earliest_departure,
+            float(task.ready_time) - elapsed_from_departure,
+        )
+        latest_departure = min(
+            latest_departure,
+            float(task.due_time)
+            - float(task.service_time)
+            - elapsed_from_departure,
+        )
+        if earliest_departure > latest_departure + _TIME_EPS:
             return _infeasible(sequence, path_types, start_time, "time_window")
-        service_starts[task_id] = service_start
-        elapsed = service_start + task.service_time
+        elapsed_from_departure += task.service_time
         energy += task.service_energy
         risk += task.local_thermal_risk * task.service_time * 0.01
         shadow += task.local_shadow_score * task.service_time
         demand += task.demand
         service_cost += task.service_cost
-        completion_term += task.science_weight * elapsed
-        task_completion_times[task_id] = elapsed
         legs.append(SortieLeg(source=current, target=task_id, path_type=path_types[index]))
         current = task_id
 
     back = data.option(current, "depot", path_types[-1])
-    elapsed += back.travel_time_min
+    elapsed_from_departure += back.travel_time_min
     travel_time += back.travel_time_min
     distance += back.distance_km
     energy += back.energy_proxy
     risk += back.risk_integral
     shadow += back.shadow_exposure_min
     legs.append(SortieLeg(source=current, target="depot", path_type=path_types[-1]))
-    return_time = elapsed
     recharge = data.dock_overhead_min + energy / max(1.0e-9, data.recharge_power_proxy_per_min)
-    end_time = return_time + recharge
+    latest_departure = min(
+        latest_departure,
+        float(data.horizon) - elapsed_from_departure - recharge,
+    )
 
     if demand > data.capacity + 1.0e-9:
         return _infeasible(sequence, path_types, start_time, "capacity")
@@ -110,13 +132,26 @@ def build_timed_sortie(
         return _infeasible(sequence, path_types, start_time, "energy")
     if shadow > data.max_shadow_exposure_per_sortie + 1.0e-9:
         return _infeasible(sequence, path_types, start_time, "shadow_exposure")
-    if end_time > data.horizon + 1.0e-9:
+    if earliest_departure > latest_departure + _TIME_EPS:
         return _infeasible(sequence, path_types, start_time, "horizon")
+
+    actual_departure = earliest_departure
+    service_starts: dict[str, float] = {}
+    task_completion_times: dict[str, float] = {}
+    for task_id in sequence:
+        task = data.tasks[task_id]
+        service_start = actual_departure + arrival_offsets[task_id]
+        completion = service_start + float(task.service_time)
+        service_starts[task_id] = service_start
+        task_completion_times[task_id] = completion
+        completion_term += float(task.science_weight) * completion
+    return_time = actual_departure + elapsed_from_departure
+    end_time = return_time + recharge
 
     return TimedSortie(
         tasks=tuple(sequence),
         legs=tuple(legs),
-        start_time=round(start_time, 6),
+        start_time=round(actual_departure, 6),
         service_starts={key: round(value, 6) for key, value in service_starts.items()},
         return_time=round(return_time, 6),
         recharge_time=round(recharge, 6),

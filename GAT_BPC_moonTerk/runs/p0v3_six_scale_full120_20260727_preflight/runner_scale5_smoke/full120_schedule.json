@@ -1,0 +1,17 @@
+{
+  "created_at_utc": "2026-07-27T01:56:01.442412+00:00",
+  "schema_version": "lunar_ice_bpc.p0v3_six_scale_full120_baseline.v1.schedule",
+  "slots": [
+    {
+      "backend_id": "native_rcspp_inprocess",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_005/instance_001_logical_graph.json",
+      "instance_content_hash": "",
+      "instance_key": "instance_001",
+      "instance_sha256": "57aaf574b91093ab9e20cc43e0e3722434b7b92e3f21679d65d26507ec5e3bb3",
+      "scale": 5,
+      "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+      "slot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_six_scale_full120_20260727_preflight/runner_scale5_smoke/slots/scale_005/instance_001",
+      "slot_id": "s005_instance_001"
+    }
+  ]
+}

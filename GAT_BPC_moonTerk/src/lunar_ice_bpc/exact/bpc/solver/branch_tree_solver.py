@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from time import perf_counter
 from typing import Iterable, Mapping
 
+from lunar_ice_bpc.domain.scenario import SERVICE_TIMING_POLICY_ID
 from lunar_ice_bpc.exact.bpc.certificates.certificate_ledger import CertificateLedger
 from lunar_ice_bpc.exact.bpc.certificates.proof_debt_queue import ProofDebtQueue
 from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
@@ -1610,6 +1611,8 @@ def _tree_payload(
     return {
         "schema_version": "lunar_ice_bpc.b3_branch_price_tree_baseline.v1",
         "instance_id": data.instance_id,
+        "instance_content_hash": data.instance_content_hash,
+        "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
         "b3_mode": "B3B_seeded_branch_price_tree",
         "node_pricing_mode": root.get("node_pricing_mode") or B2B_R3_MODE,
         "node_pricing_modes": sorted({str(node.get("node_pricing_mode") or "") for node in nodes if node.get("node_pricing_mode")}),
@@ -2075,6 +2078,8 @@ def _too_large_payload(
     return {
         "schema_version": "lunar_ice_bpc.b3_branch_price_tree_baseline.v1",
         "instance_id": data.instance_id,
+        "instance_content_hash": data.instance_content_hash,
+        "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
         "algorithm_status": AlgorithmStatus.BPC_INCOMPLETE_PRICING.value,
         "certificate_scope": CertificateScope.FEASIBLE_INCUMBENT_ONLY.value,
         "pricing_state": PricingState.INCOMPLETE_LIMIT.value,

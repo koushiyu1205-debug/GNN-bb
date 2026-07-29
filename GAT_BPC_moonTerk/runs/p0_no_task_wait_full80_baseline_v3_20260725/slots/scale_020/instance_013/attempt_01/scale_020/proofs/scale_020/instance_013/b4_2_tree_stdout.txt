@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_full80_baseline_v3_20260725/slots/scale_020/instance_013/attempt_01/scale_020/proofs/scale_020/instance_013/b4_1_report_zh.md

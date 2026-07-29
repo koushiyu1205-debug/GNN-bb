@@ -1,0 +1,59 @@
+{
+  "completed_progress": {
+    "exact_by_scale": {
+      "10": 20,
+      "100": 0,
+      "20": 20,
+      "30": 20,
+      "5": 20,
+      "50": 0
+    },
+    "row_count": 81,
+    "terminal_by_scale": {
+      "10": {
+        "EXACT": 20
+      },
+      "100": {},
+      "20": {
+        "EXACT": 20
+      },
+      "30": {
+        "EXACT": 20
+      },
+      "5": {
+        "EXACT": 20
+      },
+      "50": {
+        "MEMORY_CENSORED_INCOMPLETE": 1
+      }
+    }
+  },
+  "created_at_utc": "2026-07-27T04:28:58.026817+00:00",
+  "frozen_native_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/native",
+  "issues": [
+    "host_total_memory_below_required_minimum"
+  ],
+  "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_six_scale_full120_baseline_20260727",
+  "resource_envelope_change_only": true,
+  "resource_plan": {
+    "host_emergency_watchdog_limit_gb": 2.0,
+    "host_qualified": false,
+    "minimum_required_total_memory_gb": 360.0,
+    "minimum_runtime_available_memory_gb": 16.0,
+    "minimum_start_available_memory_gb": 12.0,
+    "native_cap_fraction": 0.875,
+    "native_cooperative_memory_limit_gb": 0.0,
+    "outer_process_tree_emergency_cap_gb": 4.0,
+    "recommendation_met": false,
+    "recommended_total_memory_gb": 380.0,
+    "row_time_limit_sec": 3600.0,
+    "system_reserve_gb": 48.0,
+    "total_memory_gb": 15.52446
+  },
+  "scale_50_100_legal_incomplete_rows_retried": true,
+  "scale_5_30_rows_reused": true,
+  "schema_version": "lunar_ice_bpc.p0v3_large_memory_continuation.v1.preflight",
+  "solver_change": false,
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/native_live_sri_p0_full120_v1.yaml",
+  "status": "FAILED"
+}

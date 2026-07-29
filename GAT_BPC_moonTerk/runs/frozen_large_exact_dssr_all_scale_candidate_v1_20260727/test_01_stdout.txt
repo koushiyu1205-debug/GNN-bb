@@ -1,0 +1,10 @@
+Internal ctest changing into directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-large-exact
+Test project /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-large-exact
+    Start 1: lunar_spprc_native_tests
+1/2 Test #1: lunar_spprc_native_tests .........   Passed    0.00 sec
+    Start 2: lunar_spprc_patch_queue_check
+2/2 Test #2: lunar_spprc_patch_queue_check ....   Passed    0.02 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.02 sec

@@ -14,6 +14,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include "rcspp/rcspp.hpp"
@@ -27,6 +29,8 @@ namespace {
 // exact-search operation into an allocation/copy/deallocation cycle.
 using VisitedMask = std::array<std::uint64_t, 2>;
 constexpr std::size_t kMaxActiveCuts = 16;
+constexpr const char* kDssrPolicyVersion =
+    "multi_sortie_counterexample_refinement_v1";
 
 struct CutState {
     // Exact overlap values: SRI-3 uses 2 bits (0..3), SRI-5 uses 3 bits
@@ -75,11 +79,14 @@ struct State {
     bool at_depot = true;
     VisitedMask visited{};
     std::size_t visited_count = 0;
+    std::size_t task_visit_count = 0;
     std::size_t sortie_task_count = 0;
     std::size_t sortie_count = 0;
     std::size_t visited_at_sortie_start = 0;
     double global_time = 0.0;
     double sortie_start_time = 0.0;
+    double sortie_latest_start_time = std::numeric_limits<double>::infinity();
+    double sortie_science_weight = 0.0;
     double sortie_demand = 0.0;
     double sortie_energy = 0.0;
     double sortie_shadow = 0.0;
@@ -90,6 +97,8 @@ struct State {
     double positive_task_dual_reward = 0.0;
     double cut_dual_reward = 0.0;
     double guidance_score = 0.0;
+    std::size_t last_task_index = std::numeric_limits<std::size_t>::max();
+    std::size_t last_model_arc_index = std::numeric_limits<std::size_t>::max();
     CutState cut_state;
 };
 
@@ -128,6 +137,32 @@ bool visited(const State& state, std::size_t task_index) {
     const auto word = task_index / 64U;
     const auto bit = task_index % 64U;
     return word < state.visited.size() && ((state.visited[word] >> bit) & 1U) != 0U;
+}
+
+bool mask_contains(const std::vector<std::uint64_t>& mask,
+                   std::size_t task_index) {
+    const auto word = task_index / 64U;
+    const auto bit = task_index % 64U;
+    return word < mask.size() && ((mask[word] >> bit) & 1U) != 0U;
+}
+
+VisitedMask dominance_visited_key(const Model& model, const State& state) {
+    if (!model.dssr_relaxation_enabled) {
+        return state.visited;
+    }
+    VisitedMask key{};
+    for (std::size_t word = 0; word < key.size(); ++word) {
+        const auto critical =
+            word < model.dssr_critical_task_mask.size()
+                ? model.dssr_critical_task_mask[word]
+                : std::uint64_t{0};
+        const auto branch =
+            word < model.dssr_branch_task_mask.size()
+                ? model.dssr_branch_task_mask[word]
+                : std::uint64_t{0};
+        key[word] = state.visited[word] & (critical | branch);
+    }
+    return key;
 }
 
 bool visited_subset(const State& lhs, const State& rhs) {
@@ -174,6 +209,9 @@ bool branch_terminal_feasible(const Model& model, const State& state) {
 }
 
 void mark_visited(State* state, std::size_t task_index) {
+    if (visited(*state, task_index)) {
+        return;
+    }
     const auto word = task_index / 64U;
     const auto bit = task_index % 64U;
     state->visited.at(word) |= (std::uint64_t{1} << bit);
@@ -200,7 +238,7 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         } else if (action.kind == ActionKind::ReturnDepot) {
             extend_return(action, &next);
         } else {
-            next.valid = next.at_depot && next.visited_count > 0 &&
+            next.valid = next.at_depot && next.task_visit_count > 0 &&
                          next.sortie_task_count == 0 &&
                          branch_terminal_feasible(*model_, next);
         }
@@ -220,8 +258,17 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
   private:
     void extend_visit(const Action& action, State* state) const {
         const auto epsilon = 1.0e-9;
-        if (action.task_index >= model_->tasks.size() || visited(*state, action.task_index) ||
-            state->sortie_task_count >= model_->max_tasks_per_trip) {
+        if (action.task_index >= model_->tasks.size() ||
+            state->sortie_task_count >= model_->max_tasks_per_trip ||
+            state->task_visit_count >= model_->tasks.size()) {
+            state->valid = false;
+            return;
+        }
+        const bool already_visited = visited(*state, action.task_index);
+        if (already_visited &&
+            (!model_->dssr_relaxation_enabled ||
+             mask_contains(model_->dssr_critical_task_mask,
+                           action.task_index))) {
             state->valid = false;
             return;
         }
@@ -229,9 +276,28 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         if (state->sortie_task_count == 0) {
             state->visited_at_sortie_start = state->visited_count;
             state->sortie_start_time = state->global_time;
+            state->sortie_latest_start_time = model_->horizon;
+            state->sortie_science_weight = 0.0;
         }
         const double arrival = state->global_time + action.travel_time;
-        const double service_start = std::max(arrival, task.ready_time);
+        const double arrival_offset = arrival - state->sortie_start_time;
+        state->sortie_latest_start_time =
+            std::min(state->sortie_latest_start_time,
+                     task.due_time - task.service_time - arrival_offset);
+        const double required_start =
+            std::max(state->sortie_start_time,
+                     task.ready_time - arrival_offset);
+        if (required_start > state->sortie_latest_start_time + epsilon) {
+            state->valid = false;
+            return;
+        }
+        const double departure_shift = required_start - state->sortie_start_time;
+        if (departure_shift > epsilon) {
+            state->raw_weighted_completion +=
+                state->sortie_science_weight * departure_shift;
+            state->sortie_start_time = required_start;
+        }
+        const double service_start = arrival + departure_shift;
         const double completion = service_start + task.service_time;
         if (completion > task.due_time + epsilon || completion > model_->horizon + epsilon) {
             state->valid = false;
@@ -251,6 +317,7 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
                                      task.service_cost;
         state->raw_risk += action.risk + task.local_thermal_risk * task.service_time * 0.01;
         state->raw_weighted_completion += task.science_weight * completion;
+        state->sortie_science_weight += task.science_weight;
         state->task_dual_reward += task.dual;
         state->positive_task_dual_reward += std::max(0.0, task.dual);
         if (model_->guidance_task_arc_enabled) {
@@ -289,7 +356,10 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
             }
         }
         state->at_depot = false;
+        state->last_task_index = action.task_index;
+        state->last_model_arc_index = action.model_arc_index;
         ++state->sortie_task_count;
+        ++state->task_visit_count;
         mark_visited(state, action.task_index);
         for (const auto& decision : model_->branch_decisions) {
             if (decision.sense != BranchSense::DifferentJourney) {
@@ -323,7 +393,8 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         const double end_time = return_time + recharge;
         if (end_time > model_->horizon + epsilon ||
             end_time <= state->sortie_start_time + epsilon ||
-            state->visited_count <= state->visited_at_sortie_start) {
+            (!model_->dssr_relaxation_enabled &&
+             state->visited_count <= state->visited_at_sortie_start)) {
             state->valid = false;
             return;
         }
@@ -336,14 +407,19 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
                 model_->arcs[action.model_arc_index].guidance_priority;
         }
         state->at_depot = true;
+        state->last_model_arc_index = action.model_arc_index;
         state->sortie_demand = 0.0;
         state->sortie_energy = 0.0;
         state->sortie_shadow = 0.0;
+        state->sortie_latest_start_time = std::numeric_limits<double>::infinity();
+        state->sortie_science_weight = 0.0;
         state->sortie_task_count = 0;
         ++state->sortie_count;
-        assert(state->visited_count > state->visited_at_sortie_start);
+        assert(model_->dssr_relaxation_enabled ||
+               state->visited_count > state->visited_at_sortie_start);
         assert(state->global_time > state->sortie_start_time);
-        if (state->sortie_count > state->visited_count) {
+        if (!model_->dssr_relaxation_enabled &&
+            state->sortie_count > state->visited_count) {
             state->valid = false;
         }
     }
@@ -377,7 +453,7 @@ class JourneyFeasibility final : public rcspp::FeasibilityFunction<JourneyResour
             }
         }
         if (node_id_ == sink_id_) {
-            return state.at_depot && state.visited_count > 0 &&
+            return state.at_depot && state.task_visit_count > 0 &&
                    state.sortie_task_count == 0 &&
                    branch_terminal_feasible(*model_, state);
         }
@@ -448,15 +524,26 @@ class JourneyDominance final : public rcspp::DominanceFunction<JourneyResource> 
         if (!lhs.valid || !rhs.valid || lhs.at_depot != rhs.at_depot) {
             return false;
         }
-        if (lhs.visited != rhs.visited) {
-            if (!model_->subset_dominance_enabled || lhs.visited_count == 0 ||
-                !visited_subset(lhs, rhs) ||
+        // During a sortie, a later task may require a retroactive depot
+        // departure shift.  Existing resource dominance does not carry the
+        // complete departure-feasibility interval and shift-cost intercept, so
+        // active-sortie dominance would be unsafe under no-task-wait timing.
+        if (!lhs.at_depot) {
+            return false;
+        }
+        const auto lhs_key = dominance_visited_key(*model_, lhs);
+        const auto rhs_key = dominance_visited_key(*model_, rhs);
+        if (lhs_key != rhs_key) {
+            if (model_->dssr_relaxation_enabled ||
+                !model_->subset_dominance_enabled ||
+                lhs.visited_count == 0 || !visited_subset(lhs, rhs) ||
                 !same_active_cut_state(lhs.cut_state, rhs.cut_state) ||
                 !branch_subset_dominance_compatible(*model_, lhs, rhs)) {
                 return false;
             }
         }
         return lhs.global_time <= rhs.global_time + resource_epsilon_ &&
+               lhs.task_visit_count <= rhs.task_visit_count &&
                lhs.sortie_demand <= rhs.sortie_demand + resource_epsilon_ &&
                lhs.sortie_energy <= rhs.sortie_energy + resource_epsilon_ &&
                lhs.sortie_shadow <= rhs.sortie_shadow + resource_epsilon_ &&
@@ -482,6 +569,24 @@ struct VisitedKeyHash {
     }
 };
 
+struct ProofQueuePotentialTrace {
+    ProofQueuePotentialTrace(
+        std::size_t task_count,
+        std::size_t arc_count
+    )
+        : task_rows(task_count), arc_rows(arc_count) {
+        for (std::size_t index = 0; index < task_rows.size(); ++index) {
+            task_rows[index].task_index = index;
+        }
+        for (std::size_t index = 0; index < arc_rows.size(); ++index) {
+            arc_rows[index].task_index = index;
+        }
+    }
+
+    std::vector<TaskDominanceTraceRow> task_rows;
+    std::vector<TaskDominanceTraceRow> arc_rows;
+};
+
 class VisitedLabelList {
   public:
     using Label = rcspp::Label<Composition>;
@@ -491,11 +596,13 @@ class VisitedLabelList {
     explicit VisitedLabelList(std::shared_ptr<const Model> model = nullptr,
                               std::size_t subset_enumeration_limit = 10,
                               double dominance_epsilon = 1.0e-12,
-                              double resource_epsilon = 1.0e-9)
+                              double resource_epsilon = 1.0e-9,
+                              std::shared_ptr<ProofQueuePotentialTrace> trace = nullptr)
         : model_(std::move(model)),
           subset_enumeration_limit_(subset_enumeration_limit),
           dominance_epsilon_(dominance_epsilon),
-          resource_epsilon_(resource_epsilon) {}
+          resource_epsilon_(resource_epsilon),
+          trace_(std::move(trace)) {}
     // AlgorithmParams only copies the empty prototype container. Runtime
     // containers are created through copy(), so iterator-bearing state is
     // never copied.
@@ -503,12 +610,13 @@ class VisitedLabelList {
         : model_(other.model_),
           subset_enumeration_limit_(other.subset_enumeration_limit_),
           dominance_epsilon_(other.dominance_epsilon_),
-          resource_epsilon_(other.resource_epsilon_) {}
+          resource_epsilon_(other.resource_epsilon_),
+          trace_(other.trace_) {}
     VisitedLabelList& operator=(const VisitedLabelList&) = delete;
 
     [[nodiscard]] VisitedLabelList copy() const {
         return VisitedLabelList{model_, subset_enumeration_limit_, dominance_epsilon_,
-                                resource_epsilon_};
+                                resource_epsilon_, trace_};
     }
 
     [[nodiscard]] const std::list<Label*>& get_labels() const { return labels_; }
@@ -549,6 +657,7 @@ class VisitedLabelList {
             }
             ++dominance_candidate_checks_;
             if (label <= *candidate) {
+                record_removal(label, *candidate);
                 candidate->dominated = true;
                 remove_location(candidate, true);
                 ++removed;
@@ -561,6 +670,7 @@ class VisitedLabelList {
     }
 
     [[nodiscard]] bool is_dominated(const Label& label) const {
+        record_exposure(label);
         const auto bucket_it = buckets_.find(visited_key(label));
         if (bucket_it != buckets_.end()) {
             for (const auto* candidate : bucket_it->second.labels) {
@@ -569,6 +679,7 @@ class VisitedLabelList {
                 }
                 ++dominance_candidate_checks_;
                 if (*candidate <= label) {
+                    record_dominance(candidate, label);
                     return true;
                 }
             }
@@ -628,6 +739,7 @@ class VisitedLabelList {
                 ++dominance_candidate_checks_;
                 ++subset_dominance_candidate_checks_;
                 if (known_subset_candidate_dominates(*candidate, label)) {
+                    record_dominance(candidate, label);
                     ++subset_dominance_rejected_labels_;
                     return true;
                 }
@@ -666,6 +778,73 @@ class VisitedLabelList {
     }
 
   private:
+    void record_exposure(const Label& label) const {
+        if (trace_ == nullptr) {
+            return;
+        }
+        const auto& value = state(label);
+        if (value.last_task_index < trace_->task_rows.size()) {
+            ++trace_->task_rows[value.last_task_index].incoming_evaluated;
+        }
+        if (value.last_model_arc_index < trace_->arc_rows.size()) {
+            ++trace_->arc_rows[value.last_model_arc_index].incoming_evaluated;
+        }
+    }
+
+    void record_removal(
+        const Label& winner,
+        const Label& removed
+    ) const {
+        if (trace_ == nullptr) {
+            return;
+        }
+        const auto& winner_state = state(winner);
+        const auto& removed_state = state(removed);
+        if (winner_state.last_task_index < trace_->task_rows.size()) {
+            ++trace_->task_rows[winner_state.last_task_index]
+                  .accepted_removed_existing;
+        }
+        if (removed_state.last_task_index < trace_->task_rows.size()) {
+            ++trace_->task_rows[removed_state.last_task_index]
+                  .removed_as_existing;
+        }
+        if (winner_state.last_model_arc_index < trace_->arc_rows.size()) {
+            ++trace_->arc_rows[winner_state.last_model_arc_index]
+                  .accepted_removed_existing;
+        }
+        if (removed_state.last_model_arc_index < trace_->arc_rows.size()) {
+            ++trace_->arc_rows[removed_state.last_model_arc_index]
+                  .removed_as_existing;
+        }
+    }
+
+    void record_dominance(
+        const Label* winner,
+        const Label& rejected
+    ) const {
+        if (trace_ == nullptr) {
+            return;
+        }
+        const auto& winner_state = state(*winner);
+        const auto& rejected_state = state(rejected);
+        if (winner_state.last_task_index < trace_->task_rows.size()) {
+            ++trace_->task_rows[winner_state.last_task_index]
+                  .existing_dominator_wins;
+        }
+        if (rejected_state.last_task_index < trace_->task_rows.size()) {
+            ++trace_->task_rows[rejected_state.last_task_index]
+                  .incoming_rejected;
+        }
+        if (winner_state.last_model_arc_index < trace_->arc_rows.size()) {
+            ++trace_->arc_rows[winner_state.last_model_arc_index]
+                  .existing_dominator_wins;
+        }
+        if (rejected_state.last_model_arc_index < trace_->arc_rows.size()) {
+            ++trace_->arc_rows[rejected_state.last_model_arc_index]
+                  .incoming_rejected;
+        }
+    }
+
     struct Bucket {
         std::vector<Label*> labels;
         double min_global_time = std::numeric_limits<double>::infinity();
@@ -690,7 +869,9 @@ class VisitedLabelList {
             .state;
     }
 
-    static VisitedKey visited_key(const Label& label) { return state(label).visited; }
+    [[nodiscard]] VisitedKey visited_key(const Label& label) const {
+        return dominance_visited_key(*model_, state(label));
+    }
 
     void update_summary(Bucket* bucket, const Label& label) const {
         const auto& value = state(label);
@@ -726,7 +907,11 @@ class VisitedLabelList {
             !same_active_cut_state(lhs.cut_state, rhs.cut_state)) {
             return false;
         }
+        if (!lhs.at_depot) {
+            return false;
+        }
         if (lhs.global_time > rhs.global_time + resource_epsilon_ ||
+            lhs.task_visit_count > rhs.task_visit_count ||
             lhs.sortie_demand > rhs.sortie_demand + resource_epsilon_ ||
             lhs.sortie_energy > rhs.sortie_energy + resource_epsilon_ ||
             lhs.sortie_shadow > rhs.sortie_shadow + resource_epsilon_ ||
@@ -788,6 +973,7 @@ class VisitedLabelList {
     std::size_t subset_enumeration_limit_ = 10;
     double dominance_epsilon_ = 1.0e-12;
     double resource_epsilon_ = 1.0e-9;
+    std::shared_ptr<ProofQueuePotentialTrace> trace_;
 };
 
 using LabelList = VisitedLabelList;
@@ -803,12 +989,16 @@ class AuditedBestFirstDominance final
     AuditedBestFirstDominance(rcspp::ResourceFactory<Composition>* factory,
                               rcspp::AlgorithmParams<LabelList> params,
                               std::shared_ptr<const Model> model,
-                              ProofQueuePolicy proof_queue_policy)
+                              ProofQueuePolicy proof_queue_policy,
+                              double proof_queue_guidance_bucket_width)
         : Base(factory, std::move(params)),
           model_(std::move(model)),
-          proof_queue_policy_(proof_queue_policy) {}
+          proof_queue_policy_(proof_queue_policy),
+          proof_queue_guidance_bucket_width_(
+              proof_queue_guidance_bucket_width) {}
 
     [[nodiscard]] std::size_t extended_labels() const { return this->num_extended_labels_; }
+    [[nodiscard]] std::size_t processed_labels() const { return processed_labels_; }
     [[nodiscard]] std::size_t dominated_labels() const { return this->nb_dominated_labels_; }
     [[nodiscard]] bool memory_pressure_triggered() const {
         return this->memory_pressure_triggered_;
@@ -926,8 +1116,10 @@ class AuditedBestFirstDominance final
                                         .get_value()
                                         .get_value()
                                         .state;
-            const bool lhs_can_terminate = lhs_state.at_depot && lhs_state.visited_count > 0;
-            const bool rhs_can_terminate = rhs_state.at_depot && rhs_state.visited_count > 0;
+            const bool lhs_can_terminate =
+                lhs_state.at_depot && lhs_state.task_visit_count > 0;
+            const bool rhs_can_terminate =
+                rhs_state.at_depot && rhs_state.task_visit_count > 0;
             if (lhs_can_terminate != rhs_can_terminate) {
                 return !lhs_can_terminate;
             }
@@ -947,6 +1139,7 @@ class AuditedBestFirstDominance final
         Pair value;
         bool can_terminate = false;
         double primary_key = 0.0;
+        double secondary_key = 0.0;
         double guidance_score = 0.0;
         double partial_cost = 0.0;
         std::uint64_t creation_sequence_id = 0;
@@ -966,6 +1159,12 @@ class AuditedBestFirstDominance final
                 key_epsilon
             ) {
                 return lhs.primary_key > rhs.primary_key;
+            }
+            if (
+                std::abs(lhs.secondary_key - rhs.secondary_key) >
+                key_epsilon
+            ) {
+                return lhs.secondary_key > rhs.secondary_key;
             }
             if (
                 std::abs(lhs.guidance_score - rhs.guidance_score) >
@@ -996,6 +1195,7 @@ class AuditedBestFirstDominance final
             }
             auto value = unprocessed_q0_.top();
             unprocessed_q0_.pop();
+            ++processed_labels_;
             return value;
         }
         if (unprocessed_experimental_.empty()) {
@@ -1003,6 +1203,7 @@ class AuditedBestFirstDominance final
         }
         auto entry = unprocessed_experimental_.top();
         unprocessed_experimental_.pop();
+        ++processed_labels_;
         return entry.value;
     }
 
@@ -1032,6 +1233,7 @@ class AuditedBestFirstDominance final
                                 .state;
         const double partial_cost = value.first->get_cost();
         double primary_key = 0.0;
+        double secondary_key = 0.0;
         if (
             proof_queue_policy_ ==
             ProofQueuePolicy::QD1DeeperFirst
@@ -1046,13 +1248,26 @@ class AuditedBestFirstDominance final
                 model_->positive_task_dual_sum -
                     state.positive_task_dual_reward);
             primary_key = partial_cost - remaining_positive_dual;
+        } else if (
+            proof_queue_policy_ ==
+            ProofQueuePolicy::QG1GuidancePotential
+        ) {
+            // Keep QD1's proven deeper-first skeleton. Guidance is allowed to
+            // reorder only labels at the same depth and in the same
+            // deterministic coarse partial-RC bucket. Exact partial RC and
+            // creation id remain deterministic fallbacks. With all-zero
+            // guidance this is exactly the QD1 total order.
+            primary_key = -static_cast<double>(state.visited_count);
+            secondary_key = std::floor(
+                partial_cost / proof_queue_guidance_bucket_width_);
         }
         unprocessed_experimental_.push(CachedQueueEntry{
             .value = value,
             .can_terminate = (
-                state.at_depot && state.visited_count > 0
+                state.at_depot && state.task_visit_count > 0
             ),
             .primary_key = primary_key,
+            .secondary_key = secondary_key,
             .guidance_score = state.guidance_score,
             .partial_cost = partial_cost,
             .creation_sequence_id = next_creation_sequence_id_++,
@@ -1085,7 +1300,9 @@ class AuditedBestFirstDominance final
     std::shared_ptr<const Model> model_;
     ProofQueuePolicy proof_queue_policy_ =
         ProofQueuePolicy::Q0PartialCost;
+    double proof_queue_guidance_bucket_width_ = 0.01;
     std::uint64_t next_creation_sequence_id_ = 0;
+    std::size_t processed_labels_ = 0;
     static constexpr std::size_t max_best_reduced_cost_events_ = 512;
     Clock::time_point trace_started_{};
     bool trace_enabled_ = false;
@@ -1130,7 +1347,10 @@ std::string graph_cache_key(const Model& model, const SolveParams& params) {
         return {};
     }
     return model.structure_hash + ":d=" + std::to_string(params.dominance_epsilon) +
-           ":r=" + std::to_string(params.resource_epsilon);
+           ":r=" + std::to_string(params.resource_epsilon) +
+           ":tw=no_task_wait_base_departure_shift_v1" +
+           ":dssr=" + (params.dssr_enabled ? std::string{kDssrPolicyVersion}
+                                            : std::string{"off"});
 }
 
 void refresh_dynamic_model(const Model& source, Model* target) {
@@ -1165,6 +1385,9 @@ void refresh_dynamic_model(const Model& source, Model* target) {
     target->branch_decisions = source.branch_decisions;
     target->cuts = source.cuts;
     target->guidance_task_arc_enabled = source.guidance_task_arc_enabled;
+    target->dssr_relaxation_enabled = source.dssr_relaxation_enabled;
+    target->dssr_critical_task_mask = source.dssr_critical_task_mask;
+    target->dssr_branch_task_mask = source.dssr_branch_task_mask;
 }
 
 BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& params) {
@@ -1219,13 +1442,14 @@ BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& pa
                 candidate.path_type == other.path_type) {
                 return false;
             }
-            const bool no_worse = other.travel_time <= candidate.travel_time + epsilon &&
+            const bool same_travel_time =
+                std::abs(other.travel_time - candidate.travel_time) <= epsilon;
+            const bool no_worse = same_travel_time &&
                                   other.energy <= candidate.energy + epsilon &&
                                   other.risk <= candidate.risk + epsilon &&
                                   other.distance <= candidate.distance + epsilon &&
                                   other.shadow <= candidate.shadow + epsilon;
-            const bool strictly_better = other.travel_time < candidate.travel_time - epsilon ||
-                                         other.energy < candidate.energy - epsilon ||
+            const bool strictly_better = other.energy < candidate.energy - epsilon ||
                                          other.risk < candidate.risk - epsilon ||
                                          other.distance < candidate.distance - epsilon ||
                                          other.shadow < candidate.shadow - epsilon;
@@ -1240,9 +1464,9 @@ BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& pa
         if (arc.source == "depot" && arc.target == "depot") {
             continue;
         }
-        // All objective coefficients are non-negative. For the same endpoints,
-        // an option weakly worse in time and every additive resource/objective
-        // component cannot belong to an optimal or negative journey.
+        // Under no-task-wait timing, a slower arc may absorb time that would
+        // otherwise require an infeasible retroactive depot departure shift.
+        // Therefore only equal-travel alternatives may dominate one another.
         if (option_is_dominated(arc)) {
             continue;
         }
@@ -1304,9 +1528,16 @@ Route reconstruct_route(const rcspp::Solution& solution, const Model& model,
 
 }  // namespace
 
-SolveOutput solve(const Model& input_model, const SolveParams& params) {
+SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     if (input_model.tasks.empty() || input_model.tasks.size() > 100) {
         throw std::invalid_argument("native v1 requires 1..100 tasks");
+    }
+    if (
+        !std::isfinite(params.proof_queue_guidance_bucket_width) ||
+        params.proof_queue_guidance_bucket_width <= 0.0
+    ) {
+        throw std::invalid_argument(
+            "proof queue guidance bucket width must be finite and positive");
     }
     if (input_model.cost_coefficient < 0.0 || input_model.risk_coefficient < 0.0 ||
         input_model.completion_coefficient < 0.0 || input_model.recharge_power <= 0.0) {
@@ -1423,12 +1654,20 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     // objective-best representative of each task set and caps the public
     // result at harvest_target, avoiding dozens of same-cover replacements.
     base.stop_after_X_solutions =
-        params.exact_proof
-            ? rcspp::MAX_INT
-            : std::min<std::size_t>(rcspp::MAX_INT, params.harvest_target * 8U);
-    base.return_dominated_solutions = !params.exact_proof;
+        params.dssr_enabled
+            ? 1U
+            : (params.exact_proof
+                   ? rcspp::MAX_INT
+                   : std::min<std::size_t>(
+                         rcspp::MAX_INT, params.harvest_target * 8U));
+    base.return_dominated_solutions =
+        params.dssr_enabled || !params.exact_proof;
     base.num_labels_to_extend_by_node = rcspp::MAX_INT;
     base.num_max_phases = 1;
+    base.max_iterations =
+        params.exact_proof || params.harvest_max_processed_labels == 0U
+            ? rcspp::MAX_INT
+            : params.harvest_max_processed_labels;
     // Harvest calls are allowed to return any audited negative subset.  Bound
     // their internal search slice so a dual with fewer than harvest_target
     // negatives cannot consume the entire proof clock before the explicit
@@ -1442,7 +1681,7 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     // Retain upstream's 1000-label cadence; per-request label-pool release
     // prevents the cross-round accumulation that caused the observed 012/014
     // failures, while this check still enforces the single-call hard limit.
-    base.memory_check_interval = 1000;
+    base.memory_check_interval = params.dssr_enabled ? 250U : 1000U;
     // Exact mode must never discard truncated labels. At the hard threshold the upstream
     // main loop checks is_exceeded() before is_under_pressure(), so 1.0 disables trimming.
     base.memory_pressure_fraction = 1.0;
@@ -1454,12 +1693,26 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     base.release_after_solve = false;
     base.tolerance = params.dominance_epsilon;
 
+    auto proof_queue_potential_trace =
+        params.proof_queue_potential_trace_enabled
+            ? std::make_shared<ProofQueuePotentialTrace>(
+                  model->tasks.size(),
+                  model->arcs.size())
+            : nullptr;
     rcspp::AlgorithmParams<LabelList> algorithm_params(
-        base, LabelList{model, 10, params.dominance_epsilon, params.resource_epsilon});
+        base,
+        LabelList{
+            model,
+            10,
+            params.dominance_epsilon,
+            params.resource_epsilon,
+            proof_queue_potential_trace,
+        });
     AuditedBestFirstDominance algorithm(&built.graph->get_resource_factory(),
                                         std::move(algorithm_params),
                                         model,
-                                        params.proof_queue_policy);
+                                        params.proof_queue_policy,
+                                        params.proof_queue_guidance_bucket_width);
     const auto started = std::chrono::steady_clock::now();
     algorithm.begin_best_reduced_cost_trace(started, !params.exact_proof);
     auto result = built.graph->solve<AuditedBestFirstDominance, rcspp::RealResource>(
@@ -1471,6 +1724,7 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     output.search_exhaustive = result.status == rcspp::AlgorithmStatus::COMPLETE;
     output.frontier_empty = output.search_exhaustive && algorithm.all_labels_processed();
     output.labels_dropped = algorithm.memory_pressure_triggered();
+    output.telemetry.processed_labels = algorithm.processed_labels();
     output.telemetry.extended_labels = algorithm.extended_labels();
     output.telemetry.dominated_labels = algorithm.dominated_labels();
     output.telemetry.dominance_candidate_checks = algorithm.dominance_candidate_checks();
@@ -1503,12 +1757,213 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
         algorithm.best_reduced_cost_event_count_total();
     output.telemetry.best_reduced_cost_events_truncated =
         algorithm.best_reduced_cost_events_truncated();
+    output.telemetry.proof_queue_potential_trace_enabled =
+        params.proof_queue_potential_trace_enabled;
+    if (proof_queue_potential_trace != nullptr) {
+        output.telemetry.proof_queue_potential_trace =
+            proof_queue_potential_trace->task_rows;
+        output.telemetry.proof_queue_arc_potential_trace =
+            proof_queue_potential_trace->arc_rows;
+    }
     output.routes.reserve(result.solutions.size());
     for (const auto& solution : result.solutions) {
         output.routes.push_back(reconstruct_route(solution, *model, built.actions_by_arc_id));
     }
     algorithm.release_request_memory();
     return output;
+}
+
+SolveOutput solve(const Model& input_model, const SolveParams& params) {
+    if (!params.dssr_enabled) {
+        return solve_once(input_model, params);
+    }
+    if (!params.exact_proof) {
+        throw std::invalid_argument(
+            "DSSR relaxation is available only for exact-proof pricing");
+    }
+
+    Model model = input_model;
+    model.dssr_relaxation_enabled = true;
+    const auto mask_words = (model.tasks.size() + 63U) / 64U;
+    model.dssr_critical_task_mask.assign(mask_words, 0U);
+    model.dssr_branch_task_mask.assign(mask_words, 0U);
+    for (const auto& decision : model.branch_decisions) {
+        const auto mark_branch_task = [&](std::size_t task_index,
+                                          bool exists) {
+            if (!exists || task_index >= model.tasks.size()) {
+                return;
+            }
+            model.dssr_branch_task_mask[task_index / 64U] |=
+                std::uint64_t{1} << (task_index % 64U);
+        };
+        mark_branch_task(decision.task_a, decision.task_a_exists);
+        mark_branch_task(decision.task_b, decision.task_b_exists);
+    }
+
+    SolveParams iteration_params = params;
+    iteration_params.completion_bound_enabled = false;
+    iteration_params.subset_dominance_enabled = false;
+    iteration_params.proof_queue_potential_trace_enabled = false;
+
+    const auto overall_started = std::chrono::steady_clock::now();
+    std::size_t total_processed_labels = 0;
+    std::size_t total_extended_labels = 0;
+    std::size_t total_dominated_labels = 0;
+    std::size_t total_dominance_checks = 0;
+    std::size_t max_bucket_size = 0;
+    double total_extension_seconds = 0.0;
+    double total_dominance_seconds = 0.0;
+    std::size_t refinement_count = 0;
+    std::size_t repeated_witness_count = 0;
+    std::vector<DssrIterationTraceRow> iteration_trace;
+
+    const auto critical_count = [&]() {
+        std::size_t count = 0;
+        for (const auto word : model.dssr_critical_task_mask) {
+            count += std::popcount(word);
+        }
+        return count;
+    };
+    const auto finalize = [&](SolveOutput output,
+                              bool elementary_witness,
+                              bool relaxation_certificate) {
+        output.telemetry.processed_labels = total_processed_labels;
+        output.telemetry.extended_labels = total_extended_labels;
+        output.telemetry.dominated_labels = total_dominated_labels;
+        output.telemetry.dominance_candidate_checks =
+            total_dominance_checks;
+        output.telemetry.max_visited_bucket_size = max_bucket_size;
+        output.telemetry.extension_wall_time_seconds =
+            total_extension_seconds;
+        output.telemetry.dominance_wall_time_seconds =
+            total_dominance_seconds;
+        output.telemetry.wall_time_seconds =
+            std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - overall_started)
+                .count();
+        output.telemetry.dssr_enabled = true;
+        output.telemetry.dssr_policy_version = kDssrPolicyVersion;
+        output.telemetry.dssr_iteration_count = iteration_trace.size();
+        output.telemetry.dssr_refinement_count = refinement_count;
+        output.telemetry.dssr_initial_critical_task_count = 0;
+        output.telemetry.dssr_final_critical_task_count =
+            critical_count();
+        output.telemetry.dssr_repeated_witness_count =
+            repeated_witness_count;
+        output.telemetry.dssr_elementary_witness_returned =
+            elementary_witness;
+        output.telemetry.dssr_relaxation_no_negative_certificate =
+            relaxation_certificate;
+        output.telemetry.dssr_iteration_trace = iteration_trace;
+        return output;
+    };
+
+    std::unordered_map<std::string, std::size_t> task_index_by_id;
+    for (const auto& task : model.tasks) {
+        task_index_by_id.emplace(task.id, task.index);
+    }
+
+    for (std::size_t iteration = 0;
+         iteration <= model.tasks.size();
+         ++iteration) {
+        if (std::isfinite(params.timeout_seconds)) {
+            const auto elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - overall_started);
+            const double remaining = params.timeout_seconds - elapsed.count();
+            if (remaining <= 0.0) {
+                SolveOutput timeout;
+                timeout.status = "timeout";
+                return finalize(std::move(timeout), false, false);
+            }
+            iteration_params.timeout_seconds = remaining;
+        }
+
+        const auto critical_before = critical_count();
+        auto output = solve_once(model, iteration_params);
+        total_processed_labels += output.telemetry.processed_labels;
+        total_extended_labels += output.telemetry.extended_labels;
+        total_dominated_labels += output.telemetry.dominated_labels;
+        total_dominance_checks +=
+            output.telemetry.dominance_candidate_checks;
+        max_bucket_size = std::max(
+            max_bucket_size,
+            output.telemetry.max_visited_bucket_size);
+        total_extension_seconds +=
+            output.telemetry.extension_wall_time_seconds;
+        total_dominance_seconds +=
+            output.telemetry.dominance_wall_time_seconds;
+
+        std::unordered_set<std::size_t> repeated_tasks;
+        bool witness_found = !output.routes.empty();
+        if (witness_found) {
+            std::unordered_set<std::size_t> seen_tasks;
+            for (const auto& sortie : output.routes.front().sorties) {
+                for (const auto& task_id : sortie.tasks) {
+                    const auto found = task_index_by_id.find(task_id);
+                    if (found == task_index_by_id.end()) {
+                        throw std::runtime_error(
+                            "DSSR witness references an unknown task");
+                    }
+                    if (!seen_tasks.insert(found->second).second) {
+                        repeated_tasks.insert(found->second);
+                    }
+                }
+            }
+        }
+        const bool witness_elementary =
+            witness_found && repeated_tasks.empty();
+        iteration_trace.push_back(DssrIterationTraceRow{
+            .iteration = iteration,
+            .critical_task_count_before = critical_before,
+            .repeated_task_count = repeated_tasks.size(),
+            .processed_labels = output.telemetry.processed_labels,
+            .extended_labels = output.telemetry.extended_labels,
+            .dominated_labels = output.telemetry.dominated_labels,
+            .max_visited_bucket_size =
+                output.telemetry.max_visited_bucket_size,
+            .wall_time_seconds = output.telemetry.wall_time_seconds,
+            .status = output.status,
+            .search_exhaustive = output.search_exhaustive,
+            .frontier_empty = output.frontier_empty,
+            .labels_dropped = output.labels_dropped,
+            .negative_witness_found = witness_found,
+            .witness_elementary = witness_elementary,
+        });
+
+        if (!witness_found) {
+            const bool certificate =
+                output.search_exhaustive && output.frontier_empty &&
+                !output.labels_dropped;
+            return finalize(std::move(output), false, certificate);
+        }
+        if (witness_elementary) {
+            return finalize(std::move(output), true, false);
+        }
+
+        ++repeated_witness_count;
+        std::size_t newly_critical = 0;
+        for (const auto task_index : repeated_tasks) {
+            const auto word = task_index / 64U;
+            const auto bit = task_index % 64U;
+            const auto bit_mask = std::uint64_t{1} << bit;
+            if ((model.dssr_critical_task_mask[word] & bit_mask) == 0U) {
+                model.dssr_critical_task_mask[word] |= bit_mask;
+                ++newly_critical;
+            }
+        }
+        if (newly_critical == 0U) {
+            output.status = "dssr_refinement_stalled";
+            output.routes.clear();
+            output.search_exhaustive = false;
+            output.frontier_empty = false;
+            return finalize(std::move(output), false, false);
+        }
+        ++refinement_count;
+    }
+
+    SolveOutput exhausted;
+    exhausted.status = "dssr_refinement_limit";
+    return finalize(std::move(exhausted), false, false);
 }
 
 std::unordered_map<std::string, std::string> build_info() {
@@ -1528,6 +1983,10 @@ std::unordered_map<std::string, std::string> build_info() {
         {"completion_bound", "positive_cover_dual_threshold_pruning_v1"},
         {"guidance_ordering", "negative_harvest_task_arc_priority_v1"},
         {"best_reduced_cost_event_trace", "harvest_improvements_v1"},
+        {"harvest_work_budget", "deterministic_processed_labels_v1"},
+        {"service_timing_policy_id", "no_task_wait_base_departure_shift_v1"},
+        {"large_scale_exact_pricer", kDssrPolicyVersion},
+        {"dssr_certificate_kind", "DSSR_RELAXATION_LOWER_BOUND"},
     };
 }
 

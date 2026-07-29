@@ -32,6 +32,9 @@ mathematical condition or scholarly conclusion in the third column.
 | `low_time` | Path alternative generated to minimize travel time | minimum-travel-time path alternative | Treat as an instance category, not as a code value. |
 | `low_energy` | Path alternative generated to minimize the recorded energy proxy | minimum-energy path alternative | Do not imply physical energy optimality beyond the frozen generator. |
 | `low_risk` | Path alternative generated to minimize the recorded traversal-risk measure | minimum-traversal-risk path alternative | Keep the risk measure bounded by its declared preprocessing model. |
+| The superseded `service_start = max(arrival, ready_time)` transition | Historical route construction permitted early-arrival waiting at a candidate task | the predecessor implementation permits candidate-site waiting | This is legacy evidence only and must not be used to describe the revised formulation. |
+| Current common-departure and latest-feasible-departure fields | Pricing represents the common feasible depot-departure interval and shifts the whole trip when a later release requires it | the feasible depot-departure interval and no-wait timing state | Use mathematical timing terms in the manuscript, not field names. |
+| Current rejected no-wait extension | An extension is infeasible when the accumulated task windows have no common feasible depot departure | the trip's feasible depot-departure interval is empty | Early arrival under a provisional departure is not itself infeasible; the whole trip is first shifted at the depot. |
 
 ## Drafting rule
 

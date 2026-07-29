@@ -841,8 +841,26 @@ def _extend_partial_sortie_label(
 ) -> _PartialSortieLabel | None:
     task = data.tasks[task_id]
     option = data.option(label.last_task, task_id, path_type)
-    elapsed = float(label.elapsed) + float(option.travel_time_min)
-    service_start = max(elapsed, float(task.ready_time))
+    arrival = float(label.elapsed) + float(option.travel_time_min)
+    arrival_offset = arrival - float(label.start_time)
+    required_departure = max(
+        float(label.start_time),
+        float(task.ready_time) - arrival_offset,
+    )
+    departure_shift = required_departure - float(label.start_time)
+    shifted_service_starts = {
+        previous_task_id: float(previous_start) + departure_shift
+        for previous_task_id, previous_start in label.service_starts.items()
+    }
+    if any(
+        shifted_service_starts[previous_task_id]
+        > float(data.tasks[previous_task_id].due_time)
+        - float(data.tasks[previous_task_id].service_time)
+        + 1.0e-9
+        for previous_task_id in shifted_service_starts
+    ):
+        return None
+    service_start = arrival + departure_shift
     if service_start > float(task.due_time) - float(task.service_time) + 1.0e-9:
         return None
     elapsed = service_start + float(task.service_time)
@@ -865,7 +883,15 @@ def _extend_partial_sortie_label(
     if shadow > float(data.max_shadow_exposure_per_sortie) + 1.0e-9:
         return None
     service_cost = float(label.service_cost) + float(task.service_cost)
-    completion = float(label.discovery_completion_term) + float(task.science_weight) * elapsed
+    prior_science_weight = sum(
+        float(data.tasks[previous_task_id].science_weight)
+        for previous_task_id in label.sequence
+    )
+    completion = (
+        float(label.discovery_completion_term)
+        + prior_science_weight * departure_shift
+        + float(task.science_weight) * elapsed
+    )
     distance = float(label.distance_km) + float(option.distance_km)
     base_cost = additive_objective_value(
         data,
@@ -877,14 +903,14 @@ def _extend_partial_sortie_label(
         risk_integral=risk,
         weighted_completion_time=completion,
     )
-    service_starts = dict(label.service_starts)
+    service_starts = dict(shifted_service_starts)
     service_starts[task_id] = round(service_start, 6)
     return _PartialSortieLabel(
         task_mask=int(label.task_mask) | int(task_bit),
         last_task=task_id,
         sequence=(*label.sequence, task_id),
         path_types=(*label.path_types, path_type),
-        start_time=label.start_time,
+        start_time=round(required_departure, 6),
         elapsed=round(elapsed, 6),
         service_starts=service_starts,
         travel_time=round(float(label.travel_time) + float(option.travel_time_min), 6),
@@ -909,16 +935,22 @@ def _nondominated_path_types(data: LunarIceData, source: str, target: str) -> tu
             if other_type == path_type:
                 continue
             other = options[str(other_type)]
+            same_travel_time = (
+                abs(
+                    float(other.travel_time_min)
+                    - float(option.travel_time_min)
+                )
+                <= 1.0e-9
+            )
             weakly_better = (
-                float(other.travel_time_min) <= float(option.travel_time_min) + 1.0e-9
+                same_travel_time
                 and float(other.distance_km) <= float(option.distance_km) + 1.0e-9
                 and float(other.energy_proxy) <= float(option.energy_proxy) + 1.0e-9
                 and float(other.risk_integral) <= float(option.risk_integral) + 1.0e-9
                 and float(other.shadow_exposure_min) <= float(option.shadow_exposure_min) + 1.0e-9
             )
             strictly_better = (
-                float(other.travel_time_min) < float(option.travel_time_min) - 1.0e-9
-                or float(other.distance_km) < float(option.distance_km) - 1.0e-9
+                float(other.distance_km) < float(option.distance_km) - 1.0e-9
                 or float(other.energy_proxy) < float(option.energy_proxy) - 1.0e-9
                 or float(other.risk_integral) < float(option.risk_integral) - 1.0e-9
                 or float(other.shadow_exposure_min) < float(option.shadow_exposure_min) - 1.0e-9
@@ -1022,15 +1054,19 @@ def _close_partial_sortie_label(
 def _add_partial_sortie_label(labels: list[_PartialSortieLabel], candidate: _PartialSortieLabel) -> None:
     kept: list[_PartialSortieLabel] = []
     for old in labels:
+        same_timing_state = (
+            abs(float(old.start_time) - float(candidate.start_time)) <= 1.0e-9
+            and abs(float(old.elapsed) - float(candidate.elapsed)) <= 1.0e-9
+        )
         if (
-            float(old.elapsed) <= float(candidate.elapsed) + 1.0e-9
+            same_timing_state
             and float(old.energy_proxy) <= float(candidate.energy_proxy) + 1.0e-9
             and float(old.shadow_exposure_min) <= float(candidate.shadow_exposure_min) + 1.0e-9
             and float(old.base_cost) <= float(candidate.base_cost) + 1.0e-9
         ):
             return
         if (
-            float(candidate.elapsed) <= float(old.elapsed) + 1.0e-9
+            same_timing_state
             and float(candidate.energy_proxy) <= float(old.energy_proxy) + 1.0e-9
             and float(candidate.shadow_exposure_min) <= float(old.shadow_exposure_min) + 1.0e-9
             and float(candidate.base_cost) <= float(old.base_cost) + 1.0e-9

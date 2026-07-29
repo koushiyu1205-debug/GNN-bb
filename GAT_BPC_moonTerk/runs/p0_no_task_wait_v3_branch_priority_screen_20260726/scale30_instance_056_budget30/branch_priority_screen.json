@@ -1,0 +1,673 @@
+{
+  "active_column_count": 2242,
+  "baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "baseline_registry_sha256": "bb0513a72f1a32e6714a25dd6ef79e1483371365736e3dfa7337c39bc434ed5c",
+  "cumulative_screen_wall_sec": 31.001154,
+  "cut_aware_active_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+  "cut_aware_active_cut_count": 0,
+  "cut_aware_candidate_count": 0,
+  "cut_aware_certificate_role": "none",
+  "cut_aware_commit_history": [
+    {
+      "activation": {
+        "active_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+        "active_cut_count": 0,
+        "added_cut_count": 0,
+        "added_cut_ids": [],
+        "addition_cap": 4,
+        "committed": false,
+        "cut_lineage_hash": "c768751713a52eda541e1ea27f8a5f65efbcf350515bccde86662cb21d5417ed",
+        "global_cut_count": 0,
+        "lineage_local_cut_count": 0,
+        "live_cut_policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+        "requested_selected_count": 0,
+        "scope": "global"
+      },
+      "rmp_bound_before": 1.40451,
+      "separation": {
+        "divisor": 2,
+        "enumerated_candidate_count": 4060,
+        "expected_candidate_count": 4060,
+        "family_no_violated_sri_certified": true,
+        "full_enumeration_completed": true,
+        "max_violation": null,
+        "positive_primal_column_count": 4,
+        "schema_version": "lunar_ice_bpc.live_sri_separation.v1",
+        "selected": [],
+        "selected_candidate_count": 0,
+        "selection_cap_reached": false,
+        "selection_capacity": 4,
+        "separator_policy_version": "native_live_sri_complete_enumeration_v1",
+        "subset_sizes": [
+          3
+        ],
+        "unselected_violated_count": 0,
+        "violated_candidate_count": 0,
+        "violation_eps": 1e-06
+      },
+      "separation_round": 1,
+      "terminal_reason": "COMPLETE_ENUMERATION_NO_NEW_VIOLATED_SRI"
+    }
+  ],
+  "cut_aware_cut_lineage_hash": "c768751713a52eda541e1ea27f8a5f65efbcf350515bccde86662cb21d5417ed",
+  "cut_aware_replay_completed": true,
+  "cut_aware_restricted_rmp_objective_bound": 1.40451,
+  "cut_aware_restricted_rmp_primal_column_count": 4,
+  "cut_aware_restricted_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+  "cut_aware_terminal_reason": "COMPLETE_ENUMERATION_NO_NEW_VIOLATED_SRI",
+  "cut_aware_top3_candidates": [],
+  "cut_aware_top3_fractionality_sum": 0,
+  "deployable": false,
+  "development_only": true,
+  "engine_hash": "439e12be8bf04208",
+  "exact_promotion_recommendation_is_training_target": false,
+  "exact_promotion_recommended": false,
+  "guidance_branch_pair_drop_count": 0,
+  "guidance_filter_count": 0,
+  "instance_content_hash": "530a79b233a9117e",
+  "instance_id": "lunar_ice_030_056_seed202907306",
+  "is_branch_training_label": false,
+  "is_certificate": false,
+  "is_exact_opportunity_decision": false,
+  "is_natural_opportunity_rate_evidence": false,
+  "may_permanently_filter_development_instance": false,
+  "note": "No-cut and fixed-pool P0 cut-aware restricted-RMP fractionality are collection schedulers only. Exact promotion requires cut-aware top-3 plus near saturation. At least 25% of development attempts remain content-hash-first to measure screen false negatives.",
+  "priority_key": [
+    1,
+    0,
+    32,
+    -2242,
+    "530a79b233a9117e"
+  ],
+  "priority_key_fields": [
+    "missing_top3_proxy",
+    "negative_top3_fractionality_sum",
+    "final_round_added_column_count",
+    "negative_active_column_count",
+    "instance_content_hash"
+  ],
+  "priority_key_is_training_target": false,
+  "proxy_candidate_count": 0,
+  "proxy_top3_candidates": [],
+  "proxy_top3_fractionality_sum": 0,
+  "recent_round_added_column_counts": [
+    32,
+    32
+  ],
+  "required_hash_order_exploration_quota": 0.25,
+  "restricted_frontier_near_saturation": false,
+  "restricted_rmp_objective_bound": 1.40451,
+  "restricted_rmp_primal_column_count": 4,
+  "restricted_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+  "root_prefix_added_column_count": 2208,
+  "root_prefix_certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+  "root_prefix_exact_safe": false,
+  "root_prefix_history": [
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.154484,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 1
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.080679,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 2
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.195951,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 3
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.096493,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 4
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.135621,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 5
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.117199,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 6
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.144488,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 7
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.094517,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 8
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.094554,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 9
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.141113,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 10
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.108098,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 11
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.073524,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 12
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.107206,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 13
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.14454,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 14
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.074735,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 15
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.14319,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 16
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.10126,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 17
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.106473,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 18
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.093202,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 19
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.082417,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 20
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.113556,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 21
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.093727,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 22
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.153743,
+      "node_lp_bound": 1.453992,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 23
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.144335,
+      "node_lp_bound": 1.425258,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 24
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.095186,
+      "node_lp_bound": 1.425258,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 25
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.102228,
+      "node_lp_bound": 1.425258,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 26
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.102836,
+      "node_lp_bound": 1.425258,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 27
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.226487,
+      "node_lp_bound": 1.425258,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 28
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.094638,
+      "node_lp_bound": 1.425258,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 29
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.281346,
+      "node_lp_bound": 1.425258,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 30
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.111689,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 31
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.081248,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 32
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.131342,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 33
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.103234,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 34
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.08484,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 35
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.143249,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 36
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.092835,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 37
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.44818,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 38
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.109249,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 39
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.073171,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 40
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.097337,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 41
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.077068,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 42
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.13577,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 43
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.223552,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 44
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.075599,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 45
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.27403,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 46
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.183134,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 47
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.148759,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 48
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.106838,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 49
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.074156,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 50
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.379468,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 51
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.51579,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 52
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.165177,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 53
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.228887,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 54
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.298868,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 55
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.297516,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 56
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.422748,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 57
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.191686,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 58
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 1.555192,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 59
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.233259,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 60
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 1.441934,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 61
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.176122,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 62
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.949199,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 63
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.777164,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 64
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 1.369019,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 65
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.473587,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 66
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.794994,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 67
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.728766,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 68
+    },
+    {
+      "addable_negative_count": 64,
+      "added_column_count": 32,
+      "final_judge_wall_time": 5.901352,
+      "node_lp_bound": 1.40451,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 69
+    }
+  ],
+  "root_prefix_pricing_state": "INCOMPLETE_LIMIT",
+  "root_prefix_round_count": 69,
+  "root_prefix_warm_source_certificate_reused": false,
+  "root_prefix_warm_source_columns_only": true,
+  "root_prefix_warm_source_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_priority_screen_20260726/scale30_instance_056_budget30/root_prefix_warm_source.json",
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_priority_screen.v3",
+  "screen_budget_sec": 30.0,
+  "screen_wall_sec": 31.001154,
+  "screen_warm_start": null,
+  "screen_warm_start_certificate_reused": false,
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "split_manifest_hash": "dd76b57d4618663c789d8c4dc2cfc4939597fc7900f8159ebc45b9aab8a68bca",
+  "training_authorized": false
+}

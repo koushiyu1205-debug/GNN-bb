@@ -1,0 +1,311 @@
+{
+  "all_census_exact": false,
+  "calibration_used": false,
+  "census_bindings": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_census/opportunity_census_progress.json",
+      "scale": 20,
+      "sha256": "91affe0e6205ed33bd6d3f7704533d400b99e98f59e104c58104c8c98ac83e04"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_census/opportunity_census_progress.json",
+      "scale": 30,
+      "sha256": "eb5b1fda231fdca7a086c124419f7d56b4dcab3c044421f8de8d186f05f553ad"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_expansion_census_root600/opportunity_census_progress.json",
+      "scale": 20,
+      "sha256": "293ebd79ce870bbb61e57ea50b11ba944f304dee0a8dd2c239f9d95d6970ec93"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_expansion_census/opportunity_census_progress.json",
+      "scale": 30,
+      "sha256": "5c0f9cbdad160460b7d32eb6568fe4def94f4a109d65b9372c41e7e04ae653ff"
+    }
+  ],
+  "deployment_authorized": false,
+  "event_rows": [
+    {
+      "driver_wall_sec": 9.485864,
+      "instance_content_hash": "08f23b317f52df8e",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_census/scale20_instance_004/branch_opportunity_report.json",
+      "opportunity_report_sha256": "c41b14ae2a0f5318a0244b86dff08246a6ba3fdad817da66e7e7bcec4b6f5a10",
+      "scale": 20,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.45668735,
+      "tail_event_elapsed_sec": 9.133747,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 6.749515,
+      "instance_content_hash": "37037d48065d317b",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_census/scale20_instance_001/branch_opportunity_report.json",
+      "opportunity_report_sha256": "84eb8f7ee46c064cea6034e21b805322d96e00ebd30dbe793796d4c3e1f4186d",
+      "scale": 20,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_ACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.3191916,
+      "tail_event_elapsed_sec": 6.383832,
+      "tail_trigger_eligible": true,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "BELOW_FIXED_TAIL_THRESHOLD",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 8.719815,
+      "instance_content_hash": "4fc392d5ac545bbd",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_census/scale20_instance_002/branch_opportunity_report.json",
+      "opportunity_report_sha256": "e25948a7f70e37c48879b6cb2d7c8f2a1d9ba7ab04b7d1daec4a8cbf7e6efc51",
+      "scale": 20,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.4170263,
+      "tail_event_elapsed_sec": 8.340526,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 75.466777,
+      "instance_content_hash": "39f5c5475211f753",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_census/scale30_instance_003/branch_opportunity_report.json",
+      "opportunity_report_sha256": "b50830e1ff34c36bd9a947287acaaa230ce9059a23410b6885d56ba3650d6b94",
+      "scale": 30,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 2.4814324666666665,
+      "tail_event_elapsed_sec": 74.44297399999999,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 47.927858,
+      "instance_content_hash": "4eefac1f60c7cdb5",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_census/scale30_instance_001/branch_opportunity_report.json",
+      "opportunity_report_sha256": "32b5f8c172f294d4f00e1fb307e58a42e355b7b6b22f84908217ee4c65f3d0da",
+      "scale": 30,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 1.5747556666666667,
+      "tail_event_elapsed_sec": 47.24267,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 77.862896,
+      "instance_content_hash": "5c27cdbd962c734d",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_census/scale30_instance_002/branch_opportunity_report.json",
+      "opportunity_report_sha256": "50c4792fa3e63a32a5c19b617339fcd34c05e0aaffa49c6218b6fbbf49478a82",
+      "scale": 30,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 2.564594833333333,
+      "tail_event_elapsed_sec": 76.937845,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 3.874419,
+      "instance_content_hash": "2fb79d2d6afd0eb1",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_expansion_census_root600/scale20_instance_006/branch_opportunity_report.json",
+      "opportunity_report_sha256": "a5f36634a181d82a73aca9b349bf5ecd8b11a6045ad91aa160c3835f916ef62a",
+      "scale": 20,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.1776294,
+      "tail_event_elapsed_sec": 3.552588,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 15.519963,
+      "instance_content_hash": "4a7b82692a2ab385",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_expansion_census_root600/scale20_instance_005/branch_opportunity_report.json",
+      "opportunity_report_sha256": "614120b4db138e246ea710329a8328420339e9498bb4f0cc44171a0e622c6b5f",
+      "scale": 20,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.7600866,
+      "tail_event_elapsed_sec": 15.201732,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 638.532181,
+      "instance_content_hash": "4aed02b565495412",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_expansion_census_root600/scale20_instance_008/branch_opportunity_report.json",
+      "opportunity_report_sha256": "3f6e18a161423a1a79d8b2330570448f69ffee9e0eff8746b9e1fdcfd5957c2e",
+      "scale": 20,
+      "selective_oracle_action": null,
+      "selective_oracle_net_gain_sec": null,
+      "status": "TREE_CENSORED",
+      "tail_elapsed_sec_per_task": 31.904472650000002,
+      "tail_event_elapsed_sec": 638.089453,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 83.820832,
+      "instance_content_hash": "82ea214bf17d5c38",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_expansion_census/scale30_instance_006/branch_opportunity_report.json",
+      "opportunity_report_sha256": "c9c507779b9a7a210a06f5592548b6511224c936431c9f84767a88427c5ffcba",
+      "scale": 30,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 2.7545026999999993,
+      "tail_event_elapsed_sec": 82.63508099999999,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 126.045817,
+      "instance_content_hash": "c37a19389e5c5fcf",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_expansion_census/scale30_instance_007/branch_opportunity_report.json",
+      "opportunity_report_sha256": "430f090841d9702c8024b65ff90d16e8a7648bcbb476f336e5582ca24f53468f",
+      "scale": 30,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 4.1811636,
+      "tail_event_elapsed_sec": 125.434908,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 153.094417,
+      "instance_content_hash": "d16e0a0e2002ebb6",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_expansion_census/scale30_instance_005/branch_opportunity_report.json",
+      "opportunity_report_sha256": "cdce1826c77a8c93b75472c5996bb2b73ec5820e06632e3f349009f4ad323b8a",
+      "scale": 30,
+      "selective_oracle_action": "2",
+      "selective_oracle_net_gain_sec": 17.563144,
+      "status": "EXACT_ACTIONABLE",
+      "tail_elapsed_sec_per_task": 5.055920633333333,
+      "tail_event_elapsed_sec": 151.677619,
+      "tail_trigger_eligible": true,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "FIRST_EXACT_LEGAL_TOP3_IN_TAIL",
+      "tail_triggered": true
+    }
+  ],
+  "evidence_role": "DESIGN_ONLY",
+  "formal_feature_collection_authorized": false,
+  "fresh_validation_collection_authorized": true,
+  "gat_training_authorized": false,
+  "gold_label_bindings": [
+    {
+      "branch_e2e_p0_control_wall_sec": 3.834803,
+      "branch_e2e_wall_sec_by_rank": {
+        "0": 3.854803,
+        "1": 37.261259,
+        "2": 3.138586
+      },
+      "branch_guidance_lifecycle_overhead_sec": 0.02,
+      "e2e_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale20_instance_001_e2e/state_oracle_report.json",
+      "e2e_report_sha256": "3cf48ce2c27a2baa65c74f44b45d6172077dc9ea91b48304647d402a759439e8",
+      "instance_content_hash": "37037d48065d317b",
+      "path_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "scale": 20
+    },
+    {
+      "branch_e2e_p0_control_wall_sec": 44.190635,
+      "branch_e2e_wall_sec_by_rank": {
+        "0": 44.210635,
+        "1": 775.551566,
+        "2": 26.627491
+      },
+      "branch_guidance_lifecycle_overhead_sec": 0.02,
+      "e2e_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_branch_real_map_headroom_20260726/scale30_instance_005_e2e/state_oracle_report.json",
+      "e2e_report_sha256": "e41b3b5fb920c0509f13f99b43f54c6a47dfea4575b44d03886a5af397d39e3b",
+      "instance_content_hash": "d16e0a0e2002ebb6",
+      "path_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "scale": 30
+    }
+  ],
+  "linear_training_authorized": false,
+  "observed": {
+    "evaluable_instance_cluster_count": 11,
+    "exact_instance_count_by_scale": {
+      "20": 5,
+      "30": 6
+    },
+    "missing_tail_trigger_gold_hashes": [],
+    "projected_instances_for_required_trigger_gold_by_scale": {
+      "20": null,
+      "30": 120
+    },
+    "selective_oracle_net_gain_sec_balanced_mean": 1.4635953333333334,
+    "selective_oracle_net_gain_sec_bootstrap_95ci": [
+      0.0,
+      4.390786
+    ],
+    "tail_trigger_count_by_scale": {
+      "20": 0,
+      "30": 1
+    },
+    "tail_trigger_gold_count_by_scale": {
+      "20": 0,
+      "30": 1
+    }
+  },
+  "one_shot_per_instance": true,
+  "pre_import_bypass_required": true,
+  "projected_collection_feasible": false,
+  "protected_final_test_used": false,
+  "required_trigger_gold_reached": false,
+  "schema_version": "lunar_ice_bpc.tail_selective_oracle_gate.v1",
+  "selective_oracle_lcb_positive": false,
+  "split_manifest_hash": "fcbb5fb9fbee8bce142d7291aa854ddc0644a83a98b1881073733b3fd62c2edf",
+  "split_manifest_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_branch_cross_domain_expanded_20260726_grouped_split_manifest.json",
+  "tail_selective_landing_validated": false,
+  "tail_trigger_gold_complete": true,
+  "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+  "target_domain": "real_lunar_south_pole_sp50_benchmark_v1",
+  "thresholds": {
+    "guidance_lifecycle_overhead_sec": 0.02,
+    "maximum_projected_development_instances_per_scale": 120,
+    "required_independent_trigger_gold_per_scale": 20
+  }
+}

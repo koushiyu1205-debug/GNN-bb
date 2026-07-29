@@ -13,11 +13,11 @@ multi-trip fleet routing, exact pricing, and the bounded role of learning.
 | Paragraph | Message | Evidence | Exit Function |
 |---:|---|---|---|
 | 1 | A mapped water-related signal is not yet site-level evidence of abundance, physical occurrence, or accessibility | C054, C061, C062; CL038 | Defines detection, sampling, and drilling at preidentified candidates as the planning task |
-| 2 | South-pole terrain, PSRs, static task windows, shadow exposure and alternative paths make evidence acquisition timing- and resource-dependent | C042, C054, C055; EV029, EV032, EV034; CL040 | Converts the lunar environment into joint service-timing and path decisions without adding a dynamic communication model |
+| 2 | South-pole terrain, PSRs, static task windows, shadow exposure and alternative paths make evidence acquisition timing- and resource-dependent; idle waiting is prohibited after depot departure | C042, C054, C055; EV029, EV032, EV034--EV035; CL040--CL041 | Converts the lunar environment into joint service-timing and path decisions with common adjustable trip departures and supported-depot waiting, without adding a dynamic communication model |
 | 3 | The heterogeneous multi-path, multi-trip capacitated formulation integrates task assignment, repeated trips, resource feasibility, the normalized objective and a forward-looking real-map benchmark | EV002--EV003, EV009--EV011, EV032; CL036 | Defines the mathematical decision and resolves the user's data placeholder through verified LOLA-derived raster provenance |
 | 4 | Retaining one inter-site path loses operational trade-offs, while complete multi-trip route columns make exact pricing resource-rich; learned ordering cannot replace proof-producing completion | C001, C002, C009, C021, C028--C030, C059; EV002, EV004--EV008, EV030 | Establishes both the representation and computational gaps addressed by the paper |
 | 5 | The proposed BPC uses pricing-first and branch-second guidance while all validity, bounds, pruning, and closure remain exact; seasonal comparisons solve independent fixed instances | EV004--EV009, EV033; CL005--CL011, CL035, CL039 | States the method and its exactness and environmental boundaries without self-questioning prose |
-| 6 | Four contributions and the paper organization follow the same funnel: formulation, exact framework, bounded guidance, and correctness-first evaluation with four seasonal phases | CL001--CL011, CL035--CL039; section blueprints | Leaves both learning effects and seasonal differences explicitly open |
+| 6 | Three contributions and the paper organization follow the same funnel: lunar routing model, learning-guided exact BPC algorithm, and reproducible benchmark/evaluation package | CL001--CL011, CL035--CL042; section blueprints | Combines the proof and guidance interface as one algorithmic contribution while leaving learning effects and seasonal differences explicitly open |
 
 ## User-Provided Material Transfer
 
@@ -28,6 +28,7 @@ multi-trip fleet routing, exact pricing, and the bounded role of learning.
 | Chang'E-5 shows heterogeneous host and retention conditions | Retained with C061--C062 | Primary sample evidence supports the bounded claim |
 | PSR access creates thermal, energy, and return considerations | Retained with a benchmark-model qualifier | Explains shadow exposure without treating it as solar generation |
 | Direct sunlight is not required for service; task windows represent instrument, communication and mission-schedule restrictions | Retained as a bounded static model interpretation | EV034 and CL040 record the user-confirmed interpretation; communication is explicitly not a separate dynamic constraint |
+| Waiting is prohibited at candidate tasks and en route but allowed at the depot | Retained with the common-departure feasibility condition, arrival-equals-service-start rule, service/wait distinction, and supported-depot assumption | EV035--EV036 and CL041 record the implemented policy |
 | Several alternative paths may trade time, energy, shadow, and risk | Retained | Matches the three fixed path options |
 | Use a 50 km by 50 km real lunar region, 30 km/h modeled speed and `xxxxx` lunar data | Retained after resolving `xxxxx` as locally available LOLA-derived elevation, slope, roughness, PSR and average solar-visibility rasters | EV011 and EV032 support the provenance; the extent and speed remain forward-looking experimental assumptions |
 | Path attributes vary with departure time | Not attributed to the current model | Attributes may differ across independently generated mission epochs, but remain immutable within one solve; departure time changes schedule feasibility only |
@@ -45,6 +46,7 @@ multi-trip fleet routing, exact pricing, and the bounded role of learning.
 | PSRs and adjacent terrain motivate path-resource trade-offs | C042, C054, C055; EV032 | Supported with scope qualifier |
 | Shadow exposure accumulates during movement and service in the benchmark | EV029; Eq. (6b) | Supported |
 | Static task windows can represent externally specified instrument, communication-schedule and mission-planning restrictions without modeling communication dynamics | EV034; CL040 | Supported as a bounded model interpretation, not measured schedule evidence |
+| A trip is time-feasible without candidate-site or en-route waiting only if one common depot departure satisfies every shifted task window | EV035--EV036; Eq. (3); CL041 | Supported by the mathematical model, implementation, and tests |
 | Current path attributes depend on departure time | Contradicted by EV029 and Lemma 1 assumptions | Excluded |
 | The benchmark uses a 50 km by 50 km area and configured 30 km/h maximum modeled speed | EV010--EV011, EV032 | Supported as uncalibrated scenario design |
 | The real-map benchmark uses locally available LOLA-derived elevation, slope, roughness, PSR and average solar-visibility rasters | EV011; source catalog and real-map preview | Supported with native-resolution and proxy qualifiers |
@@ -73,7 +75,7 @@ multi-trip fleet routing, exact pricing, and the bounded role of learning.
 | Writing clarity | Can a reader follow the argument before encountering solver terminology? | PASS: the first three paragraphs establish the evidence gap, environment, and routing model before decomposition or learning |
 | Experimental strength | Does the introduction imply a learning improvement that the present experiments cannot support? | PASS: learning effectiveness is explicitly left open pending M001--M005 |
 | Evaluation completeness | Are the future learning comparisons and safety checks visible at contribution level? | PASS: the fourth contribution names the correctness-first benchmark and audit order without inserting results |
-| Method soundness | Does the introduction match the implemented model and exactness proof? | PASS: path attributes are fixed, the objective is unchanged, learning is ordering-only, cuts are deterministic, and the exactness proof is stated as conditional |
+| Method soundness | Does the introduction match the revised model and exactness proof without overstating the current executable? | PASS: path attributes are fixed, no-wait feasibility uses one common trip departure, supported-depot waiting is explicit, the objective is unchanged, learning is ordering-only, cuts are deterministic, and the exactness proof is stated as conditional while executable validation remains pending |
 
 ## Verdict
 

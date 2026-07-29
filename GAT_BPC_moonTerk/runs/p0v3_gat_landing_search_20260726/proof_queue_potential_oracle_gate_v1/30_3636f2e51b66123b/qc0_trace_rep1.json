@@ -1,0 +1,360 @@
+{
+  "best_found_rc": null,
+  "can_certify_source_solve": false,
+  "can_enter_certificate_audit": true,
+  "certificate_blockers": [],
+  "column_count": 0,
+  "deployable": false,
+  "development_only": true,
+  "engine_status": "COMPLETE",
+  "exact_safe_ordering_audit": {
+    "guidance_can_certify": false,
+    "guidance_can_change_reduced_cost": false,
+    "guidance_can_filter": false,
+    "guidance_can_prune": false,
+    "ordering_only": true,
+    "passed": true
+  },
+  "fresh_process_arm": true,
+  "frontier_empty": true,
+  "global_min_rc": null,
+  "global_min_rc_is_exact": false,
+  "instance_content_hash": "d16e0a0e2002ebb6",
+  "instance_id": "lunar_ice_sp50_030_005_seed202907269",
+  "labels_dropped": false,
+  "mutates_p0": false,
+  "policy": "QC0",
+  "potential_id": null,
+  "potential_path": null,
+  "proof_telemetry": {
+    "dominance_candidate_checks": 70797388,
+    "dominance_wall_time_seconds": 0.518729007,
+    "dominated_labels": 284349,
+    "extended_labels": 16284455,
+    "extension_wall_time_seconds": 1.269713242,
+    "guidance_arc_drop_count": 0,
+    "guidance_branch_pair_drop_count": 0,
+    "guidance_effective_mode": "off",
+    "guidance_filter_count": 0,
+    "guidance_label_drop_count": 0,
+    "guidance_task_arc_enabled": null,
+    "legal_action_universe_hash_before_sort": "c2b8b400eb649e25083a3816de84a23801579c864737a02f0c22cdc9dac0d411",
+    "legal_arc_universe_hash_before_sort": "663a28b6a30a6c0d6995c6b98c2da040a6e1639de6a250a7464783af18d3d648",
+    "max_visited_bucket_size": 972,
+    "memory_pressure_triggered": false,
+    "processed_labels": 181429,
+    "proof_queue_policy_id": "QC0",
+    "proof_queue_potential_trace": [
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 2621,
+        "incoming_evaluated": 1945,
+        "incoming_rejected": 1457,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_001",
+        "task_index": 0
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 16493,
+        "incoming_evaluated": 38378,
+        "incoming_rejected": 28612,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_002",
+        "task_index": 1
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 22540,
+        "incoming_evaluated": 19916,
+        "incoming_rejected": 11919,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_003",
+        "task_index": 2
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 4948,
+        "incoming_evaluated": 10838,
+        "incoming_rejected": 4228,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_004",
+        "task_index": 3
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 5344,
+        "incoming_evaluated": 1262,
+        "incoming_rejected": 943,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_005",
+        "task_index": 4
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 6290,
+        "incoming_evaluated": 373,
+        "incoming_rejected": 278,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_006",
+        "task_index": 5
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 13664,
+        "incoming_evaluated": 14,
+        "incoming_rejected": 7,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_007",
+        "task_index": 6
+      },
+      {
+        "accepted_removed_existing": 1,
+        "existing_dominator_wins": 4514,
+        "incoming_evaluated": 121,
+        "incoming_rejected": 88,
+        "removed_as_existing": 1,
+        "task_id": "ice_site_008",
+        "task_index": 7
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 6704,
+        "incoming_evaluated": 80361,
+        "incoming_rejected": 57624,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_009",
+        "task_index": 8
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 17556,
+        "incoming_evaluated": 13,
+        "incoming_rejected": 8,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_010",
+        "task_index": 9
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 5200,
+        "incoming_evaluated": 11703,
+        "incoming_rejected": 4295,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_011",
+        "task_index": 10
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 9070,
+        "incoming_evaluated": 18281,
+        "incoming_rejected": 8977,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_012",
+        "task_index": 11
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 3628,
+        "incoming_evaluated": 1945,
+        "incoming_rejected": 1457,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_013",
+        "task_index": 12
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 16555,
+        "incoming_evaluated": 11153,
+        "incoming_rejected": 4645,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_014",
+        "task_index": 13
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 758,
+        "incoming_evaluated": 9410,
+        "incoming_rejected": 1123,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_015",
+        "task_index": 14
+      },
+      {
+        "accepted_removed_existing": 1,
+        "existing_dominator_wins": 5476,
+        "incoming_evaluated": 11592,
+        "incoming_rejected": 8648,
+        "removed_as_existing": 1,
+        "task_id": "ice_site_016",
+        "task_index": 15
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 21085,
+        "incoming_evaluated": 95732,
+        "incoming_rejected": 71680,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_017",
+        "task_index": 16
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 8114,
+        "incoming_evaluated": 643,
+        "incoming_rejected": 477,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_018",
+        "task_index": 17
+      },
+      {
+        "accepted_removed_existing": 2,
+        "existing_dominator_wins": 13983,
+        "incoming_evaluated": 12389,
+        "incoming_rejected": 9241,
+        "removed_as_existing": 2,
+        "task_id": "ice_site_019",
+        "task_index": 18
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 17329,
+        "incoming_evaluated": 1162,
+        "incoming_rejected": 847,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_020",
+        "task_index": 19
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 20990,
+        "incoming_evaluated": 3337,
+        "incoming_rejected": 2459,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_021",
+        "task_index": 20
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 2065,
+        "incoming_evaluated": 305,
+        "incoming_rejected": 220,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_022",
+        "task_index": 21
+      },
+      {
+        "accepted_removed_existing": 10,
+        "existing_dominator_wins": 20107,
+        "incoming_evaluated": 53967,
+        "incoming_rejected": 40057,
+        "removed_as_existing": 10,
+        "task_id": "ice_site_023",
+        "task_index": 22
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 12977,
+        "incoming_evaluated": 4496,
+        "incoming_rejected": 3358,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_024",
+        "task_index": 23
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 4459,
+        "incoming_evaluated": 13,
+        "incoming_rejected": 8,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_025",
+        "task_index": 24
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 19570,
+        "incoming_evaluated": 19950,
+        "incoming_rejected": 4785,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_026",
+        "task_index": 25
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 148,
+        "incoming_evaluated": 55187,
+        "incoming_rejected": 15973,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_027",
+        "task_index": 26
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 715,
+        "incoming_evaluated": 1224,
+        "incoming_rejected": 897,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_028",
+        "task_index": 27
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 1438,
+        "incoming_evaluated": 54,
+        "incoming_rejected": 30,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_029",
+        "task_index": 28
+      },
+      {
+        "accepted_removed_existing": 0,
+        "existing_dominator_wins": 8,
+        "incoming_evaluated": 13,
+        "incoming_rejected": 8,
+        "removed_as_existing": 0,
+        "task_id": "ice_site_030",
+        "task_index": 29
+      }
+    ],
+    "proof_queue_potential_trace_enabled": true,
+    "request_bindings_match": true,
+    "solution_count": 0,
+    "subset_dominance_rejected_labels": 261442,
+    "wall_time_seconds": 1.315249351
+  },
+  "proved_no_rc_below": -1e-06,
+  "repeat_index": 1,
+  "replay_binding": {
+    "binding_hash": "fe5648c68898899bcc935325a16718ca8cef07274405eb63bba8a0e2ee8b0030",
+    "branch_context_hash": "ea4a363b99a4f0b8f4de960f15f3757c5c1f8456b617b220a7852745fc55c38e",
+    "checkpoint_id": "",
+    "config_hash": "8a6654066c4248934b4e68ca6c24e159e058a8aaaa15ad7c64384471338641f3",
+    "cut_lineage_hash": "bf0677654e0f9963d0a298ca47cf5975da083fb4c52fd403ef19274cc9e05d92",
+    "cut_state_schema_version": "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2",
+    "engine_hash": "",
+    "feature_schema_version": "",
+    "full_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "instance_hash": "d16e0a0e2002ebb6",
+    "live_cut_policy_hash": "",
+    "mathematical_dual_hash": "ac4f9f042192a3dd7a0b5956807254e267a4e15986b627bbd62687d8626c080e",
+    "normalization_version": "",
+    "objective_mode": "official",
+    "ood_policy_version": "",
+    "phase": "phase_two",
+    "pricing_mode": "exact_proof",
+    "projected_pricing_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "raw_ieee_dual_hash": "403c900f0740f8a9230860568c228d5249fa61d8f7b0773fd20e149d3c6ea33b",
+    "request_dual_hash": "",
+    "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-32",
+    "schema_version": "lunar_ice_bpc.canonical_solve_binding.v2",
+    "separator_policy_version": ""
+  },
+  "route_rows": [],
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.p0v3_proof_queue_potential_replay.v1",
+  "search_exhaustive": true,
+  "source_round": 32,
+  "source_snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0032_3636f2e51b66123b.json",
+  "source_state_hash": "3636f2e51b66123b4a37e794cfdfb382e266c892c4083fdf76c9fa7ae9061d7d",
+  "total_fresh_process_wall_sec": 1.412572955
+}

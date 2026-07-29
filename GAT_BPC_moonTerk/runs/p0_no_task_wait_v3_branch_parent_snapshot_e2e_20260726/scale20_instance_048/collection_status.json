@@ -1,0 +1,19 @@
+{
+  "complete_matched_e2e_gold": true,
+  "completed_rank_indices": [
+    0,
+    1,
+    2
+  ],
+  "deployable": false,
+  "development_only": true,
+  "instance_content_hash": "61865c171cc0b4d6",
+  "instance_id": "lunar_ice_020_048_seed202807298",
+  "missing_rank_indices": [],
+  "oracle_net_gain_sec": 2.118518,
+  "oracle_selected_rank_index": 1,
+  "resume_required": false,
+  "schema_version": "lunar_ice_bpc.p0v3_branch_parent_snapshot_e2e_collection.v1",
+  "status": "COMPLETE",
+  "training_authorized": false
+}

@@ -1,0 +1,21 @@
+{
+  "exact_safe": true,
+  "expanded_node_count": 0,
+  "global_lower_bound": 1.544408,
+  "guidance_lifecycle_overhead_sec": 0.0,
+  "incomplete_node_count": 0,
+  "matched_end_to_end_wall_sec": 458.344212,
+  "node_count": 1,
+  "objective": 1.544408,
+  "requested_rank_index": 0,
+  "root_wall_sec": 310.057643,
+  "target_fallback_to_p0": false,
+  "target_node_id": "node_000",
+  "target_path_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "target_path_reached_once": true,
+  "target_path_signature": [],
+  "target_selected_rank_index": null,
+  "tree_result_sha256": "be7d1f91c08cc03f233569bffcdb1dbd7ca48728c5888a5032e2ed3989cb7b22",
+  "tree_wall_sec": 148.286569,
+  "universe_safe": true
+}

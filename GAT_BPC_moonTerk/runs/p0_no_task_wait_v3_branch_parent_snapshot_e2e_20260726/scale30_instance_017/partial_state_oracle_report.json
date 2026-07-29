@@ -1,0 +1,146 @@
+{
+  "actionable_state_count": 1,
+  "baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "certified_parent_pricing_reused": true,
+  "control": {
+    "arm_binding_hash": "f76e140367bd7f902fdc76d676f3e18f42d9dce8f96b91948a584df4148e1b9f",
+    "certified_parent_pricing_reused": true,
+    "descendant_pricing_certificate_reused": false,
+    "exact_safe": false,
+    "expanded_node_count": 2,
+    "global_lower_bound": 1.400912,
+    "guidance_lifecycle_overhead_sec": 0.0,
+    "incomplete_node_count": 1,
+    "matched_end_to_end_wall_sec": 3604.934714,
+    "matched_scope": "post_certified_parent_continuation",
+    "node_count": 3,
+    "objective": 1.418612,
+    "parent_source_sha256": "dec4c41fe6a3aee4966f6bb53dda74bd5cb8dfe51256c194bacc434d919a450d",
+    "requested_rank_index": 0,
+    "root_wall_sec": 0.0,
+    "target_fallback_to_p0": false,
+    "target_legal_branch_shortlist_hash_after_sort": "9de59d797c117a2db04286cf5b71b02465d99bc5783c5f8bccbad66bccc5eef8",
+    "target_legal_branch_shortlist_hash_before_sort": "9de59d797c117a2db04286cf5b71b02465d99bc5783c5f8bccbad66bccc5eef8",
+    "target_node_id": "node_000",
+    "target_path_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "target_path_reached_once": true,
+    "target_path_signature": [],
+    "target_selected_candidate_id": "branch_pair:ice_site_021|ice_site_028",
+    "target_selected_rank_index": 0,
+    "target_top3_candidate_ids": [
+      "branch_pair:ice_site_021|ice_site_028",
+      "branch_pair:ice_site_003|ice_site_016",
+      "branch_pair:ice_site_005|ice_site_013"
+    ],
+    "tree_result_sha256": "8b36bb5080c752b45f4a522e40328a64e9f7309c6453225cb334ecad9eebf015",
+    "tree_wall_sec": 3604.934714,
+    "universe_safe": true
+  },
+  "control_exact_safe": false,
+  "control_tree_sha256": "ec69e3e3daec12a4ec8dacba054af262651c5eda08c777c60b2043e174505ee5",
+  "control_universe_safe": true,
+  "deployable": false,
+  "descendant_pricing_certificate_reused": false,
+  "development_only": true,
+  "guidance_branch_pair_drop_count": 0,
+  "guidance_filter_count": 0,
+  "instance_content_hash": "737d74b59e71b2a3",
+  "instance_id": "lunar_ice_030_017_seed202907267",
+  "matched_scope": "post_certified_parent_continuation",
+  "missing_rank_indices": [
+    1
+  ],
+  "observed_rank_indices": [
+    0,
+    2
+  ],
+  "one_deviation_only": true,
+  "post_deviation_policy": "p0_rank0",
+  "root_exact_safe": true,
+  "root_source_sha256": "dec4c41fe6a3aee4966f6bb53dda74bd5cb8dfe51256c194bacc434d919a450d",
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_state_oracle.v2",
+  "selected_state_count": 1,
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "split_manifest_hash": "dd76b57d4618663c789d8c4dc2cfc4939597fc7900f8159ebc45b9aab8a68bca",
+  "state_reports": [
+    {
+      "arms": [
+        {
+          "arm_binding_hash": "848ae1fb23801041f9d203a60b9dfbde4a6cf999ae180460d14f15c70b3baee4",
+          "certified_parent_pricing_reused": true,
+          "counterfactual_universe_matches_control": true,
+          "descendant_pricing_certificate_reused": false,
+          "exact_safe": true,
+          "expanded_node_count": 1,
+          "global_lower_bound": 1.401924,
+          "guidance_lifecycle_overhead_sec": 0.02,
+          "incomplete_node_count": 0,
+          "matched_end_to_end_wall_sec": 3581.258953,
+          "matched_scope": "post_certified_parent_continuation",
+          "node_count": 3,
+          "objective": 1.401924,
+          "parent_source_sha256": "dec4c41fe6a3aee4966f6bb53dda74bd5cb8dfe51256c194bacc434d919a450d",
+          "requested_rank_index": 2,
+          "root_wall_sec": 0.0,
+          "target_fallback_to_p0": false,
+          "target_legal_branch_shortlist_hash_after_sort": "9de59d797c117a2db04286cf5b71b02465d99bc5783c5f8bccbad66bccc5eef8",
+          "target_legal_branch_shortlist_hash_before_sort": "9de59d797c117a2db04286cf5b71b02465d99bc5783c5f8bccbad66bccc5eef8",
+          "target_node_id": "node_000",
+          "target_path_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "target_path_reached_once": true,
+          "target_path_signature": [],
+          "target_selected_candidate_id": "branch_pair:ice_site_005|ice_site_013",
+          "target_selected_rank_index": 2,
+          "target_top3_candidate_ids": [
+            "branch_pair:ice_site_021|ice_site_028",
+            "branch_pair:ice_site_003|ice_site_016",
+            "branch_pair:ice_site_005|ice_site_013"
+          ],
+          "tree_result_sha256": "555d4f7a58cb1fd7c22ded66530c6a09284d97972c2857a46b35dc46047da88c",
+          "tree_wall_sec": 3581.238953,
+          "universe_safe": true
+        }
+      ],
+      "candidate_count": 3,
+      "complete_matched_e2e_gold": false,
+      "control_tree_elapsed_sec_at_exit": 0.0,
+      "depth": 0,
+      "eligible_alternative_count": 1,
+      "legal_branch_shortlist_hash_after_sort": "9de59d797c117a2db04286cf5b71b02465d99bc5783c5f8bccbad66bccc5eef8",
+      "legal_branch_shortlist_hash_before_sort": "9de59d797c117a2db04286cf5b71b02465d99bc5783c5f8bccbad66bccc5eef8",
+      "matched_scope": "post_certified_parent_continuation",
+      "missing_rank_indices": [
+        1
+      ],
+      "node_id": "node_000",
+      "objective_matches_across_arms": false,
+      "observed_rank_indices": [
+        0,
+        2
+      ],
+      "oracle_net_gain_ratio": null,
+      "oracle_net_gain_sec": null,
+      "oracle_selected_rank_index": null,
+      "path_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "path_signature": [],
+      "top3_candidate_ids": [
+        "branch_pair:ice_site_021|ice_site_028",
+        "branch_pair:ice_site_003|ice_site_016",
+        "branch_pair:ice_site_005|ice_site_013"
+      ],
+      "trusted_censored_pairwise_preferences": [
+        {
+          "evidence": "EXACT_BEFORE_OTHER_CENSOR_HORIZON",
+          "loser_observed_or_censor_wall_sec": 3604.934714,
+          "loser_rank_index": 0,
+          "same_parent_snapshot": true,
+          "unexplored_arm_used_as_negative": false,
+          "winner_observed_wall_sec": 3581.258953,
+          "winner_rank_index": 2
+        }
+      ]
+    }
+  ],
+  "training_authorized": false
+}

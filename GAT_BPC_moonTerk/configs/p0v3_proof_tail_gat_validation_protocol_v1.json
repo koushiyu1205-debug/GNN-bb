@@ -1,0 +1,73 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v3_proof_tail_gat_validation_protocol.v1",
+  "frozen_before_new_action_labels": true,
+  "development_only": true,
+  "deployable": false,
+  "promotion_authorized": false,
+  "landing_point": {
+    "trigger": "first exact pre-call state after two consecutive bounded sparse harvests",
+    "maximum_calls_per_root": 1,
+    "default_action": "proof_only",
+    "permitted_override": "one additional bounded harvest_then_proof",
+    "guidance_filtering_permitted": false
+  },
+  "new_instance_pool": {
+    "generation_manifest": "data/gat_v3_proof_tail_veto_expansion_20260726_generation_manifest.json",
+    "generator": "real_lunar_south_pole_sp50_benchmark_v1",
+    "scale": 30,
+    "seed_base": 203007260,
+    "accepted_target": 8,
+    "partition_policy": "content_hash_ascending_before_action_labels",
+    "development_count": 6,
+    "locked_calibration_count": 2,
+    "calibration_labels_read_authorized": false
+  },
+  "frozen_training_inputs": {
+    "harvest_dynamics_rows": {
+      "path": "runs/p0v3_gat_landing_search_20260726/harvest_dynamics_rows_realdev18.json",
+      "sha256": "7d51ad06487c77e3204f393350bf5a4a53de8b702addcd8ef8083bb125c0d34e"
+    },
+    "first_trigger_labels": {
+      "path": "runs/p0v3_gat_landing_search_20260726/twostrike_first_proof_all_realdev_exact_labels.json",
+      "sha256": "ed3e02b5a6172b67f2ce670b0cf1b99bf5434654b79ba5db32f6be651708cdeb"
+    },
+    "all_state_labels": {
+      "path": "runs/p0v3_gat_landing_search_20260726/twostrike_all_proof_state_exact_labels.json",
+      "sha256": "0bc774effc112a47fa1922178eb462faa49b4c297f3473f31293e8e3aac5c3ee"
+    }
+  },
+  "frozen_code": {
+    "feature_schema": "lunar_ice_bpc.p0v3_proof_tail_veto_features.v2",
+    "feature_file_sha256": "d077228a5dd6af97a12cfd85aef1164e00a8887168e5bf15947b4df25966af3d",
+    "model_schema": "lunar_ice_bpc.p0v3_proof_tail_veto_model.v1",
+    "model_file_sha256": "bc643cf4dcf9e069eda6a71c8b21b0bdb75bec3302bfc706595b54b8a74a7cf5",
+    "dense_pretrainer_sha256": "b0081345f8a6081def79a447aa242baf7bd2a2007e61ef60fecdaa3d93a76ad6",
+    "selector_trainer_sha256": "b18f554ea1e02d65b37725dea678234cfc42d0323d6bf51b0a1178d741f58d5b",
+    "transfer_trainer_sha256": "48c0e9724a7709d8ca101da8f17b377e1e1f9cec7c0ff3f00da624900ae75de4"
+  },
+  "training_protocol": {
+    "model_ladder": [
+      "linear",
+      "mlp2x32",
+      "gat1x32x1"
+    ],
+    "dense_pretrain_epochs": 40,
+    "selector_epochs": 120,
+    "seed": 20260726,
+    "encoder_frozen_during_selector_training": true,
+    "instance_equal_weighting": true,
+    "minimum_full_call_cost_sec": 0.02,
+    "torch_online_import_permitted": false,
+    "online_runtime_if_eligible": "framework_free_single_forward"
+  },
+  "heldout_decision_rule": {
+    "false_veto_count_must_equal": 0,
+    "realized_net_gain_sec_must_be_greater_than": 0.0,
+    "gat_must_outperform_linear_and_mlp": true,
+    "exact_bound_mismatch_count_must_equal": 0,
+    "extra_incomplete_count_must_equal": 0,
+    "binding_mismatch_accepted_must_equal": 0,
+    "guidance_induced_drop_count_must_equal": 0,
+    "failure_action": "reject proof-tail GAT landing point"
+  }
+}

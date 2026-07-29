@@ -44,7 +44,7 @@ physical safety guarantee.
 | Related work | Treats time-dependent routing as adjacent literature and leaves continuous environmental routing outside the current scope | PASS |
 | Section 3 opening | Defines one fixed planning instance rather than one universally valid lunar environment | PASS |
 | Section 3.1 | Defines \(\mathcal Q\), \(b_\zeta\), \(\mathcal W_\zeta\), \(\Delta^{\mathrm{env}}\), fixed per-instance attributes and omitted epoch superscripts | PASS |
-| Section 3.2 | Uses fixed path attributes in time, energy, shadow and risk constraints; no departure-time switching remains | PASS |
+| Section 3.2 | Uses fixed path attributes in time, energy, shadow and risk constraints; no departure-time switching remains; task-site and en-route waiting are prohibited while a common trip departure may be delayed at the support depot | PASS |
 | Section 3.3 | Keeps one normalized objective and common cross-epoch normalizers | PASS |
 | Sections 4.1--4.6 | Learning and exact components act only on the frozen instance; no environmental state enters GAT authority, cuts or proof | PASS |
 | Section 4.7 | Exactness theorem remains conditional on time-independent attributes within one window-aggregated instance | PASS |

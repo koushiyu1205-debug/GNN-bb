@@ -1,3 +1,4 @@
 GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_100/*_logical_graph.json filter=lfs diff=lfs merge=lfs -text
 GAT_BPC_moonTerk/runs/native_spprc_50_100_5x3600_20260717/scale100_acceptance/scale_100/pools/scale_100/instance_004/stage_001/probe.json filter=lfs diff=lfs merge=lfs -text
 GAT_BPC_moonTerk/data/gat_p0v2/pricing_training_rows.jsonl filter=lfs diff=lfs merge=lfs -text
+GAT_BPC_moonTerk/runs/large_exact_dssr_pricer_20260727/e2e_dssr_scale100_instance001/scale_100/pools/scale_100/instance_001/stage_001/probe.json filter=lfs diff=lfs merge=lfs -text

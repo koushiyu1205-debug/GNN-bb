@@ -1,0 +1,185 @@
+{
+  "schema_version": "lunar_ice_bpc.baseline_freeze_manifest.v3",
+  "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "created_at": "2026-07-25T20:02:43+08:00",
+  "role": "active_experiment_control_and_gat_foundation",
+  "project_root": "/home/kai/work/GAT_BPC_moonTerk",
+  "git_binding": {
+    "repository_head_at_freeze": "339304ca3f749ba2f6832ee4c5679255e30efdbd",
+    "source_bundle_file_count": 162,
+    "source_bundle_sha256": "30fa833a4d0168d949373a334635ffb8d4fa39a63e7b902be1d5f59ccd6e031f",
+    "source_bundle_mismatch_count_at_freeze": 0,
+    "repository_worktree_clean": false,
+    "binding_mode": "content_addressed_source_bundle",
+    "note": "The tested solver state contains intentional uncommitted changes. This freeze is therefore bound to all 162 source/config/native/test file hashes in candidate_preflight_snapshot.json, not falsely represented as a clean Git commit."
+  },
+  "algorithm": {
+    "model_id": "NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_V3",
+    "algorithm_family": "exact_native_branch_price_and_cut",
+    "master": "HiGHS restricted master",
+    "pricing": "Native exact SPPRC in-process",
+    "branching": "Ryan-Foster same/different task-pair branching",
+    "cut_policy": "P0 root-only SRI-3 divisor-2",
+    "policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+    "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+    "service_timing_semantics": {
+      "task_waiting_allowed": false,
+      "service_start_equals_arrival": true,
+      "common_base_departure_shift_allowed": true,
+      "fixed_route_and_native_pricing_semantics_aligned": true
+    },
+    "policy": {
+      "name": "P0",
+      "version": "native_live_sri_bpc_v1",
+      "root_subset_sizes": [
+        3
+      ],
+      "node_subset_sizes": [],
+      "global_cap": 4,
+      "lineage_local_cap": 4,
+      "active_cap": 8,
+      "max_separation_rounds": 8,
+      "violation_eps": 1e-06,
+      "min_restricted_rmp_gain": 0.0001,
+      "completion_bound_with_active_cuts": false
+    },
+    "node_level_cut_separation_enabled": false,
+    "native_completion_bound_enabled": false,
+    "native_cut_state_enabled": true,
+    "nonzero_dual_pricing_projection": "exact_enabled",
+    "cut_state_schema": "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+    "cut_state_bytes": 8,
+    "label_state_bytes": 176,
+    "max_native_active_cuts": 16,
+    "exactness_contract": "Learning or heuristic guidance may reorder discovery or legal branch candidates only. Current true-dual exhaustive Native exact pricing remains mandatory for official no-negative, node-bound, and tree certificates."
+  },
+  "config_snapshot": {
+    "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/frozen_config.yaml",
+    "sha256": "a928c1c5dfe83b35b77f483ff2dd6268966e3b8999321e1afb74aea0a6d1c13d",
+    "source_path": "configs/native_live_sri_p0_pilot_v1.yaml"
+  },
+  "native_binary_snapshot": {
+    "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/native/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+    "sha256": "b3742b60b76f2cfe68a7841940ecb7bca7bdb48f867e8dc9c2b8eaa76587f1ec",
+    "size_bytes": 11575656,
+    "engine_hash": "439e12be8bf04208",
+    "python_abi": "cp313",
+    "build_type": "RelWithDebInfo",
+    "compiler": "13.3.0",
+    "cxx_standard": 23
+  },
+  "candidate_snapshot": {
+    "candidate_id": "P0_NO_TASK_WAIT_BASELINE_V3_CANDIDATE",
+    "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/candidate_preflight_snapshot.json",
+    "sha256": "a1da25c898e906976b9da6c368116ac90ee5d82a1e95102ac188feb40c89ed6b"
+  },
+  "verification": {
+    "script": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/verify_freeze.py",
+    "script_sha256": "5f5d3708656cc99cf5af1db71d2049d6e91962c53e27f6f3a53969bc5a6b1137",
+    "command": "/home/kai/miniconda3/bin/python runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/verify_freeze.py",
+    "expected_valid": true
+  },
+  "instance_binding": {
+    "scales": [
+      5,
+      10,
+      20,
+      30
+    ],
+    "instances_per_scale": 20,
+    "instance_count": 80,
+    "instance_hash_source": "performance/full80_rows_snapshot.json",
+    "instance_content_hash_and_file_sha256_required": true
+  },
+  "performance_evidence": {
+    "evidence_id": "P0_NO_TASK_WAIT_FULL80_SINGLE_REPEAT_20260725",
+    "role": "frozen_single_repeat_benchmark_for_future_experiment_control",
+    "source_run_dir": "runs/p0_no_task_wait_full80_baseline_v3_20260725",
+    "strict_cold_start": true,
+    "fresh_python_native_runtime_per_slot": true,
+    "solver_resume": false,
+    "instance_count": 80,
+    "slot_count": 80,
+    "exact_slot_count": 80,
+    "correctness_pass_count": 80,
+    "zero_redline_slot_count": 80,
+    "repeats_per_instance": 1,
+    "formal_full80": true,
+    "new_baseline_freeze_authorized": true,
+    "default_production_switch_authorized": false,
+    "summary": {
+      "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/performance/full80_summary_snapshot.json",
+      "sha256": "ac6969e3924ed2b1c8ac2693d120d61b3eb5786d76b28a27e2205d71db2208f8"
+    },
+    "rows_json": {
+      "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/performance/full80_rows_snapshot.json",
+      "sha256": "5b7e30f669c731c2688a0acffdf259093c7dc59b08fea43e56753f5536bee1d6"
+    },
+    "rows_csv": {
+      "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/performance/full80_rows_snapshot.csv",
+      "sha256": "daaea7645d1dddf783c0b00be20b319c887733be78e3b529047b05645e0d4296"
+    },
+    "report": {
+      "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/performance/full80_report_snapshot_zh.md",
+      "sha256": "6b3f5f0a1889c6bc619addce8fac5d2e08f984aaf8b0caa82cf6469fac47fa9c"
+    },
+    "schedule": {
+      "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/performance/full80_schedule_snapshot.json",
+      "sha256": "0e472762481ec62af9e86ecfa347f2191e8ddd4d684a66387f63ab4c926ab6f0"
+    },
+    "resource_heartbeat": {
+      "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/performance/resource_heartbeat_snapshot.csv",
+      "sha256": "f8ad2abb33e455c4868358af7b9264372a95f1ed397d848294f8b257598533e9"
+    },
+    "metrics": {
+      "5": {
+        "mean_sec": 0.44176845,
+        "p50_sec": 0.4459895,
+        "max_sec": 0.479031
+      },
+      "10": {
+        "mean_sec": 1.461395,
+        "p50_sec": 0.987978,
+        "max_sec": 5.178049
+      },
+      "20": {
+        "mean_sec": 39.82004725,
+        "p50_sec": 17.106476,
+        "max_sec": 201.125098
+      },
+      "30": {
+        "mean_sec": 177.35752905,
+        "p50_sec": 77.280779,
+        "max_sec": 716.426428
+      }
+    }
+  },
+  "historical_baselines": [
+    {
+      "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+      "preserved": true,
+      "new_status": "preserved_historical_experiment_baseline",
+      "manifest_path": "runs/frozen_native_live_sri_p0_optimized_baseline_v2_20260723/baseline_freeze_manifest.json",
+      "manifest_sha256": "48500a47dd84ae108b859e2707736c1546f8c6140407ffe57d0d87b71767d9c2",
+      "comparison_warning": "V2 permits task waiting and V3 forbids it. Objectives and timings are different mathematical-model evidence and must not be reported as a same-problem speed ratio."
+    },
+    {
+      "freeze_id": "FROZEN_NATIVE_NO_CUT_BASELINE_V1",
+      "preserved": true,
+      "status": "preserved_historical_baseline_and_production_default",
+      "manifest_path": "runs/native_spprc_no_cut_5_30_full3600_frozen_v1/baseline_freeze_manifest.json",
+      "manifest_sha256": "f374070b0e6b65eafd628ce4e60958e9112eb12b166aabc9bd12cdf0c18fe720"
+    }
+  ],
+  "experiment_use": {
+    "current_control_for_gat": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+    "same_code_b0_rerun_required_for_each_online_guidance_experiment": true,
+    "production_default_policy": "no_cut",
+    "production_default_switch_authorized": false,
+    "legacy_baselines_must_remain_runnable": true,
+    "node_level_cuts_default": false,
+    "gat_cut_guidance_allowed": false,
+    "guidance_may_filter_legal_work": false,
+    "official_closure_requires_current_true_dual_exhaustive_pricing": true
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "active_column_count": 6,
+  "active_column_ids": [
+    "36e4eec48b18c389b29e260b59463eedd197f6eb3d72806ce96e04dff8715985",
+    "04dbd41c14a6446e35a05d756ad7c6f24b1e1531057e6dfb0e3385eea0d4a80c",
+    "293855c823b44c0893c0c37a2e2d698919a2e57b892f22bba67f2777a5f54935",
+    "0a80ec640ea25350c35b5eb77f0a27ac94d0e87d3e313be7ef0aa232009f9afd",
+    "df2c36f9cbb2d1e8b07d1e52227d3bda847e2e8793dd95600f8410403be1bba9",
+    "bc7bd23eed4849375a37820998326bfb755d4475dce2bf58aa04b8bf70b28053"
+  ],
+  "branch_context": {
+    "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+    "pair_decision_count": 0,
+    "pair_decisions": [],
+    "schema_version": "lunar_ice_bpc.branch_context.v1"
+  },
+  "can_certify": false,
+  "cut_context": {
+    "cut_count": 0,
+    "cuts": [],
+    "note": "Exact cut coefficient context. Current runner records no active cuts by default.",
+    "schema_version": "lunar_ice_bpc.cut_context.v2"
+  },
+  "cut_lineage": {
+    "entries": [],
+    "entry_count": 0,
+    "policy_version": "explicit_cut_context_v1",
+    "schema_version": "lunar_ice_bpc.cut_lineage.v1"
+  },
+  "deployable": false,
+  "development_only": true,
+  "effective_harvest_target": 8,
+  "instance_content_hash": "075139c9a86399ff",
+  "instance_id": "lunar_ice_005_054_seed85777001",
+  "live_cut_policy_hash": "",
+  "max_columns_per_round": 8,
+  "mutates_p0": false,
+  "node_id": "root",
+  "node_lp_bound": 2.150471,
+  "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-1",
+  "rmp_primal": [
+    {
+      "column_index": 0,
+      "end_time": 417.025548,
+      "lambda_value": 1.0,
+      "objective": 2.150471,
+      "sortie_count": 1,
+      "task_count": 5,
+      "tasks": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_004",
+        "ice_site_005"
+      ]
+    }
+  ],
+  "round": 1,
+  "schema_version": "lunar_ice_bpc.p0v3_root_policy_state_snapshot.v1",
+  "separator_policy_version": "",
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "source_pass_policy": "harvest_then_proof",
+  "source_pass_strategy": "harvest_then_proof",
+  "source_solver_binding_hash": "5a4fc6b653a6db34b5fcc48fc5a6ec37b45c36268a526d734d260c2ce7c98c53",
+  "split_manifest_hash": "0b8f191c8e9cddcb8e36d56ddc377818827fffec4259a9540e2ff846da6ae951",
+  "state_hash": "3bdbd9868c5adf2e63a7b275cc4291e1ce12bb1159ea7831cd9f5fc7cfcc32d8",
+  "trajectory_features": {
+    "active_column_count": 6,
+    "active_task_set_count": 6,
+    "dual_l1_delta_from_previous": null,
+    "dual_linf_delta_from_previous": null,
+    "effective_harvest_target": 8,
+    "node_lp_bound": 2.150471,
+    "node_lp_bound_delta": null,
+    "previous_added_column_count": null,
+    "previous_best_true_rc": null,
+    "previous_final_judge_wall_time": null,
+    "previous_harvest_column_count": null,
+    "previous_harvest_pass_wall_time": null,
+    "previous_node_lp_bound": null,
+    "previous_proof_pass_wall_time": null,
+    "rmp_primal_fractional_count": 0,
+    "rmp_primal_nonzero_count": 1,
+    "round": 1
+  },
+  "true_duals": {
+    "cut_duals": {},
+    "dual_fingerprint": "df6dfb81644fbc3bebe38d5d564f02dceff70af3722403fabf86f89539fbda6b",
+    "dual_source": "master.reduced_cost_context",
+    "fleet_dual": -0.0,
+    "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-1",
+    "task_duals": {
+      "ice_site_001": 0.703473,
+      "ice_site_002": 0.480005,
+      "ice_site_003": 0.395186,
+      "ice_site_004": 0.452366,
+      "ice_site_005": 0.119441
+    }
+  }
+}

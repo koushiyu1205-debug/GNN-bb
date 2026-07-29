@@ -555,6 +555,7 @@ def run_true_dual_root_final_judge(
     labeling_final_judge_exact_harvest_target: int | None = None,
     labeling_final_judge_pass_strategy: str = LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
     labeling_final_judge_harvest_time_cap_sec: float | None = None,
+    labeling_final_judge_harvest_max_processed_labels: int = 0,
     harvest_discovery_duals: JourneyDuals | None = None,
     harvest_discovery_metadata: dict | None = None,
 ) -> FinalJudgeResult:
@@ -606,6 +607,9 @@ def run_true_dual_root_final_judge(
             active_task_sets=active_task_sets,
             pass_strategy=labeling_final_judge_pass_strategy,
             harvest_time_cap_sec=labeling_final_judge_harvest_time_cap_sec,
+            harvest_max_processed_labels=(
+                labeling_final_judge_harvest_max_processed_labels
+            ),
             harvest_discovery_duals=harvest_discovery_duals,
             harvest_discovery_metadata=harvest_discovery_metadata,
         )
@@ -773,6 +777,7 @@ def _run_labeling_pricer_final_judge(
     active_task_sets: set[frozenset[str]] | None = None,
     pass_strategy: str = LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
     harvest_time_cap_sec: float | None = None,
+    harvest_max_processed_labels: int = 0,
     harvest_discovery_duals: JourneyDuals | None = None,
     harvest_discovery_metadata: dict | None = None,
 ) -> FinalJudgeResult:
@@ -823,6 +828,9 @@ def _run_labeling_pricer_final_judge(
             raise ValueError(
                 "labeling_final_judge_harvest_time_cap_sec must be a finite positive number"
             )
+    normalized_harvest_max_processed_labels = max(
+        0, int(harvest_max_processed_labels)
+    )
 
     def run_labeling_pass(
         *,
@@ -840,6 +848,11 @@ def _run_labeling_pricer_final_judge(
                 negative_eps=negative_eps,
                 wall_time_limit_sec=pass_wall_time_limit_sec,
                 exact_negative_harvest_target=exact_harvest_target,
+                harvest_max_processed_labels=(
+                    normalized_harvest_max_processed_labels
+                    if stop_at_first_negative
+                    else 0
+                ),
                 stop_at_first_negative=bool(stop_at_first_negative),
                 active_task_sets_for_exact_harvest=active_task_sets_for_exact_harvest,
                 rmp_iteration_id=context.rmp_iteration_id,
@@ -1062,12 +1075,23 @@ def _run_labeling_pricer_final_judge(
             "labeling_final_judge_two_phase_enabled": not proof_only,
             "labeling_final_judge_harvest_pass_attempted": bool(harvest_pass_attempted),
             "labeling_final_judge_harvest_time_cap_sec": normalized_harvest_cap,
+            "labeling_final_judge_harvest_max_processed_labels": (
+                normalized_harvest_max_processed_labels
+            ),
             "labeling_final_judge_harvest_pass_status": harvest_pass_payload.get("status"),
             "labeling_final_judge_harvest_pass_pricing_state": harvest_pass_payload.get("pricing_state"),
             "labeling_final_judge_harvest_pass_pricing_proof_kind": harvest_pass_payload.get(
                 "pricing_proof_kind"
             ),
             "labeling_final_judge_harvest_pass_wall_time": round(harvest_pass_wall, 6),
+            "labeling_final_judge_harvest_pass_processed_labels": int(
+                (
+                    harvest_pass_payload.get("telemetry")
+                    or {}
+                ).get("processed_labels")
+                or harvest_pass_payload.get("processed_labels")
+                or 0
+            ),
             "labeling_final_judge_harvest_pass_column_count": int(
                 harvest_pass_payload.get("returned_column_count")
                 or harvest_pass_payload.get("true_audited_column_count")

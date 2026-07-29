@@ -33,7 +33,7 @@ conclusion.
 
 | ID | Manuscript Location | Deferred Text | Activation Rule | Present Status |
 |---|---|---|---|---|
-| `TBD-ABS-RESULT` | Abstract | One bounded empirical result sentence | Activate only after L0/L1/L2 rows and safety gates are frozen; report magnitude, uncertainty, scope, and exact-safety outcome in one sentence | `TBD` |
+| `TBD-ABS-RESULT` | Appendix E, with activation target in the Abstract | One bounded empirical result sentence | Activate only after L0/L1/L2 rows and safety gates are frozen; replace the abstract's pending-validation sentence and report magnitude, uncertainty, scope, and exact-safety outcome in one sentence | `TBD` |
 | `TBD-DISC-RQ1-RQ5` | Section 7.1 | Direct answers to the five registered research questions | Activate each answer only after its corresponding learning or mission-epoch rows exist; an inconclusive answer is acceptable and must remain explicit | `TBD` |
 | `TBD-DISC-IMPLICATION` | Section 7.3 | Transportation-system implication of measured solver behavior | Activate only from validated workload and robustness evidence; do not infer field productivity or scientific yield | `TBD` |
 | `TBD-DISC-PHASE` | Section 7.3 | Bounded implication of the four-phase comparison | Activate only after M006 and TBD-EXP-EPOCH provide exact paired rows, family-level phase summaries and uncertainty; report metric disagreement and infeasible/incomplete cases | `TBD` |
@@ -54,8 +54,13 @@ schema:
 - All manuscript placeholders are represented in this ledger.
 - Repeated M001--M006 entries are intentional cross-references to the same
   missing artifact, not separate missing results.
+- The former M007 implementation slot is activated by the frozen no-task-wait
+  source, test, freeze, and 80-row baseline package. New no-task-wait runs are
+  still required for historical cut-effect, state-refinement, and
+  scale-50/100 claims.
 - Available deterministic evidence remains visible in Section 6 and is not
-  relabeled as learned-model evidence.
+  relabeled as learned-model evidence. Every historical wait-permitted result
+  retains that qualifier.
 - Empty learning rows do not interrupt the paper's argument: the method,
   baselines, questions, safety gates, metrics, and interpretation locations are
   already defined.

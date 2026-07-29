@@ -3,28 +3,25 @@
 - Output directory: `paper_rewriting_output`
 - Workflow: `build_from_materials`
 - Tier: `pro`
-- PDF policy: `never`
+- PDF policy: `always`
 - TeX engine: `not found`
-- Word policy: `always`
+- Word policy: `never`
 - Translation package required: yes
 - Status: FAIL
 
 ## Stage Interpretation
 
-This failure is expected at the active Markdown drafting stage. The user has
-not authorized final LaTeX, Word, or Chinese-translation production, and M001
-through M006 still block the final empirical manuscript. The matrix-specific
-messages below come from the stock artifact parser; the dedicated integrity
-audit independently found all 99 rationale rows adequate. They are retained
-as tool output rather than treated as a current manuscript defect.
+The stock pro-tier checker evaluates the originally configured final-delivery
+package. The present task synchronizes the English working manuscript, its
+Chinese Introduction review copy, LaTeX source, and PDF; it does not activate
+the full Chinese translation package or DOCX production stage. The missing
+translation artifacts below therefore remain scheduled deliverables rather
+than defects in the revised no-task-wait manuscript. The separate integrity
+audit reports all 99 rationale rows adequate; the matrix messages below are
+retained as stock-parser output rather than silently discarded.
 
 ## Missing
 
-- `latex_report.md`
-- `final_artifact_manifest.md`
-- `final_paper/main.tex`
-- `final_paper/paper.docx`
-- `word_report.md`
 - `translation_zh/manifest.md`
 - `translation_zh/translation_coverage.md`
 - `translation_zh/paper_spine_config.zh.md`
@@ -60,7 +57,6 @@ as tool output rather than treated as a current manuscript defect.
 - writing_rationale_matrix.md row 7 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
 - writing_rationale_matrix.md row 8 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
 - writing_rationale_matrix.md row 9 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
-- writing_rationale_matrix.md row 10 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
 - writing_rationale_matrix.md row 11 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
 - writing_rationale_matrix.md row 12 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
 - writing_rationale_matrix.md row 13 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
@@ -77,4 +73,5 @@ as tool output rather than treated as a current manuscript defect.
 - writing_rationale_matrix.md row 24 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
 - writing_rationale_matrix.md row 25 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
 - writing_rationale_matrix.md row 26 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
+- writing_rationale_matrix.md row 27 lacks enough concrete anchors; include motivation, learned reference/SOTA pattern, target-scene norm, evidence/citation, and the planned text move.
 - writing_rationale_matrix.md has additional issues not shown; fix the matrix and rerun the check.

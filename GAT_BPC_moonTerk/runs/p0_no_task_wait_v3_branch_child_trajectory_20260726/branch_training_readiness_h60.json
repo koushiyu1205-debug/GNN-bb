@@ -1,0 +1,56 @@
+{
+  "checks": {
+    "all_children_observed": true,
+    "gold_count": false,
+    "gold_count_per_scale": false,
+    "instance_count_per_scale": false,
+    "perfect_policy_net_gain_upper_bound_positive": false,
+    "positive_gold_count": false,
+    "scale_scope_exact": true,
+    "state_count": false,
+    "survival_event_count": false,
+    "winner_diversity": false
+  },
+  "deployment_authorized": false,
+  "note": "The oracle upper-bound check is only a direction viability screen. Passing it authorizes shadow training, never online branch changes or an exactness claim.",
+  "observed": {
+    "gold_count": 0,
+    "gold_count_by_scale": {
+      "20": 0,
+      "30": 0
+    },
+    "gold_winner_count_by_rank": {
+      "0": 0,
+      "1": 0,
+      "2": 0
+    },
+    "instance_count_by_scale": {
+      "20": 1,
+      "30": 1
+    },
+    "perfect_policy_net_gain_sec_bootstrap_95ci": [
+      null,
+      null
+    ],
+    "perfect_policy_net_gain_sec_mean_after_overhead": null,
+    "positive_gold_count": 0,
+    "state_count": 2,
+    "survival_event_count": 0,
+    "survival_observation_count": 12
+  },
+  "records_jsonl": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_child_trajectory_20260726/formal_branch_survival_h60.jsonl",
+  "records_sha256": "9e020a68d0e924067de1e0cf2d8a9685d73f07ba0b41460b23c95ffacef0b5b3",
+  "sample_threshold_reached": false,
+  "schema_version": "lunar_ice_bpc.branch_training_readiness.v1",
+  "terminate_branch_ranking_direction": false,
+  "thresholds": {
+    "guidance_lifecycle_overhead_sec": 0.02,
+    "minimum_gold_count": 10,
+    "minimum_gold_count_per_scale": 5,
+    "minimum_instance_count_per_scale": 10,
+    "minimum_positive_gold_count": 3,
+    "minimum_state_count": 20,
+    "minimum_survival_event_count": 12
+  },
+  "training_authorized": false
+}

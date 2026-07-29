@@ -869,45 +869,56 @@ def run_monitored(
             stderr=stderr_handle,
             start_new_session=True,
         )
-        while True:
-            sample = resource_sample(process.pid)
-            elapsed = monotonic() - started
-            sample.update(
-                {
-                    "timestamp_utc": utc_now(),
-                    "slot_id": slot_id,
-                    "root_pid": process.pid,
-                    "elapsed_sec": round(elapsed, 6),
-                    "effective_memory_limit_gb": effective_memory_limit_gb,
-                }
-            )
-            append_heartbeat(heartbeat_csv, sample)
-            peak_tree_rss_gb = max(peak_tree_rss_gb, float(sample["tree_rss_gb"]))
-            available_gb = float(sample["available_memory_gb"])
-            minimum_available_gb = (
-                available_gb
-                if minimum_available_gb is None
-                else min(minimum_available_gb, available_gb)
-            )
-            low_memory_samples = (
-                low_memory_samples + 1
-                if available_gb < min_available_memory_gb
-                else 0
-            )
-            if float(sample["tree_rss_gb"]) > effective_memory_limit_gb:
-                termination_reason = "TREE_RSS_EXCEEDED_EFFECTIVE_LIMIT"
-            elif low_memory_samples >= low_memory_consecutive_samples:
-                termination_reason = "AVAILABLE_MEMORY_SUSTAINED_BELOW_LIMIT"
-            elif elapsed > timeout_sec:
-                termination_reason = "LAUNCHER_TIMEOUT"
-            if termination_reason:
+        try:
+            while True:
+                sample = resource_sample(process.pid)
+                elapsed = monotonic() - started
+                sample.update(
+                    {
+                        "timestamp_utc": utc_now(),
+                        "slot_id": slot_id,
+                        "root_pid": process.pid,
+                        "elapsed_sec": round(elapsed, 6),
+                        "effective_memory_limit_gb": effective_memory_limit_gb,
+                    }
+                )
+                append_heartbeat(heartbeat_csv, sample)
+                peak_tree_rss_gb = max(
+                    peak_tree_rss_gb, float(sample["tree_rss_gb"])
+                )
+                available_gb = float(sample["available_memory_gb"])
+                minimum_available_gb = (
+                    available_gb
+                    if minimum_available_gb is None
+                    else min(minimum_available_gb, available_gb)
+                )
+                low_memory_samples = (
+                    low_memory_samples + 1
+                    if available_gb < min_available_memory_gb
+                    else 0
+                )
+                if float(sample["tree_rss_gb"]) > effective_memory_limit_gb:
+                    termination_reason = "TREE_RSS_EXCEEDED_EFFECTIVE_LIMIT"
+                elif low_memory_samples >= low_memory_consecutive_samples:
+                    termination_reason = "AVAILABLE_MEMORY_SUSTAINED_BELOW_LIMIT"
+                elif elapsed > timeout_sec:
+                    termination_reason = "LAUNCHER_TIMEOUT"
+                if termination_reason:
+                    terminate_process_group(process)
+                    break
+                try:
+                    returncode = process.wait(timeout=heartbeat_interval_sec)
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+        except BaseException:
+            # Popen uses a dedicated session.  If the controlling benchmark is
+            # interrupted, clean up the entire nested acceptance/pricing tree
+            # before propagating the interrupt.  Otherwise a scale-50/100
+            # Native host can remain orphaned with hundreds of GiB allocated.
+            if process.poll() is None:
                 terminate_process_group(process)
-                break
-            try:
-                returncode = process.wait(timeout=heartbeat_interval_sec)
-                break
-            except subprocess.TimeoutExpired:
-                continue
+            raise
         if process.poll() is None:
             terminate_process_group(process)
         returncode = int(process.wait())

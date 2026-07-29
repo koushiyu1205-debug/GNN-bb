@@ -1,7 +1,7 @@
 {
   "schema_version": "lunar_ice_bpc.baseline_registry.v1",
-  "updated_at": "2026-07-23T20:47:07+08:00",
-  "active_experiment_baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
+  "updated_at": "2026-07-27T13:29:28+08:00",
+  "active_experiment_baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
   "production_default_policy": "no_cut",
   "production_default_switch_authorized": false,
   "baselines": [
@@ -36,7 +36,7 @@
     },
     {
       "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_OPTIMIZED_BASELINE_V2",
-      "status": "active_experiment_baseline",
+      "status": "preserved_historical_experiment_baseline",
       "algorithm": "Native exact Branch-Price-and-Cut with root-only P0 SRI-3",
       "git_commit": "0e52f622814cdb81e9e4c24cbbd3a1c9d320c965",
       "engine_hash": "8e255a88436e937c",
@@ -62,7 +62,66 @@
           "mean_sec": 371.51445985,
           "p50_sec": 274.684953
         }
+      },
+      "superseded_as_active_by": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+      "comparison_warning": "V2 permits task waiting. Preserve it for history only; do not treat V2 versus V3 as a same-mathematical-model speed comparison."
+    },
+    {
+      "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+      "status": "active_experiment_baseline",
+      "algorithm": "Native exact Branch-Price-and-Cut with root-only P0 SRI-3 and no task waiting",
+      "repository_head_at_freeze": "339304ca3f749ba2f6832ee4c5679255e30efdbd",
+      "source_binding_mode": "content_addressed_source_bundle",
+      "source_bundle_sha256": "30fa833a4d0168d949373a334635ffb8d4fa39a63e7b902be1d5f59ccd6e031f",
+      "engine_hash": "439e12be8bf04208",
+      "policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+      "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+      "manifest_path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/baseline_freeze_manifest.json",
+      "manifest_sha256": "94234c9684851084b9a4189232bf2ec154a4f165c6777bacc1ecdae87240f82b",
+      "performance_evidence_role": "formal_full80_single_repeat_control",
+      "formal_full80_complete": true,
+      "production_default_switch_authorized": false,
+      "performance": {
+        "5": {
+          "mean_sec": 0.44176845,
+          "p50_sec": 0.4459895,
+          "max_sec": 0.479031
+        },
+        "10": {
+          "mean_sec": 1.461395,
+          "p50_sec": 0.987978,
+          "max_sec": 5.178049
+        },
+        "20": {
+          "mean_sec": 39.82004725,
+          "p50_sec": 17.106476,
+          "max_sec": 201.125098
+        },
+        "30": {
+          "mean_sec": 177.35752905,
+          "p50_sec": 77.280779,
+          "max_sec": 716.426428
+        }
       }
+    }
+  ],
+  "runtime_capsules": [
+    {
+      "capsule_id": "FROZEN_P0V3_FULL_RUNTIME_CAPSULE_20260727",
+      "status": "immutable_verified_runtime_capsule",
+      "baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+      "path": "runs/frozen_p0v3_full_runtime_capsule_20260727",
+      "manifest_path": "runs/frozen_p0v3_full_runtime_capsule_20260727/capsule_manifest.json",
+      "manifest_sha256": "2a9b34f2e7d0b54336741ddb9fd2e36a60490b0a4541c243f2573c0216c23cd0",
+      "archive_path": "runs/frozen_p0v3_full_runtime_capsule_20260727/p0v3_full_runtime_capsule.tar.gz",
+      "archive_sha256": "707b1bb1df891981e3bce4c841c5519483685e2dcce112e57b3c978e981c6fe6",
+      "runtime_replay_verified": true,
+      "smoke_scale": 5,
+      "smoke_instance": "instance_001",
+      "smoke_exact_status": "BPC_TREE_OPTIMAL",
+      "smoke_objective": 2.192192,
+      "frozen_native_original_rebuild_source_available": false,
+      "note": "Preserves complete runtime use of the P0 V3 frozen binary and compatible Python shell before large-scale exact-pricer development. It does not claim a byte-for-byte rebuild of the historical native binary."
     }
   ],
   "historical_experiments": [

@@ -1,0 +1,11 @@
+{
+  "completed_slot_count": 4,
+  "expected_slot_count": 4,
+  "last_correctness_pass": false,
+  "last_exact": false,
+  "last_slot_id": "s030_instance_001",
+  "last_status": "DRY_RUN",
+  "schema_version": "lunar_ice_bpc.p0_no_task_wait_full80_baseline.v1.progress",
+  "solver_resume": false,
+  "updated_at_utc": "2026-07-25T10:29:21.667833+00:00"
+}

@@ -18,6 +18,32 @@ double optional_double(const py::dict& payload, const char* key, double fallback
     return value.is_none() ? fallback : py::cast<double>(value);
 }
 
+std::size_t optional_size_t(
+    const py::dict& payload,
+    const char* key,
+    std::size_t fallback
+) {
+    const auto name = py::str(key);
+    if (!payload.contains(name)) {
+        return fallback;
+    }
+    const auto value = payload[name];
+    return value.is_none() ? fallback : py::cast<std::size_t>(value);
+}
+
+bool optional_bool(
+    const py::dict& payload,
+    const char* key,
+    bool fallback
+) {
+    const auto name = py::str(key);
+    if (!payload.contains(name)) {
+        return fallback;
+    }
+    const auto value = payload[name];
+    return value.is_none() ? fallback : py::cast<bool>(value);
+}
+
 lunar_spprc::Model parse_model(const py::dict& payload) {
     lunar_spprc::Model model;
     model.instance_id = py::cast<std::string>(payload["instance_id"]);
@@ -157,6 +183,8 @@ lunar_spprc::SolveParams parse_params(const py::dict& payload) {
     lunar_spprc::SolveParams params;
     params.exact_proof = py::cast<std::string>(payload["mode"]) == "exact_proof";
     params.harvest_target = py::cast<std::size_t>(payload["harvest_target"]);
+    params.harvest_max_processed_labels = optional_size_t(
+        payload, "harvest_max_processed_labels", 0U);
     params.timeout_seconds = optional_double(payload, "wall_time_limit_sec",
                                              std::numeric_limits<double>::infinity());
     params.max_memory_gb = py::cast<double>(payload["memory_limit_gb"]);
@@ -166,6 +194,12 @@ lunar_spprc::SolveParams parse_params(const py::dict& payload) {
     params.graph_cache_entries = py::cast<std::size_t>(payload["graph_cache_entries"]);
     params.completion_bound_enabled = py::cast<bool>(payload["completion_bound_enabled"]);
     params.subset_dominance_enabled = py::cast<bool>(payload["subset_dominance_enabled"]);
+    params.proof_queue_potential_trace_enabled =
+        optional_bool(payload, "proof_queue_potential_trace_enabled", false);
+    params.proof_queue_guidance_bucket_width =
+        optional_double(payload, "proof_queue_guidance_bucket_width", 0.01);
+    params.dssr_enabled =
+        optional_bool(payload, "dssr_enabled", false);
     const auto proof_queue_policy =
         py::cast<std::string>(payload["proof_queue_policy_id"]);
     if (proof_queue_policy == "Q0") {
@@ -180,6 +214,9 @@ lunar_spprc::SolveParams parse_params(const py::dict& payload) {
     } else if (proof_queue_policy == "QB1") {
         params.proof_queue_policy =
             lunar_spprc::ProofQueuePolicy::QB1OptimisticCompletion;
+    } else if (proof_queue_policy == "QG1") {
+        params.proof_queue_policy =
+            lunar_spprc::ProofQueuePolicy::QG1GuidancePotential;
     } else {
         throw py::value_error(
             "unsupported proof_queue_policy_id: " + proof_queue_policy);
@@ -209,6 +246,7 @@ py::dict solve_payload(const py::dict& payload) {
         routes.append(route_payload(route));
     }
     py::dict telemetry;
+    telemetry["processed_labels"] = output.telemetry.processed_labels;
     telemetry["extended_labels"] = output.telemetry.extended_labels;
     telemetry["dominated_labels"] = output.telemetry.dominated_labels;
     telemetry["dominance_candidate_checks"] = output.telemetry.dominance_candidate_checks;
@@ -258,6 +296,84 @@ py::dict solve_payload(const py::dict& payload) {
         output.telemetry.best_reduced_cost_event_count_total;
     telemetry["best_reduced_cost_events_truncated"] =
         output.telemetry.best_reduced_cost_events_truncated;
+    telemetry["proof_queue_potential_trace_enabled"] =
+        output.telemetry.proof_queue_potential_trace_enabled;
+    py::list proof_queue_potential_trace;
+    const auto tasks = py::cast<py::list>(payload["tasks"]);
+    for (const auto& row : output.telemetry.proof_queue_potential_trace) {
+        py::dict trace_row;
+        trace_row["task_index"] = row.task_index;
+        trace_row["task_id"] = py::cast<py::dict>(tasks[row.task_index])["id"];
+        trace_row["incoming_evaluated"] = row.incoming_evaluated;
+        trace_row["incoming_rejected"] = row.incoming_rejected;
+        trace_row["existing_dominator_wins"] = row.existing_dominator_wins;
+        trace_row["accepted_removed_existing"] =
+            row.accepted_removed_existing;
+        trace_row["removed_as_existing"] = row.removed_as_existing;
+        proof_queue_potential_trace.append(std::move(trace_row));
+    }
+    telemetry["proof_queue_potential_trace"] =
+        std::move(proof_queue_potential_trace);
+    py::list proof_queue_arc_potential_trace;
+    const auto arcs = py::cast<py::list>(payload["arcs"]);
+    for (const auto& row : output.telemetry.proof_queue_arc_potential_trace) {
+        py::dict trace_row;
+        const auto arc = py::cast<py::dict>(arcs[row.task_index]);
+        trace_row["model_arc_index"] = row.task_index;
+        trace_row["source"] = arc["source"];
+        trace_row["target"] = arc["target"];
+        trace_row["path_type"] = arc["path_type"];
+        trace_row["incoming_evaluated"] = row.incoming_evaluated;
+        trace_row["incoming_rejected"] = row.incoming_rejected;
+        trace_row["existing_dominator_wins"] = row.existing_dominator_wins;
+        trace_row["accepted_removed_existing"] =
+            row.accepted_removed_existing;
+        trace_row["removed_as_existing"] = row.removed_as_existing;
+        proof_queue_arc_potential_trace.append(std::move(trace_row));
+    }
+    telemetry["proof_queue_arc_potential_trace"] =
+        std::move(proof_queue_arc_potential_trace);
+    telemetry["dssr_enabled"] = output.telemetry.dssr_enabled;
+    telemetry["dssr_policy_version"] =
+        output.telemetry.dssr_policy_version;
+    telemetry["dssr_iteration_count"] =
+        output.telemetry.dssr_iteration_count;
+    telemetry["dssr_refinement_count"] =
+        output.telemetry.dssr_refinement_count;
+    telemetry["dssr_initial_critical_task_count"] =
+        output.telemetry.dssr_initial_critical_task_count;
+    telemetry["dssr_final_critical_task_count"] =
+        output.telemetry.dssr_final_critical_task_count;
+    telemetry["dssr_repeated_witness_count"] =
+        output.telemetry.dssr_repeated_witness_count;
+    telemetry["dssr_elementary_witness_returned"] =
+        output.telemetry.dssr_elementary_witness_returned;
+    telemetry["dssr_relaxation_no_negative_certificate"] =
+        output.telemetry.dssr_relaxation_no_negative_certificate;
+    py::list dssr_iteration_trace;
+    for (const auto& row : output.telemetry.dssr_iteration_trace) {
+        py::dict trace_row;
+        trace_row["iteration"] = row.iteration;
+        trace_row["critical_task_count_before"] =
+            row.critical_task_count_before;
+        trace_row["repeated_task_count"] = row.repeated_task_count;
+        trace_row["processed_labels"] = row.processed_labels;
+        trace_row["extended_labels"] = row.extended_labels;
+        trace_row["dominated_labels"] = row.dominated_labels;
+        trace_row["max_visited_bucket_size"] =
+            row.max_visited_bucket_size;
+        trace_row["wall_time_seconds"] = row.wall_time_seconds;
+        trace_row["status"] = row.status;
+        trace_row["search_exhaustive"] = row.search_exhaustive;
+        trace_row["frontier_empty"] = row.frontier_empty;
+        trace_row["labels_dropped"] = row.labels_dropped;
+        trace_row["negative_witness_found"] =
+            row.negative_witness_found;
+        trace_row["witness_elementary"] = row.witness_elementary;
+        dssr_iteration_trace.append(std::move(trace_row));
+    }
+    telemetry["dssr_iteration_trace"] =
+        std::move(dssr_iteration_trace);
 
     py::dict result;
     result["status"] = output.status;
@@ -277,6 +393,9 @@ py::dict solve_payload(const py::dict& payload) {
              "instance_hash",
              "config_hash",
              "engine_hash",
+             "service_timing_policy_id",
+             "dssr_enabled",
+             "dssr_policy_version",
              "canonical_solve_binding_v2",
              "canonical_solve_binding_v2_schema",
              "canonical_solve_binding_v2_hash",

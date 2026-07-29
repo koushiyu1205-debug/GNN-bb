@@ -1,0 +1,245 @@
+{
+  "artifact_hash": "2021abe7730e33ffd8b17e3760dfc431184e65782cd5b71f2a7b076dc34bbaab",
+  "calibration_content_read": false,
+  "decision": "PROOF_TAIL_GAT_HELDOUT_GATE_FAILED",
+  "deployable": false,
+  "development_only": true,
+  "gat_gate_criteria": {
+    "false_veto_count": true,
+    "outperforms_smaller_models": false,
+    "positive_net_gain": false
+  },
+  "gat_gate_passed": false,
+  "heldout_excluded_non_call_state_count": 0,
+  "heldout_label_count": 2,
+  "heldout_labels_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_twostrike_first_proof_exact_labels.json",
+  "heldout_labels_sha256": "faf2c2c613c1bfffca80f61314525e7e43000051530c8551dc9d513c58ed4b7d",
+  "heldout_used_for_threshold_selection": false,
+  "heldout_used_for_training": false,
+  "models": [
+    {
+      "dense_pretraining": {
+        "final_losses": {
+          "added": 0.028756141662597656,
+          "best_rc": 7.305036544799805,
+          "sparse": 1.2388299703598022,
+          "total": 2.5078721046447754,
+          "wall": 0.010452507063746452,
+          "yield": 0.03082852251827717
+        },
+        "train_instance_count": 18,
+        "train_row_count": 426,
+        "train_wall_sec": 4.536125972983427
+      },
+      "heldout_predictions": [
+        {
+          "actual_advantage_sec": -6.640240946000002,
+          "actual_veto_target": false,
+          "instance_content_hash": "95309e5df0af83d2",
+          "instance_id": "lunar_ice_sp50_030_004_seed203307272",
+          "predicted_advantage_sec": -2.5941166531068838,
+          "predicted_harvest_cost_sec": 3.690797262630808,
+          "predicted_proof_cost_sec": 1.096680609523924,
+          "predicted_veto": false,
+          "scale": 30,
+          "state_hash": "21dc080ea953ca6bc175be03cbcf118af3869032cf4eadcd8261cbbc53300f78",
+          "veto_probability": 0.16725187003612518,
+          "veto_probability_threshold": 0.3473777340183258
+        },
+        {
+          "actual_advantage_sec": 0.6367840679999999,
+          "actual_veto_target": true,
+          "instance_content_hash": "e22b1f88830b1c74",
+          "instance_id": "lunar_ice_sp50_030_007_seed203307275",
+          "predicted_advantage_sec": -1.4616883664531237,
+          "predicted_harvest_cost_sec": 3.220887258385158,
+          "predicted_proof_cost_sec": 1.7591988919320343,
+          "predicted_veto": false,
+          "scale": 30,
+          "state_hash": "52e39529addfc6eee71ee45862fb7470bf0f26d0caa8d780d114d8994876cbb1",
+          "veto_probability": 0.30627721548080444,
+          "veto_probability_threshold": 0.3473777340183258
+        }
+      ],
+      "kind": "linear",
+      "metrics": {
+        "action_gain_before_call_cost_sec": 0,
+        "assumed_total_call_cost_sec": 0.04,
+        "false_veto_count": 0,
+        "first_trigger_count": 2,
+        "missed_veto_count": 1,
+        "realized_net_gain_sec": -0.04,
+        "true_veto_count": 0,
+        "veto_precision": 1.0,
+        "veto_recall": 0.0
+      },
+      "selector_training": {
+        "final_losses": {
+          "advantage": 0.050320252776145935,
+          "cost": 0.26181334257125854,
+          "expected_regret": 0.2937481701374054,
+          "ranking": 0.7928608655929565,
+          "selective_classification": 0.7155417799949646,
+          "total": 2.1142842769622803
+        },
+        "pretrained_encoder_frozen": true,
+        "train_instance_count": 13,
+        "train_state_count": 13,
+        "train_wall_sec": 0.4480754890246317,
+        "trainable_parameter_count": 213,
+        "veto_probability_threshold": 0.3473777340183258
+      }
+    },
+    {
+      "dense_pretraining": {
+        "final_losses": {
+          "added": 0.03000526688992977,
+          "best_rc": 4.7441205978393555,
+          "sparse": 1.1338081359863281,
+          "total": 1.8168962001800537,
+          "wall": 0.011912360787391663,
+          "yield": 0.030978688970208168
+        },
+        "train_instance_count": 18,
+        "train_row_count": 426,
+        "train_wall_sec": 7.930328014015686
+      },
+      "heldout_predictions": [
+        {
+          "actual_advantage_sec": -6.640240946000002,
+          "actual_veto_target": false,
+          "instance_content_hash": "95309e5df0af83d2",
+          "instance_id": "lunar_ice_sp50_030_004_seed203307272",
+          "predicted_advantage_sec": -2.5109705249948973,
+          "predicted_harvest_cost_sec": 3.7567717749197658,
+          "predicted_proof_cost_sec": 1.2458012499248685,
+          "predicted_veto": false,
+          "scale": 30,
+          "state_hash": "21dc080ea953ca6bc175be03cbcf118af3869032cf4eadcd8261cbbc53300f78",
+          "veto_probability": 0.09242799133062363,
+          "veto_probability_threshold": 0.47498463256454465
+        },
+        {
+          "actual_advantage_sec": 0.6367840679999999,
+          "actual_veto_target": true,
+          "instance_content_hash": "e22b1f88830b1c74",
+          "instance_id": "lunar_ice_sp50_030_007_seed203307275",
+          "predicted_advantage_sec": -1.6104198683057676,
+          "predicted_harvest_cost_sec": 3.851921972311859,
+          "predicted_proof_cost_sec": 2.2415021040060914,
+          "predicted_veto": false,
+          "scale": 30,
+          "state_hash": "52e39529addfc6eee71ee45862fb7470bf0f26d0caa8d780d114d8994876cbb1",
+          "veto_probability": 0.23243482410907745,
+          "veto_probability_threshold": 0.47498463256454465
+        }
+      ],
+      "kind": "mlp2x32",
+      "metrics": {
+        "action_gain_before_call_cost_sec": 0,
+        "assumed_total_call_cost_sec": 0.04,
+        "false_veto_count": 0,
+        "first_trigger_count": 2,
+        "missed_veto_count": 1,
+        "realized_net_gain_sec": -0.04,
+        "true_veto_count": 0,
+        "veto_precision": 1.0,
+        "veto_recall": 0.0
+      },
+      "selector_training": {
+        "final_losses": {
+          "advantage": 0.043584227561950684,
+          "cost": 0.21410250663757324,
+          "expected_regret": 0.2562125325202942,
+          "ranking": 0.7860746383666992,
+          "selective_classification": 0.6450820565223694,
+          "total": 1.9450560808181763
+        },
+        "pretrained_encoder_frozen": true,
+        "train_instance_count": 13,
+        "train_state_count": 13,
+        "train_wall_sec": 0.6349220579722896,
+        "trainable_parameter_count": 5795,
+        "veto_probability_threshold": 0.47498463256454465
+      }
+    },
+    {
+      "dense_pretraining": {
+        "final_losses": {
+          "added": 0.030106931924819946,
+          "best_rc": 1.931894063949585,
+          "sparse": 1.1615703105926514,
+          "total": 1.1297175884246826,
+          "wall": 0.016156665980815887,
+          "yield": 0.03181278705596924
+        },
+        "train_instance_count": 18,
+        "train_row_count": 426,
+        "train_wall_sec": 27.104723077034578
+      },
+      "heldout_predictions": [
+        {
+          "actual_advantage_sec": -6.640240946000002,
+          "actual_veto_target": false,
+          "instance_content_hash": "95309e5df0af83d2",
+          "instance_id": "lunar_ice_sp50_030_004_seed203307272",
+          "predicted_advantage_sec": -2.243703685996567,
+          "predicted_harvest_cost_sec": 3.4516547492138576,
+          "predicted_proof_cost_sec": 1.2079510632172903,
+          "predicted_veto": false,
+          "scale": 30,
+          "state_hash": "21dc080ea953ca6bc175be03cbcf118af3869032cf4eadcd8261cbbc53300f78",
+          "veto_probability": 0.11353574693202972,
+          "veto_probability_threshold": 0.42367850406265256
+        },
+        {
+          "actual_advantage_sec": 0.6367840679999999,
+          "actual_veto_target": true,
+          "instance_content_hash": "e22b1f88830b1c74",
+          "instance_id": "lunar_ice_sp50_030_007_seed203307275",
+          "predicted_advantage_sec": -1.2408633316526947,
+          "predicted_harvest_cost_sec": 3.367927248766912,
+          "predicted_proof_cost_sec": 2.127063917114217,
+          "predicted_veto": false,
+          "scale": 30,
+          "state_hash": "52e39529addfc6eee71ee45862fb7470bf0f26d0caa8d780d114d8994876cbb1",
+          "veto_probability": 0.2667688727378845,
+          "veto_probability_threshold": 0.42367850406265256
+        }
+      ],
+      "kind": "gat1x32x1",
+      "metrics": {
+        "action_gain_before_call_cost_sec": 0,
+        "assumed_total_call_cost_sec": 0.04,
+        "false_veto_count": 0,
+        "first_trigger_count": 2,
+        "missed_veto_count": 1,
+        "realized_net_gain_sec": -0.04,
+        "true_veto_count": 0,
+        "veto_precision": 1.0,
+        "veto_recall": 0.0
+      },
+      "selector_training": {
+        "final_losses": {
+          "advantage": 0.04664449021220207,
+          "cost": 0.21790623664855957,
+          "expected_regret": 0.26318132877349854,
+          "ranking": 0.7877386808395386,
+          "selective_classification": 0.6516059041023254,
+          "total": 1.9670765399932861
+        },
+        "pretrained_encoder_frozen": true,
+        "train_instance_count": 13,
+        "train_state_count": 13,
+        "train_wall_sec": 1.123999322007876,
+        "trainable_parameter_count": 5795,
+        "veto_probability_threshold": 0.42367850406265256
+      }
+    }
+  ],
+  "promotion_authorized": false,
+  "protocol_path": "/home/kai/work/GAT_BPC_moonTerk/configs/p0v3_proof_tail_gat_validation_protocol_v1.json",
+  "protocol_sha256": "02a47ab386db274204d9592aa0ba6eef6d9dd78b703491ef975a789b6175efc3",
+  "protocol_verified_before_training": true,
+  "schema_version": "lunar_ice_bpc.p0v3_proof_tail_transfer_heldout.v1"
+}

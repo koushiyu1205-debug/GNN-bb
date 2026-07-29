@@ -100,12 +100,32 @@ detection, sampling or drilling in the benchmark scenario. Predefined task
 time windows provide a static representation of externally specified
 instrument, communication-schedule and mission-planning restrictions;
 communication dynamics are not introduced as a separate optimization
-resource. Cumulative shadow exposure remains distinct from energy consumption
-and path risk. The unresolved data placeholder in the supplied paragraph is
+resource. A further user decision on 2026-07-25 prohibits waiting at candidate
+task sites and en route. Waiting is allowed only at the support depot, and the
+departure time of each depot-to-depot trip may be adjusted so that every
+selected task is reached within its service window. A fixed task/path sequence
+is feasible only when one common trip departure satisfies every shifted task
+window; prescribed task service is execution rather than waiting. Depot
+waiting contributes to elapsed mission time and the mission horizon, but it
+does not consume trip-level load, travel energy, path risk, or off-depot shadow
+exposure under the forward-looking assumption that the support base supplies
+standby power and thermal control. Cumulative
+shadow exposure remains distinct from energy consumption and path risk. The
+unresolved data placeholder in the supplied paragraph is
 resolved only through verified project provenance: the common regional
 benchmark uses locally available LOLA-derived elevation, slope, roughness, PSR
 and average solar-visibility rasters, while the 30 km/h maximum modeled speed
 remains a forward-looking scenario parameter.
+
+The frozen revised solver implements arrival-equals-service-start timing,
+common depot-departure adjustment, and no task-site or en-route waiting. Its
+new 80-row scale-5--30 package supports revised-model closure and descriptive
+timing claims. Earlier cut, state, and scale-50/100 experiments retain the
+predecessor wait-permitted qualifier. The proof-bearing implementation retains
+unequal-travel-time path options, limits path replacement to the recorded
+travel-time equality tolerance, disables active-trip dominance, and permits
+depot subset dominance only with the nonempty-set, cut-state, and
+branch-continuation guards in Eq. (17).
 
 ## Required Future Evidence
 

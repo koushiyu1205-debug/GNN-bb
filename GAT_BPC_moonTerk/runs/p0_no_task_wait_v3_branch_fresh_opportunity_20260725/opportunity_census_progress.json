@@ -1,0 +1,91 @@
+{
+  "development_only": true,
+  "rows": [
+    {
+      "actionable_state_count": 1,
+      "candidate_count": 3,
+      "control_exact_safe": true,
+      "instance_content_hash": "03b93358f5f4974f",
+      "instance_id": "lunar_ice_020_058_seed202807308",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_branch_candidate_pool_20260725/lunar_ice_020/instance_058_logical_graph.json",
+      "opportunity_node_lp_exact_safe": true,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_fresh_opportunity_20260725/scale20_instance_058",
+      "root_exact_safe": true,
+      "root_wall_sec": 171.082373,
+      "source_p0_difficulty_bin": null,
+      "source_p0_difficulty_is_stale": true,
+      "status": "EXACT_ACTIONABLE",
+      "tree_result_is_exact_bpc": false,
+      "tree_wall_sec": 418.347252
+    },
+    {
+      "actionable_state_count": 0,
+      "candidate_count": 0,
+      "control_exact_safe": true,
+      "instance_content_hash": "03d421acb493af0c",
+      "instance_id": "lunar_ice_020_005_seed202807255",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_branch_candidate_pool_20260725/lunar_ice_020/instance_005_logical_graph.json",
+      "opportunity_node_lp_exact_safe": true,
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_fresh_opportunity_20260725/scale20_instance_005",
+      "root_exact_safe": true,
+      "root_wall_sec": 94.685517,
+      "source_p0_difficulty_bin": null,
+      "source_p0_difficulty_is_stale": true,
+      "status": "EXACT_NONACTIONABLE",
+      "tree_result_is_exact_bpc": false,
+      "tree_wall_sec": 37.776157
+    },
+    {
+      "actionable_state_count": 0,
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "control_exact_safe": false,
+      "instance_content_hash": "050b0dfe22efb8d7",
+      "instance_id": "lunar_ice_020_047_seed202807297",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_branch_candidate_pool_20260725/lunar_ice_020/instance_047_logical_graph.json",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_fresh_opportunity_20260725/scale20_instance_047",
+      "pricing_round_count": 12,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "root_exact_safe": false,
+      "root_wall_sec": 240.664473,
+      "source_p0_difficulty_bin": null,
+      "source_p0_difficulty_is_stale": true,
+      "status": "ROOT_CENSORED",
+      "tree_wall_sec": 0.0
+    },
+    {
+      "actionable_state_count": 0,
+      "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+      "control_exact_safe": false,
+      "driver_wall_sec": 241.26186,
+      "instance_content_hash": "0844f8e13e888fd6",
+      "instance_id": "lunar_ice_020_030_seed202807280",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_branch_candidate_pool_20260725/lunar_ice_020/instance_030_logical_graph.json",
+      "output_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_fresh_opportunity_20260725/scale20_instance_030",
+      "pricing_round_count": 26,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "returncode": 1,
+      "root_exact_safe": false,
+      "root_wall_sec": 241.09778,
+      "source_p0_difficulty_bin": null,
+      "source_p0_difficulty_is_stale": true,
+      "status": "ROOT_CENSORED",
+      "tree_wall_sec": 0.0
+    }
+  ],
+  "scale": 20,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_opportunity_census.v1",
+  "split_manifest_hash": "dd76b57d4618663c789d8c4dc2cfc4939597fc7900f8159ebc45b9aab8a68bca",
+  "summary": {
+    "actionable_state_count": 1,
+    "attempted_instance_count": 4,
+    "exact_actionable_instance_count": 1,
+    "exact_actionable_rate": 0.5,
+    "exact_count": 2,
+    "status_counts": {
+      "EXACT_ACTIONABLE": 1,
+      "EXACT_NONACTIONABLE": 1,
+      "ROOT_CENSORED": 2
+    }
+  },
+  "training_authorized": false
+}

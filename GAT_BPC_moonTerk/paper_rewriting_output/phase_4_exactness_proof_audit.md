@@ -2,24 +2,27 @@
 
 ## Verdict
 
-**PASS — CONDITIONAL OVERALL EXACTNESS PROOF WITH FAIL-CLOSED BOUNDARY**
+**PASS FOR THE FROZEN NO-TASK-WAIT IMPLEMENTATION — CONDITIONAL EXACTNESS
+SCOPE RETAINED**
 
-The revised Section 4.7 proves that a closed and fully audited
+The revised Section 4.7 conditionally proves that a closed and fully audited
 branch-price-and-cut tree establishes global optimality of its best
 exactly feasible incumbent over the fixed logical-path solution space.
 Learning-order preservation is a supporting lemma rather than the main
-theorem. The proof does not claim that the current implementation must finish
-every instance.
+theorem. The frozen revised executable implements common depot-departure
+adjustment and arrival-equals-service-start timing, passes compact/native
+timing tests, and binds its guarded dominance and exhaustive-coverage context.
+The theorem remains conditional on every row passing its full proof gates.
 
 ## Proof-Obligation Review
 
 | Obligation | Mathematical check | Implementation/evidence anchor | Verdict |
 |---|---|---|---|
-| Canonical route completeness | Same-endpoint path dominance admits a componentwise no-worse substitution with unchanged task/cut/branch coefficients; earlier service cannot worsen an upper time window, time-independent resource, or nonnegative completion term; induction covers visits and trip boundaries | Section 3.1 dominance rule; Eqs. (3), (6a)–(10); exact route construction; Native option filter | PASS under the stated assumptions |
+| Canonical route completeness | Equal-travel-time path substitution preserves all task times; any reduced recharge duration is absorbed as depot waiting so later departures can remain fixed; every fixed task/path trip yields the departure interval in (3); choosing its lower endpoint is feasible and weakly improves nonnegative weighted completion; induction covers trip boundaries because earlier depot availability can be followed by depot waiting | Section 3.1; Eqs. (3), (6a)–(10); Lemma 1; EV035--EV036 | PASS AS MATHEMATICAL AND IMPLEMENTED CONTRACT |
 | Route and fleet-schedule spaces | \(\mathcal R(\mathcal I)\) contains one-rover routes, \(\Omega(\mathcal I)\) contains exact-cover fleet schedules, and \(\mathcal P(n)\subseteq\mathcal R(\mathcal I)\) is the node route set | Sections 3.1 and 3.3; Lemma 2 | PASS; route and fleet objects no longer share one symbol |
 | Trip-slot completeness | Every active trip contains at least one task and route-level task uniqueness permits at most \(|\mathcal T|\) active trips | Eq. (4a); \(\bar S=|\mathcal T|\) | PASS without an unstated truncation |
 | Route-master equivalence | Exact task cover maps tasks to one selected route; fleet limit supplies one rover per route; valid SRI-3 rows preserve every integer schedule | Eq. (12); SRI-3 derivation after (20) | PASS |
-| Full node-LP closure | Exact completion makes the RMP dual feasible for every full-master column; strong duality and restricted-column inclusion give both inequality directions in (25) | Eq. (13), Eq. (19), RMP/pricing RC audit | PASS in exact arithmetic |
+| Full node-LP closure | Exact completion makes the RMP dual feasible for every full-master column only if no-wait timing and guarded dominance preserve a no-worse continuation. Eq. (17) allows depot subset dominance only for a nonempty visited set, equal cut state, and continuation-preserving branch compatibility; active-trip dominance is disabled. Eq. (18) relies on the nonnegative input domain and positive normalizers, permits branch restrictions that only shrink the continuation set, and is disabled whenever an active cut could add an omitted cut-dual term; strong duality and restricted-column inclusion then give both inequality directions in (25) | Eqs. (13), (16)–(19); Lemma 3; EV035--EV036 | PASS WITH THE DISPLAYED GUARDS |
 | Phase-I infeasibility | A positive full Phase-I optimum after exhaustive Phase-I pricing excludes every zero-artificial LP solution and therefore every integer solution | `journey_rmp.py`; Phase-I proof contract | PASS |
 | Cut preservation | Divisor-two SRI-3 follows from exact task coverage and the floor inequality | Eq. (20); `core/cuts.py` | PASS |
 | Branch preservation | Exact cover makes same-route and different-route mutually exclusive and exhaustive; child filters implement those cases | Eq. (26); `core/branching.py` | PASS for an exact-valid pair |
@@ -39,23 +42,22 @@ every instance.
 | A fractional LP with no Ryan–Foster pair could be declared integral | The node is explicitly incomplete unless another exact disjunction or aggregation proof exists |
 | Learning could silently discard a negative column | Finite delay, explicit deferred-pricing obligations, release, and exhaustive repricing are theorem conditions |
 | A delayed item could be absent from the proof-debt set before its reduced cost is known | Every delayed item is registered immediately with \(\bar c_d=\bot\) and remains recorded until true-dual recheck, exact processing, or context-matched exhaustive coverage |
-| Native path-option filtering could omit a negative route | Same-endpoint componentwise dominance preserves task/cut/branch coefficients and gives a retained route with no greater objective or reduced cost |
+| Path-option filtering could omit a slower route needed to avoid early arrival | Options with unequal travel time are retained; substitution is allowed only at equal travel time with all remaining attributes weakly no worse |
+| Earlier open-trip labels could incorrectly dominate later ones | Active-trip dominance is disabled because a later release can force a retroactive common departure shift |
+| The initial empty depot label could dominate every completed depot label | Eq. (17) requires the dominating visited set to be nonempty |
+| A branch-incompatible subset label could remove a needed continuation | Depot subset dominance requires the continuation-preserving branch predicate and equal active-cut state |
+| Zero future increments in the completion bound could be invalid under negative inputs | Section 3.1 declares all task/path cost and resource inputs nonnegative, and Eq. (9) makes every normalizer strictly positive; the implementation gate includes an input-domain audit |
+| Approximate travel-time equality could delete a timing-distinct path | Mathematical substitution requires equality; proof-bearing native completion uses the frozen \(10^{-12}\) comparison, whereas the Python seed/reference path uses \(10^{-9}\) and has no no-negative proof authority |
 | A resource limit could leak an optimality conclusion | Any open or unresolved node precludes a tree-level optimality conclusion |
 | Floating-point tolerances could be confused with exact arithmetic | Mathematical and executable scopes are separated explicitly |
 | Fixed-graph optimality could be generalized to continuous terrain | Theorem 1 and Appendix A retain the fixed logical-path qualifier |
 
 ## Automated Checks
 
-- 21 targeted exactness-interface tests: PASS.
-- `git diff --check`: PASS.
-- 29 equation tags, all unique: PASS.
-- Display, `aligned`, and `cases` environments balanced: PASS.
-- Eight Markdown tables have consistent column counts: PASS.
-- Heading hierarchy: PASS.
-- First person, `sortie/journey`, SRI-5, `:=`, indicator notation, and
-  unnecessary equivalence arrows in the manuscript: absent.
-- Literal implementation enums, Boolean record fields, and configuration
-  values used as algorithmic conclusions in the manuscript: absent.
+The revised manuscript passed the syntax, notation, and equation-environment
+checks. Three targeted Python tests, two native tests, and the frozen-package
+verification passed for the no-task-wait implementation. The new independent
+manuscript reviews are recorded in `structured_review.md`.
 
 ## Five-Dimension Self-Review
 
@@ -64,12 +66,16 @@ every instance.
 | Contribution | Does Section 4.7 prove the complete algorithm rather than only the learning interface? | PASS — learning preservation is Lemma 5; Theorem 1 covers the full BPC chain |
 | Writing clarity | Can each proof obligation be located and followed independently? | PASS — one mathematical message per lemma, followed by a separate tree proof and scope qualification |
 | Experimental strength | Does the theorem depend on missing learning-performance evidence? | PASS — no; empirical learning effects remain `TBD` and are not proof premises |
-| Evaluation completeness | Are theorem conditions testable in future L0/L1/L2 runs? | PASS — the audit fields include pricing coverage, RC/context checks, debt, open/incomplete nodes, and ledger validity |
-| Method soundness | Is any known implementation gap hidden by the word “exact”? | PASS WITH BOUNDARY — the missing no-pair alternative branch is stated and forces an incomplete outcome |
+| Evaluation completeness | Are theorem conditions testable in future L0/L1/L2 runs? | PASS — the revised L0 control binds timing, dominance, instance, engine and proof fields; L1/L2 must use the same schema |
+| Method soundness | Is any known implementation gap hidden by the word “exact”? | PASS WITH BOUNDARY — the missing no-pair alternative branch remains explicit and fail closed |
 
 ## Remaining Boundary
 
-The current Ryan–Foster implementation is sound but not unconditionally
+The no-task-wait implementation boundary is closed for the frozen scale-5--30
+control. Revised-model cut-effect, state-refinement, and scale-50/100 evidence
+still requires new runs. The remaining algorithmic boundary is Ryan–Foster
+completeness. The
+current Ryan–Foster implementation is sound but not unconditionally
 complete because it has no implemented alternative disjunction when a
 fractional node supplies no Ryan–Foster pair. This is not a proof defect after
 the revision: such a node remains unresolved, and Theorem 1 applies only to a

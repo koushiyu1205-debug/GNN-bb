@@ -1,0 +1,588 @@
+{
+  "active_column_count": 447,
+  "baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "baseline_registry_sha256": "bb0513a72f1a32e6714a25dd6ef79e1483371365736e3dfa7337c39bc434ed5c",
+  "cumulative_screen_wall_sec": 30.244435,
+  "cut_aware_active_cut_context_hash": "ca64ad3871a3e2c9ac2c252409e973ea85dee5ceaa9d8d7a121f8fa459219124",
+  "cut_aware_active_cut_count": 4,
+  "cut_aware_candidate_count": 3,
+  "cut_aware_certificate_role": "none",
+  "cut_aware_commit_history": [
+    {
+      "activation": {
+        "active_cut_context_hash": "ca64ad3871a3e2c9ac2c252409e973ea85dee5ceaa9d8d7a121f8fa459219124",
+        "active_cut_count": 4,
+        "added_cut_count": 4,
+        "added_cut_ids": [
+          "sri:d2:n3:ice_site_003,ice_site_007,ice_site_015",
+          "sri:d2:n3:ice_site_003,ice_site_008,ice_site_018",
+          "sri:d2:n3:ice_site_003,ice_site_008,ice_site_019",
+          "sri:d2:n3:ice_site_003,ice_site_009,ice_site_010"
+        ],
+        "addition_cap": 4,
+        "committed": true,
+        "cut_lineage_hash": "cfa4a769952ab4094f937f926749f31d10422e1a680e0a93faca905ca5e3a3b3",
+        "global_cut_count": 4,
+        "lineage_local_cut_count": 0,
+        "live_cut_policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+        "requested_selected_count": 4,
+        "scope": "global"
+      },
+      "pre_activation_screen": {
+        "certificate_role": "heuristic_cut_commit_gate_only",
+        "commit": true,
+        "min_restricted_rmp_gain": 0.0001,
+        "mutates_official_bound": false,
+        "restricted_primal_integral": false,
+        "restricted_rmp_bound_gain": 0.00209500000000018,
+        "rmp_bound_after_proposed_cuts": 1.65752,
+        "status": "RESTRICTED_RMP_OPTIMAL"
+      },
+      "rmp_bound_before": 1.655425,
+      "separation": {
+        "divisor": 2,
+        "enumerated_candidate_count": 1140,
+        "expected_candidate_count": 1140,
+        "family_no_violated_sri_certified": false,
+        "full_enumeration_completed": true,
+        "max_violation": 0.333333332,
+        "positive_primal_column_count": 7,
+        "schema_version": "lunar_ice_bpc.live_sri_separation.v1",
+        "selected": [
+          {
+            "activity": 1.333333332,
+            "cut": {
+              "cut_id": "sri:d2:n3:ice_site_003,ice_site_007,ice_site_015",
+              "cut_type": "subset_row",
+              "divisor": 2,
+              "rhs": 1.0,
+              "tasks": [
+                "ice_site_003",
+                "ice_site_007",
+                "ice_site_015"
+              ]
+            },
+            "cut_id": "sri:d2:n3:ice_site_003,ice_site_007,ice_site_015",
+            "rhs": 1.0,
+            "subset_size": 3,
+            "support_column_count": 4,
+            "tasks": [
+              "ice_site_003",
+              "ice_site_007",
+              "ice_site_015"
+            ],
+            "violated": true,
+            "violation": 0.333333332
+          },
+          {
+            "activity": 1.333333332,
+            "cut": {
+              "cut_id": "sri:d2:n3:ice_site_003,ice_site_008,ice_site_018",
+              "cut_type": "subset_row",
+              "divisor": 2,
+              "rhs": 1.0,
+              "tasks": [
+                "ice_site_003",
+                "ice_site_008",
+                "ice_site_018"
+              ]
+            },
+            "cut_id": "sri:d2:n3:ice_site_003,ice_site_008,ice_site_018",
+            "rhs": 1.0,
+            "subset_size": 3,
+            "support_column_count": 4,
+            "tasks": [
+              "ice_site_003",
+              "ice_site_008",
+              "ice_site_018"
+            ],
+            "violated": true,
+            "violation": 0.333333332
+          },
+          {
+            "activity": 1.333333332,
+            "cut": {
+              "cut_id": "sri:d2:n3:ice_site_003,ice_site_008,ice_site_019",
+              "cut_type": "subset_row",
+              "divisor": 2,
+              "rhs": 1.0,
+              "tasks": [
+                "ice_site_003",
+                "ice_site_008",
+                "ice_site_019"
+              ]
+            },
+            "cut_id": "sri:d2:n3:ice_site_003,ice_site_008,ice_site_019",
+            "rhs": 1.0,
+            "subset_size": 3,
+            "support_column_count": 4,
+            "tasks": [
+              "ice_site_003",
+              "ice_site_008",
+              "ice_site_019"
+            ],
+            "violated": true,
+            "violation": 0.333333332
+          },
+          {
+            "activity": 1.333333332,
+            "cut": {
+              "cut_id": "sri:d2:n3:ice_site_003,ice_site_009,ice_site_010",
+              "cut_type": "subset_row",
+              "divisor": 2,
+              "rhs": 1.0,
+              "tasks": [
+                "ice_site_003",
+                "ice_site_009",
+                "ice_site_010"
+              ]
+            },
+            "cut_id": "sri:d2:n3:ice_site_003,ice_site_009,ice_site_010",
+            "rhs": 1.0,
+            "subset_size": 3,
+            "support_column_count": 4,
+            "tasks": [
+              "ice_site_003",
+              "ice_site_009",
+              "ice_site_010"
+            ],
+            "violated": true,
+            "violation": 0.333333332
+          }
+        ],
+        "selected_candidate_count": 4,
+        "selection_cap_reached": true,
+        "selection_capacity": 4,
+        "separator_policy_version": "native_live_sri_complete_enumeration_v1",
+        "subset_sizes": [
+          3
+        ],
+        "unselected_violated_count": 63,
+        "violated_candidate_count": 67,
+        "violation_eps": 1e-06
+      },
+      "separation_round": 1
+    },
+    {
+      "activation": {
+        "active_cut_context_hash": "ca64ad3871a3e2c9ac2c252409e973ea85dee5ceaa9d8d7a121f8fa459219124",
+        "active_cut_count": 4,
+        "added_cut_count": 0,
+        "added_cut_ids": [],
+        "addition_cap": 0,
+        "committed": false,
+        "cut_lineage_hash": "cfa4a769952ab4094f937f926749f31d10422e1a680e0a93faca905ca5e3a3b3",
+        "global_cut_count": 4,
+        "lineage_local_cut_count": 0,
+        "live_cut_policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+        "requested_selected_count": 0,
+        "scope": "global"
+      },
+      "rmp_bound_before": 1.65752,
+      "separation": {
+        "divisor": 2,
+        "enumerated_candidate_count": 1140,
+        "expected_candidate_count": 1140,
+        "family_no_violated_sri_certified": false,
+        "full_enumeration_completed": true,
+        "max_violation": 0.42857143,
+        "positive_primal_column_count": 11,
+        "schema_version": "lunar_ice_bpc.live_sri_separation.v1",
+        "selected": [],
+        "selected_candidate_count": 0,
+        "selection_cap_reached": false,
+        "selection_capacity": 0,
+        "separator_policy_version": "native_live_sri_complete_enumeration_v1",
+        "subset_sizes": [
+          3
+        ],
+        "unselected_violated_count": 111,
+        "violated_candidate_count": 111,
+        "violation_eps": 1e-06
+      },
+      "separation_round": 2,
+      "terminal_reason": "POLICY_CAP_REACHED_WITH_UNSELECTED_VIOLATIONS"
+    }
+  ],
+  "cut_aware_cut_lineage_hash": "cfa4a769952ab4094f937f926749f31d10422e1a680e0a93faca905ca5e3a3b3",
+  "cut_aware_replay_completed": true,
+  "cut_aware_restricted_rmp_objective_bound": 1.65752,
+  "cut_aware_restricted_rmp_primal_column_count": 11,
+  "cut_aware_restricted_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+  "cut_aware_terminal_reason": "POLICY_CAP_REACHED_WITH_UNSELECTED_VIOLATIONS",
+  "cut_aware_top3_candidates": [
+    {
+      "different_child_column_count": 347,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_017",
+            "task_b": "ice_site_020"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.428571429,
+      "same_child_column_count": 274,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_017",
+            "task_b": "ice_site_020"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.428571429,
+      "support_column_count": 2,
+      "task_a": "ice_site_017",
+      "task_b": "ice_site_020"
+    },
+    {
+      "different_child_column_count": 335,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_009",
+            "task_b": "ice_site_017"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.428571429,
+      "same_child_column_count": 256,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_009",
+            "task_b": "ice_site_017"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.428571429,
+      "support_column_count": 2,
+      "task_a": "ice_site_009",
+      "task_b": "ice_site_017"
+    },
+    {
+      "different_child_column_count": 416,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_003",
+            "task_b": "ice_site_015"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.428571429,
+      "same_child_column_count": 332,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_003",
+            "task_b": "ice_site_015"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.428571429,
+      "support_column_count": 1,
+      "task_a": "ice_site_003",
+      "task_b": "ice_site_015"
+    }
+  ],
+  "cut_aware_top3_fractionality_sum": 1.285714287,
+  "deployable": false,
+  "development_only": true,
+  "engine_hash": "439e12be8bf04208",
+  "exact_promotion_recommendation_is_training_target": false,
+  "exact_promotion_recommended": false,
+  "guidance_branch_pair_drop_count": 0,
+  "guidance_filter_count": 0,
+  "instance_content_hash": "838f68c9c81942f3",
+  "instance_id": "lunar_ice_020_021_seed202807271",
+  "is_branch_training_label": false,
+  "is_certificate": false,
+  "is_exact_opportunity_decision": false,
+  "is_natural_opportunity_rate_evidence": false,
+  "may_permanently_filter_development_instance": false,
+  "note": "No-cut and fixed-pool P0 cut-aware restricted-RMP fractionality are collection schedulers only. Exact promotion requires cut-aware top-3 plus near saturation. At least 25% of development attempts remain content-hash-first to measure screen false negatives.",
+  "priority_key": [
+    0,
+    -1.000000002,
+    8,
+    -447,
+    "838f68c9c81942f3"
+  ],
+  "priority_key_fields": [
+    "missing_top3_proxy",
+    "negative_top3_fractionality_sum",
+    "final_round_added_column_count",
+    "negative_active_column_count",
+    "instance_content_hash"
+  ],
+  "priority_key_is_training_target": false,
+  "proxy_candidate_count": 3,
+  "proxy_top3_candidates": [
+    {
+      "different_child_column_count": 357,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_018",
+            "task_b": "ice_site_019"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.333333334,
+      "same_child_column_count": 331,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_018",
+            "task_b": "ice_site_019"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.666666666,
+      "support_column_count": 2,
+      "task_a": "ice_site_018",
+      "task_b": "ice_site_019"
+    },
+    {
+      "different_child_column_count": 389,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_008",
+            "task_b": "ice_site_014"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.333333334,
+      "same_child_column_count": 356,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_008",
+            "task_b": "ice_site_014"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.666666666,
+      "support_column_count": 2,
+      "task_a": "ice_site_008",
+      "task_b": "ice_site_014"
+    },
+    {
+      "different_child_column_count": 367,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_012",
+            "task_b": "ice_site_017"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.333333334,
+      "same_child_column_count": 305,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_012",
+            "task_b": "ice_site_017"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.666666666,
+      "support_column_count": 2,
+      "task_a": "ice_site_012",
+      "task_b": "ice_site_017"
+    }
+  ],
+  "proxy_top3_fractionality_sum": 1.000000002,
+  "recent_round_added_column_counts": [
+    32,
+    8
+  ],
+  "required_hash_order_exploration_quota": 0.25,
+  "restricted_frontier_near_saturation": false,
+  "restricted_rmp_objective_bound": 1.655425,
+  "restricted_rmp_primal_column_count": 7,
+  "restricted_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+  "root_prefix_added_column_count": 424,
+  "root_prefix_certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+  "root_prefix_exact_safe": false,
+  "root_prefix_history": [
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.11465,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 1
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.042679,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 2
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.097961,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 3
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.064476,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 4
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.060416,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 5
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.040188,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 6
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.037262,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 7
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.035951,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 8
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 0.279099,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 9
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 3.109051,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 10
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 10.554817,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 11
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 5.08233,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 12
+    },
+    {
+      "addable_negative_count": 32,
+      "added_column_count": 32,
+      "final_judge_wall_time": 9.577412,
+      "node_lp_bound": 1.661815,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 13
+    },
+    {
+      "addable_negative_count": 8,
+      "added_column_count": 8,
+      "final_judge_wall_time": 0.706327,
+      "node_lp_bound": 1.655425,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 14
+    }
+  ],
+  "root_prefix_pricing_state": "INCOMPLETE_LIMIT",
+  "root_prefix_round_count": 14,
+  "root_prefix_warm_source_certificate_reused": false,
+  "root_prefix_warm_source_columns_only": true,
+  "root_prefix_warm_source_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_priority_screen_20260726/scale20_instance_021_budget30/root_prefix_warm_source.json",
+  "scale": 20,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_priority_screen.v3",
+  "screen_budget_sec": 30.0,
+  "screen_wall_sec": 30.244435,
+  "screen_warm_start": null,
+  "screen_warm_start_certificate_reused": false,
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "split_manifest_hash": "dd76b57d4618663c789d8c4dc2cfc4939597fc7900f8159ebc45b9aab8a68bca",
+  "training_authorized": false
+}

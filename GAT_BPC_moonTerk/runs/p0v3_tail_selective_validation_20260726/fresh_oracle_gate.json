@@ -1,0 +1,184 @@
+{
+  "all_census_exact": true,
+  "bounded_fresh_expansion_authorized": false,
+  "calibration_used": false,
+  "census_bindings": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale20_census/opportunity_census_progress.json",
+      "scale": 20,
+      "sha256": "ca5a26eac302f62c4618ad9b89e1f93e13bef8732660472285076ca8434355fe"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale30_census/opportunity_census_progress.json",
+      "scale": 30,
+      "sha256": "afa8ab80fe329250fadde9eca1d63db2b04e5fbb75552d0fec4082db36c679a2"
+    }
+  ],
+  "decision_reason_code": "FRESH_EXACT_PILOT_ZERO_TAIL_TRIGGER",
+  "deployment_authorized": false,
+  "event_rows": [
+    {
+      "driver_wall_sec": 7.380726,
+      "instance_content_hash": "103e4ad5fa78176f",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale20_census/scale20_instance_003/branch_opportunity_report.json",
+      "opportunity_report_sha256": "0ae663f28c6fc6fd646227a333eb50baf4f525565b64b313cb3c6edef84a6a5e",
+      "scale": 20,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.3242875,
+      "tail_event_elapsed_sec": 6.48575,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 5.705859,
+      "instance_content_hash": "348fca29db1913f6",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale20_census/scale20_instance_001/branch_opportunity_report.json",
+      "opportunity_report_sha256": "885cae179ab00c3104971b8d0b0cfce767279d97cc178dd33e057602eaffbc05",
+      "scale": 20,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.27076265,
+      "tail_event_elapsed_sec": 5.415253,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 18.5628,
+      "instance_content_hash": "4277d0edc78aaeff",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale20_census/scale20_instance_004/branch_opportunity_report.json",
+      "opportunity_report_sha256": "a7ff64b003d7836f22802c078c5129ee832a6d3fb996e16b311173f318b65241",
+      "scale": 20,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.91068675,
+      "tail_event_elapsed_sec": 18.213735,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 46.887051,
+      "instance_content_hash": "32e7e2804578fa0a",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale30_census/scale30_instance_001/branch_opportunity_report.json",
+      "opportunity_report_sha256": "a038eba6daee92f7b17a618d11c1cb0fb897b89c3d0c96b029d38b17ee9f2b07",
+      "scale": 30,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 1.5300130666666665,
+      "tail_event_elapsed_sec": 45.900392,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 30.261435,
+      "instance_content_hash": "4c368eccc957e6bd",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale30_census/scale30_instance_004/branch_opportunity_report.json",
+      "opportunity_report_sha256": "ae3ad3fca6a3f3b93efb228c5c2d7b5414c8221eb236455c46d9480318240c53",
+      "scale": 30,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 0.9871454333333334,
+      "tail_event_elapsed_sec": 29.614363,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    },
+    {
+      "driver_wall_sec": 58.912366,
+      "instance_content_hash": "4fd39191a233502d",
+      "opportunity_report_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_tail_selective_validation_20260726/fresh_scale30_census/scale30_instance_003/branch_opportunity_report.json",
+      "opportunity_report_sha256": "8e5d870433f079f635adecf13a02f074ade128cb76597df305938876ce8f8e3c",
+      "scale": 30,
+      "selective_oracle_action": "PRE_IMPORT_BYPASS",
+      "selective_oracle_net_gain_sec": 0.0,
+      "status": "EXACT_NONACTIONABLE",
+      "tail_elapsed_sec_per_task": 1.9365037,
+      "tail_event_elapsed_sec": 58.095111,
+      "tail_trigger_eligible": false,
+      "tail_trigger_min_elapsed_sec_per_task": 1.0,
+      "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+      "tail_trigger_reason": "NODE_NOT_BRANCHED",
+      "tail_triggered": false
+    }
+  ],
+  "evidence_role": "FRESH_VALIDATION",
+  "formal_feature_collection_authorized": false,
+  "fresh_instance_cap_reached": false,
+  "fresh_pilot_threshold_reached": true,
+  "fresh_validation_collection_authorized": false,
+  "gat_training_authorized": false,
+  "gold_label_bindings": [],
+  "linear_training_authorized": false,
+  "matched_e2e_collection_authorized": false,
+  "observed": {
+    "census_instance_count_by_scale": {
+      "20": 3,
+      "30": 3
+    },
+    "evaluable_instance_cluster_count": 6,
+    "exact_instance_count_by_scale": {
+      "20": 3,
+      "30": 3
+    },
+    "missing_tail_trigger_gold_hashes": [],
+    "projected_instances_for_required_trigger_gold_by_scale": {
+      "20": null,
+      "30": null
+    },
+    "selective_oracle_net_gain_sec_balanced_mean": 0.0,
+    "selective_oracle_net_gain_sec_bootstrap_95ci": [
+      0.0,
+      0.0
+    ],
+    "tail_trigger_count_by_scale": {
+      "20": 0,
+      "30": 0
+    },
+    "tail_trigger_gold_count_by_scale": {
+      "20": 0,
+      "30": 0
+    }
+  },
+  "one_shot_per_instance": true,
+  "pre_import_bypass_required": true,
+  "projected_collection_feasible": false,
+  "protected_final_test_used": false,
+  "required_oracle_trigger_gold_reached": false,
+  "required_training_trigger_gold_reached": false,
+  "schema_version": "lunar_ice_bpc.tail_selective_oracle_gate.v1",
+  "selective_oracle_lcb_positive": false,
+  "split_manifest_hash": "25e49533ae35412f5e4bf7f457fa2d0f887877ad4e1a2866f92a11f9bf0bd344",
+  "split_manifest_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_tail_selective_real_map_pilot_20260726_grouped_split_manifest.json",
+  "tail_selective_landing_validated": false,
+  "tail_trigger_gold_complete": true,
+  "tail_trigger_policy_id": "first_exact_legal_top3_elapsed_per_task_ge_1s.v1",
+  "target_domain": "real_lunar_south_pole_sp50_benchmark_v1",
+  "terminate_tail_selective_landing": true,
+  "thresholds": {
+    "guidance_lifecycle_overhead_sec": 0.02,
+    "maximum_fresh_instances_per_scale": 6,
+    "maximum_projected_development_instances_per_scale": 120,
+    "minimum_fresh_pilot_instances_per_scale": 3,
+    "required_independent_trigger_gold_per_scale": 20,
+    "required_oracle_trigger_gold_per_scale": 2
+  }
+}

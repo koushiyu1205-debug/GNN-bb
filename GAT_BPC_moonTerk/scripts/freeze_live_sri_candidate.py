@@ -133,6 +133,7 @@ def candidate_bundle_files() -> tuple[Path, ...]:
         "scripts/run_live_sri_paired_promotion.py",
         "scripts/run_live_sri_readiness.py",
         "scripts/run_lunar_ice_native_spprc_acceptance.py",
+        "scripts/run_p0_no_task_wait_full80_baseline.py",
         "scripts/run_lunar_ice_b4_1_true_dual_proof_tail.py",
         "scripts/run_lunar_ice_b4_2_cold_exact.py",
         "configs/native_live_sri_p0_pilot_v1.yaml",

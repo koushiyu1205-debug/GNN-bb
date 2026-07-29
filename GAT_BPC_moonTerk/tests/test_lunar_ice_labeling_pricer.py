@@ -76,6 +76,7 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
     _catalog_refinement_neighborhood_seed_task_sets,
     _catalog_refinement_seed_portfolio,
     _catalog_refinement_seed_task_sets,
+    _apply_sparse_harvest_strike_control,
     _hidden_negative_refinement_summary,
     _effective_labeling_final_judge_pass_policy,
     _adaptive_final_judge_harvest_cap_sec,
@@ -3358,6 +3359,55 @@ class LunarIceLabelingPricerTests(unittest.TestCase):
             ),
             "proof_only",
         )
+
+    def test_two_strike_control_delays_only_the_first_sparse_transition(self) -> None:
+        payload = {
+            "labeling_final_judge_proof_pass_attempted": False,
+        }
+        strategy, strikes = _apply_sparse_harvest_strike_control(
+            policy=LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE,
+            current_strategy="harvest_then_proof",
+            proposed_next_strategy="proof_only",
+            judge_payload=payload,
+            current_strike_count=0,
+            required_strikes=2,
+        )
+        self.assertEqual(strategy, "harvest_then_proof")
+        self.assertEqual(strikes, 1)
+
+        strategy, strikes = _apply_sparse_harvest_strike_control(
+            policy=LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE,
+            current_strategy="harvest_then_proof",
+            proposed_next_strategy="proof_only",
+            judge_payload=payload,
+            current_strike_count=strikes,
+            required_strikes=2,
+        )
+        self.assertEqual(strategy, "proof_only")
+        self.assertEqual(strikes, 2)
+
+        strategy, strikes = _apply_sparse_harvest_strike_control(
+            policy=LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE,
+            current_strategy="proof_only",
+            proposed_next_strategy="proof_only",
+            judge_payload={
+                "labeling_final_judge_proof_pass_attempted": True,
+            },
+            current_strike_count=strikes,
+            required_strikes=2,
+        )
+        self.assertEqual(strategy, "proof_only")
+        self.assertEqual(strikes, 0)
+
+        with self.assertRaises(ValueError):
+            _apply_sparse_harvest_strike_control(
+                policy=LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE,
+                current_strategy="harvest_then_proof",
+                proposed_next_strategy="proof_only",
+                judge_payload=payload,
+                current_strike_count=0,
+                required_strikes=0,
+            )
 
     def test_adaptive_final_judge_harvest_cap_is_policy_scoped_and_fails_closed(self) -> None:
         env_name = LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC_ENV

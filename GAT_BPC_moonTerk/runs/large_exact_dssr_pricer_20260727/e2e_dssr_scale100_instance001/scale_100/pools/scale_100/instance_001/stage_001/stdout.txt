@@ -1,0 +1,2 @@
+{"elapsed_sec": 3590.950687, "algorithm_status": "BPC_INCOMPLETE_PRICING", "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER", "pricing_state": "INCOMPLETE_LIMIT", "pricing_round_count": 148, "added_column_count": 18689, "active_column_count": 18797}
+report /home/kai/work/GAT_BPC_moonTerk/runs/large_exact_dssr_pricer_20260727/e2e_dssr_scale100_instance001/scale_100/pools/scale_100/instance_001/stage_001/probe_report_zh.md

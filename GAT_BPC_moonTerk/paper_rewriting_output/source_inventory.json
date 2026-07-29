@@ -292,11 +292,11 @@
     },
     {
       "id": "S055",
-      "path": "src/lunar_ice_bpc/domain/real_maps.py plus exact/core/columns.py, exact/core/journey.py, and exact/core/objective.py",
+      "path": "src/lunar_ice_bpc/domain/real_maps.py plus exact/core/columns.py, exact/core/journey.py, exact/core/objective.py, exact/solver/journey_driver.py, and exact/solver/gurobi_compact.py",
       "type": "python_group",
-      "role": "detailed_lunar_path_sortie_journey_normalization_and_objective_mathematics",
+      "role": "detailed_lunar_path_trip_multi_trip_route_no_task_wait_normalization_and_objective_mathematics",
       "authority": "B",
-      "status": "implemented"
+      "status": "implemented_and_targeted_test_verified"
     },
     {
       "id": "S056",
@@ -313,6 +313,22 @@
       "role": "introduction_reverse_outline_claim_transfer_and_self_review",
       "authority": "A/B",
       "status": "complete"
+    },
+    {
+      "id": "S059",
+      "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/baseline_freeze_manifest.json plus verify_freeze.py and frozen snapshots",
+      "type": "frozen_exact_package",
+      "role": "content_addressed_no_task_wait_implementation_and_reproducibility_binding",
+      "authority": "A",
+      "status": "verified_zero_mismatches"
+    },
+    {
+      "id": "S060",
+      "path": "runs/frozen_native_live_sri_p0_no_task_wait_baseline_v3_20260725/performance/full80_summary_snapshot.json plus row and report snapshots",
+      "type": "frozen_experiment",
+      "role": "scale_5_30_no_task_wait_exact_baseline",
+      "authority": "A",
+      "status": "80_of_80_exact_and_correct"
     }
   ],
   "missing_evidence": [
@@ -339,6 +355,11 @@
     {
       "id": "M005",
       "material": "inference_overhead_fallback_equivalence_and_held_out_results",
+      "status": "TBD"
+    },
+    {
+      "id": "M006",
+      "material": "paired_mission_epoch_and_four_phase_comparison_package",
       "status": "TBD"
     }
   ],

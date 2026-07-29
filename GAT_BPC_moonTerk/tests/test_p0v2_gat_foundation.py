@@ -65,6 +65,9 @@ from lunar_ice_bpc.guidance.queue_shadow import (
     exhaustive_queue_policy_differential,
     queue_shadow_key,
 )
+from lunar_ice_bpc.guidance.proof_queue_potential_features import (
+    build_proof_queue_arc_features,
+)
 from lunar_ice_bpc.guidance.splits import (
     InstanceSplitRecord,
     build_split_manifest,
@@ -124,6 +127,16 @@ def test_proof_queue_policy_contract_is_exact_only() -> None:
     )
     assert replace(control, proof_queue_policy_id="QD1").proof_queue_policy_id == "QD1"
     assert replace(control, proof_queue_policy_id="QB1").proof_queue_policy_id == "QB1"
+    assert replace(control, proof_queue_policy_id="QG1").proof_queue_policy_id == "QG1"
+    with pytest.raises(
+        ValueError,
+        match="proof_queue_guidance_bucket_width",
+    ):
+        replace(
+            control,
+            proof_queue_policy_id="QG1",
+            proof_queue_guidance_bucket_width=0.0,
+        )
     with pytest.raises(ValueError, match="unsupported proof_queue_policy_id"):
         replace(control, proof_queue_policy_id="unknown")
     with pytest.raises(ValueError, match="exact-proof diagnostics only"):
@@ -131,6 +144,42 @@ def test_proof_queue_policy_contract_is_exact_only() -> None:
             _request(negative_harvest=True),
             proof_queue_policy_id="QD1",
         )
+
+
+def test_proof_queue_arc_features_are_pre_call_only_and_universe_complete() -> None:
+    request = _request(scale=5)
+    snapshot = {
+        "instance_content_hash": request.data.instance_content_hash,
+        "state_hash": "state",
+        "round": 3,
+        "active_column_count": 12,
+        "true_duals": {
+            "task_duals": dict(request.true_duals.cover),
+            "fleet_dual": request.true_duals.fleet_limit,
+        },
+        "trajectory_features": {
+            "previous_proof_pass_wall_time": 0.2,
+            "previous_harvest_processed_labels": 100,
+            "dual_l1_delta_from_previous": 0.3,
+            "dual_linf_delta_from_previous": 0.1,
+        },
+    }
+    first = build_proof_queue_arc_features(request.data, snapshot)
+    second = build_proof_queue_arc_features(
+        request.data,
+        {
+            **snapshot,
+            "completed_routes": [{"future": True}],
+            "proof_queue_potential_trace": [{"future": True}],
+            "observed_wall_sec": 999.0,
+        },
+    )
+    assert first == second
+    assert len(first.arc_candidate_ids) == len(first.rows)
+    assert len(first.feature_names) == len(first.rows[0])
+    assert len(first.arc_candidate_ids) == len(
+        set(first.arc_candidate_ids)
+    )
 
 
 def test_development_task_priority_oracle_reuses_canonical_binding(
@@ -884,6 +933,68 @@ def test_native_task_arc_guidance_is_bound_order_only_and_zero_filter() -> None:
                 len(control_result.telemetry["reconstruction_audit"])
             )
         )
+    )
+
+    # Exact guidance is fail-closed everywhere except the explicit QG1
+    # diagnostic queue.  QG1 changes ordering only and must preserve the
+    # exhaustive result, legal universe, and zero-drop invariants.
+    qg1_enriched = replace(exact_enriched, proof_queue_policy_id="QG1")
+    qg1_binding = CanonicalSolveBindingV2.from_backend_request(qg1_enriched)
+    qg1_result = NativeRcsppInprocessBackend().solve(
+        replace(
+            qg1_enriched,
+            guidance_hints=replace(
+                hints,
+                binding_hash=qg1_binding.binding_hash,
+            ),
+        )
+    )
+    assert qg1_result.telemetry["guidance_effective_mode"] == "task_arc"
+    assert qg1_result.telemetry["proof_queue_policy_id"] == "QG1"
+    assert qg1_result.telemetry["guidance_filter_count"] == 0
+    assert qg1_result.telemetry["guidance_arc_drop_count"] == 0
+    assert qg1_result.telemetry["guidance_label_drop_count"] == 0
+    assert qg1_result.telemetry["guidance_branch_pair_drop_count"] == 0
+    assert not qg1_result.labels_dropped
+    assert qg1_result.search_exhaustive == control_result.search_exhaustive
+    assert qg1_result.frontier_empty == control_result.frontier_empty
+    assert qg1_result.proved_no_rc_below == control_result.proved_no_rc_below
+    assert qg1_result.global_min_rc == pytest.approx(
+        control_result.global_min_rc
+    )
+
+    qd1_control = NativeRcsppInprocessBackend().solve(
+        replace(exact_control, proof_queue_policy_id="QD1")
+    )
+    qg1_zero = replace(
+        exact_enriched,
+        proof_queue_policy_id="QG1",
+    )
+    qg1_zero_binding = CanonicalSolveBindingV2.from_backend_request(
+        qg1_zero
+    )
+    zero_hints = PricingOrderingHintsV2(
+        binding_hash=qg1_zero_binding.binding_hash,
+        task_priorities=tuple(
+            (task_id, 0.0) for task_id in qg1_zero.data.task_ids
+        ),
+        diagnostic_only=True,
+    )
+    qg1_zero_result = NativeRcsppInprocessBackend().solve(
+        replace(qg1_zero, guidance_hints=zero_hints)
+    )
+    assert qg1_zero_result.telemetry["guidance_effective_mode"] == "task_arc"
+    assert qg1_zero_result.telemetry["processed_labels"] == (
+        qd1_control.telemetry["processed_labels"]
+    )
+    assert qg1_zero_result.telemetry["extended_labels"] == (
+        qd1_control.telemetry["extended_labels"]
+    )
+    assert qg1_zero_result.telemetry["dominance_candidate_checks"] == (
+        qd1_control.telemetry["dominance_candidate_checks"]
+    )
+    assert qg1_zero_result.global_min_rc == pytest.approx(
+        qd1_control.global_min_rc
     )
 
 

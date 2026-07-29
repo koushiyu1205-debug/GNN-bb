@@ -1,0 +1,2 @@
+{"stage_count": 1, "latest_stage": 1, "latest_scope": "BPC_NODE_LP_CERTIFIED", "latest_state": "CERTIFIED_NO_NEGATIVE", "latest_compact_final_judge_profile": "V4SH", "latest_compact_final_judge_phase_mode": "harvest_then_proof", "latest_final_best_reduced_cost": null, "latest_final_dual_bound": null, "latest_active_column_count": 82, "latest_added_column_count": 70}
+report /home/kai/work/GAT_BPC_moonTerk/runs/dssr_all_scale_full100_validation_20260727/slots/scale_010/instance_005/attempt_01/scale_010/pools/scale_010/instance_005/staged_resume_report_zh.md

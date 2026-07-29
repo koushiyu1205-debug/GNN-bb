@@ -20,7 +20,13 @@ def main() -> int:
     parser.add_argument("--scales", nargs="+", type=int, default=[5, 10, 20, 30, 50, 100])
     parser.add_argument(
         "--backend",
-        choices=("python_reference", "native_rcspp_inprocess", "native_rcspp_host"),
+        choices=(
+            "python_reference",
+            "native_rcspp_inprocess",
+            "native_rcspp_host",
+            "native_rcspp_dssr_inprocess",
+            "native_rcspp_dssr_host",
+        ),
     )
     parser.add_argument("--instance", action="append", default=[])
     parser.add_argument(

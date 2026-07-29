@@ -1,0 +1,165 @@
+{
+  "can_certify": false,
+  "column_catalog_hash": "c196ad445cf6ef95884ea168ab73200429af336f890762ff96d58b47f472d1e9",
+  "column_catalog_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/column_catalog.json",
+  "deployable": false,
+  "development_only": true,
+  "instance_content_hash": "95309e5df0af83d2",
+  "instance_id": "lunar_ice_sp50_030_004_seed203307272",
+  "manifest_hash": "726fa49753adebd2418b18501fd3b566186c96ef9fa7435039ba4d336aa1ee58",
+  "schema_version": "lunar_ice_bpc.p0v3_root_policy_state_snapshot_manifest.v1",
+  "snapshot_count": 25,
+  "snapshots": [
+    {
+      "active_column_count": 34,
+      "round": 1,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0001_aea3252628e1e8d8.json",
+      "state_hash": "aea3252628e1e8d8e7540c23852f04e5d9802728984fb942152863e6e8ae8e96"
+    },
+    {
+      "active_column_count": 98,
+      "round": 2,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0002_b60dd98cd7b28355.json",
+      "state_hash": "b60dd98cd7b283557d267bcd5f0e38e136f1ac76fa1d393cabe83a7311230b25"
+    },
+    {
+      "active_column_count": 162,
+      "round": 3,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0003_5953663de11000b8.json",
+      "state_hash": "5953663de11000b8f2d79b5bb35726f6652f0ee62cc1689030bce89e07fa6aaa"
+    },
+    {
+      "active_column_count": 226,
+      "round": 4,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0004_3f0e75ea695a5fe2.json",
+      "state_hash": "3f0e75ea695a5fe256f75bc25252ad2dccd6e2e64e4ca6796817cff47b867d5d"
+    },
+    {
+      "active_column_count": 290,
+      "round": 5,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0005_4910dc1694c805e0.json",
+      "state_hash": "4910dc1694c805e0e80f39f1e9e3ed12b14c4335ced0a43c4241b1ed99bc22f7"
+    },
+    {
+      "active_column_count": 354,
+      "round": 6,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0006_ed4aba84bbc5cc9a.json",
+      "state_hash": "ed4aba84bbc5cc9a5c8fb7aec2438d6ad097e866cfe36de34c005575455cfc8f"
+    },
+    {
+      "active_column_count": 418,
+      "round": 7,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0007_a64386eaf77e094d.json",
+      "state_hash": "a64386eaf77e094dd91bfc03569d58e8e382678a7ab1cb73a997b4f505e7cbfb"
+    },
+    {
+      "active_column_count": 482,
+      "round": 8,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0008_8d6bca79481a89f9.json",
+      "state_hash": "8d6bca79481a89f9cc03fe998e206423b1a2a9416503fc044598332038e8ed5f"
+    },
+    {
+      "active_column_count": 546,
+      "round": 9,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0009_882ab29e12432b64.json",
+      "state_hash": "882ab29e12432b642b8d1c87d6c76aed350682a66106f4af478c64a5de80f338"
+    },
+    {
+      "active_column_count": 610,
+      "round": 10,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0010_f10e310f017d95fd.json",
+      "state_hash": "f10e310f017d95fdc2f897c45169c9770a3da3cf08973398602099fa2bdfd579"
+    },
+    {
+      "active_column_count": 674,
+      "round": 11,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0011_a9891f70dc8a6fc1.json",
+      "state_hash": "a9891f70dc8a6fc1007bd0dcb718b793a8a5308cd3d4fbbcb269df4fefbd0a79"
+    },
+    {
+      "active_column_count": 736,
+      "round": 12,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0012_696902874cc58aae.json",
+      "state_hash": "696902874cc58aae67119af92fc5b655e77d7f20a51528744900c2a4d5e98826"
+    },
+    {
+      "active_column_count": 800,
+      "round": 13,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0013_9c6ab1a2760cf4f0.json",
+      "state_hash": "9c6ab1a2760cf4f0dd0961b85fd81a7a06a745197e1bc44ef291eda466e3bd2f"
+    },
+    {
+      "active_column_count": 827,
+      "round": 14,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0014_798c2e0d745a9d68.json",
+      "state_hash": "798c2e0d745a9d68c2f05f0044998a3dcdbd6e65696274acab52778597c3fc62"
+    },
+    {
+      "active_column_count": 871,
+      "round": 15,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0015_21dc080ea953ca6b.json",
+      "state_hash": "21dc080ea953ca6bc175be03cbcf118af3869032cf4eadcd8261cbbc53300f78"
+    },
+    {
+      "active_column_count": 935,
+      "round": 16,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0016_8ab6654eac86ae1d.json",
+      "state_hash": "8ab6654eac86ae1dfb87e604c2a35cd98f08dddcfa93d3e26ecfc02e247743cc"
+    },
+    {
+      "active_column_count": 999,
+      "round": 17,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0017_211bf9ed27b58685.json",
+      "state_hash": "211bf9ed27b58685688d2eee42bf7a52cef96b5582ad82007da4446fc5861fb9"
+    },
+    {
+      "active_column_count": 1063,
+      "round": 18,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0018_8a2d1946e1d8075d.json",
+      "state_hash": "8a2d1946e1d8075df7d24196402f09720bf66e70935b9466b0854e241c90b698"
+    },
+    {
+      "active_column_count": 1121,
+      "round": 19,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0019_ccd9d3173fda4bc6.json",
+      "state_hash": "ccd9d3173fda4bc62de6ebeadfee4f7166cd34713ffbe0418127904cb4f5de34"
+    },
+    {
+      "active_column_count": 1150,
+      "round": 20,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0020_ef021c2525fb42e6.json",
+      "state_hash": "ef021c2525fb42e653bde4dbd6502e10d368acf3c90b82ab04b9f2ea88612588"
+    },
+    {
+      "active_column_count": 1157,
+      "round": 21,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0021_2e70ccce308e33e3.json",
+      "state_hash": "2e70ccce308e33e3844ae55fc4b3d353fb53982737855d9e4aa8ebfc4bafee27"
+    },
+    {
+      "active_column_count": 1178,
+      "round": 22,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0022_2884fa704dd8bf48.json",
+      "state_hash": "2884fa704dd8bf48689536caace68d5087537cefbb2703be1567fe5015f45515"
+    },
+    {
+      "active_column_count": 1217,
+      "round": 23,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0023_0c3e6fc3c6b7fd67.json",
+      "state_hash": "0c3e6fc3c6b7fd67196c95b8646829fe4b86e5325e036529d161bd9054dcd5dd"
+    },
+    {
+      "active_column_count": 1222,
+      "round": 24,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0024_017fd27ec9b875eb.json",
+      "state_hash": "017fd27ec9b875eb49793f08bd58342374492784fccb724ad2fd5d897bc09170"
+    },
+    {
+      "active_column_count": 1227,
+      "round": 25,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/newheldout_lunar_ice_sp50_030_004_seed203307272_work100000_twostrike_snapshots/round_snapshots/round_0025_c27350c3b7864942.json",
+      "state_hash": "c27350c3b7864942febf2d338d5c2e6ac04d1a6e9817501eeff7f2a8e1ed96b8"
+    }
+  ],
+  "source_solver_binding_hash": "7725509d6d97c32186f79a0345a65c35ca7c731b01a9359047cb5ffe67290a59"
+}

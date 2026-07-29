@@ -2,13 +2,16 @@
 
 ## Register Status
 
-- Status: **SYNCHRONIZED WITH THE ENGLISH WORKING DRAFT**
-- Date: 2026-07-24
+- Status: **SYNCHRONIZED WITH THE IMPLEMENTED NO-TASK-WAIT WORKING DRAFT
+  AND FROZEN SCALE-5--30 BASELINE**
+- Date: 2026-07-25
 - Purpose: provide one source-backed mathematical contract for the detailed
   formulation and exact-algorithm equations now displayed in
   `manuscript_draft.md`.
-- Precedence: current executable objective/master/pricing code outranks legacy
-  objective sketches in older design or instance-generation documents.
+- Precedence: the frozen no-task-wait source bundle and manifest govern current
+  implementation claims. Earlier wait-permitted manifests remain authoritative
+  only for their historical runs and are not transferred across the model
+  boundary.
 
 ## Notation Typography Policy
 
@@ -74,6 +77,11 @@ Source:
 | Trip activation variable | \(z_s\) | Indicates that trip \(s\) is active | `gurobi_compact.py`; implicit in a generated route | Trip-level, not a master variable |
 | Service times | \(t_{is}^{\mathrm{start}},t_{is}^{\mathrm{cmp}}\) | Start and completion time of task \(i\) in trip slot \(s\) | `gurobi_compact.py`; `core/columns.py` | Descriptive superscripts are upright |
 | Trip times | \(t_s^0,t_s^{\mathrm{return}},t_s^{\mathrm{rch}},t_s^{\mathrm{end}}\) | Departure, depot return, recharge and end time | `gurobi_compact.py`; `core/columns.py` | Descriptive superscripts are upright |
+| Depot availability | \(a_s\) | Earliest time at which the rover can depart on trip \(s\) before optional depot waiting | Manuscript Eq. (3); route constructor and native pricing | \(a_1=0\); later availability is the previous trip end |
+| Depot waiting | \(\Delta_s^{\mathrm{dep}}\) | Waiting before trip \(s\), allowed only at the support depot | Eqs. (3), (4b), and (6a); route constructor | Counts toward elapsed mission time but not trip resources; distinct from science weight \(w_i\) |
+| No-wait timing offset | \(\delta_{j,s}\) | Elapsed travel and service time from trip-\(s\) departure to service start at its \(j\)th task | Eq. (3); compact and pricing transitions | Converts each task window into a departure-time interval |
+| Trip duration | \(\chi_s\) | Fixed departure-to-end duration of a selected trip, including return, docking, and recharge | Eq. (3); route constructor | Path quantities are fixed within one solve |
+| Departure interval | \([\underline t_s^0,\overline t_s^0]\) | Feasible depot-departure times for a fixed no-wait task/path sequence | Eq. (3); route constructor and native pricing | Nonempty interval is required; the canonical route uses its lower endpoint |
 
 ## Input and Resource Notation
 
@@ -97,7 +105,8 @@ Source:
 | \(\Delta^{\mathrm{env}}\) | temporal resolution of environmental samples used before optimization | future M006; C063 uses one-hour samples |
 | \(d^{\mathrm{dock}}\) | docking overhead | `dock_overhead_min` |
 | \(P^{\mathrm{rch}}\) | recharge-power proxy | `recharge_power_proxy_per_min` |
-| \(\theta_i,\eta_i\) | local task thermal-risk and shadow scores | `local_thermal_risk`, `local_shadow_score` |
+| \(\eta_i\) | local task shadow score | `local_shadow_score` |
+| \(\rho_i^{\mathrm{srv}}\) | frozen task service-risk contribution derived before optimization from recorded thermal-risk metadata and service duration | `0.01 * local_thermal_risk * service_time`; represented in the manuscript as one immutable input rather than an exposed mixing coefficient |
 
 ## Manuscript Equation Map
 
@@ -109,11 +118,11 @@ manuscript. The current manuscript map is:
 |---:|---|---|---|
 | (1) | grid-path distance and sampled surface mean | `domain/real_maps.py::_path_metrics` | frozen instance generation |
 | (2) | trip sequence and selected path options | `exact/core/columns.py` | fixed logical-path model |
-| (3) | arrival, waiting, service start and completion | `exact/core/columns.py` | exact transition |
+| (3) | no-wait offsets, trip duration, feasible depot-departure interval, depot waiting, arrival and completion | `exact/core/columns.py`; `exact/solver/journey_driver.py`; native pricing | implemented mathematical contract |
 | (4a) | depot/task flow, trip activation, task count, route-level uniqueness and consecutive slot activation | `exact/solver/gurobi_compact.py` | core trip-level MILP definition |
 | (4b) | trip-level binary variable domains | `exact/solver/gurobi_compact.py` | core trip-level MILP definition |
 | (5) | subtour elimination / trip elementarity | `native/lunar_spprc/src/native_pricer.cpp` visited-task state; optional compact connectivity constraints | embedded in feasible columns and exact pricing |
-| (6a) | task time windows, selected-arc temporal propagation and inter-trip sequencing | `exact/solver/gurobi_compact.py`; `exact/core/columns.py` | indicator form of core temporal feasibility |
+| (6a) | task time windows, selected-arc no-wait equalities, depot waiting and inter-trip sequencing | `gurobi_compact.py`; route constructor; native pricing | selected-arc lower and upper inequalities enforce equality |
 | (6b) | trip load, energy, shadow, risk, operating cost and weighted completion | `exact/core/columns.py`; `exact/core/objective.py` | exact column construction |
 | (7) | recharge, due-time and trip resource feasibility | `exact/core/columns.py` | exact feasibility |
 | (8) | multi-trip route aggregation | `exact/core/journey.py` | exact column construction |
@@ -124,9 +133,9 @@ manuscript. The current manuscript map is:
 | (13) | true route reduced cost | `exact/master/journey_rmp.py`; native pricing | pricing/audit identity |
 | (14) | proof-gated node-bound pruning | `exact/certificates/node_bound.py`; `exact/bpc/solver/branch_tree_solver.py` | official bounds only |
 | (15) | addability-aware negative-column harvest | `exact/bpc/pricing/harvest.py` | guidance may order only |
-| (16) | resource and time-window pruning | exact column/native label feasibility | exact feasibility |
-| (17) | guarded native label dominance | `native/lunar_spprc/src/native_pricer.cpp` | context-compatible only |
-| (18) | positive-dual completion-bound pruning | `native/lunar_spprc/src/native_pricer.cpp`; `completion_bounds.py` | empty proved branch/cut context |
+| (16) | empty departure-interval, resource and horizon pruning | route constructor; Python and native pricing | implemented proof-bearing rule |
+| (17) | guarded no-wait label dominance | `native/lunar_spprc/src/native_pricer.cpp` | depot-only; nonempty visited-set subset; equal cut state; continuation-preserving branch compatibility; active-trip dominance disabled |
+| (18) | positive-dual completion-bound pruning | `native/lunar_spprc/src/native_pricer.cpp`; `completion_bounds.py` | active branch context allowed; active cut context forbidden because cut-dual terms are absent from the bound |
 | (19) | exhaustive no-negative reduced-cost condition | exact pricing/final-judge contracts | proof-bearing only after full completion |
 | (20) | root-node divisor-two SRI-3 inequality and coefficient | `exact/core/cuts.py`; `exact/bpc/cuts/live_sri.py::LiveSriPolicy.named("P0")` | deterministic valid root cut |
 | (21) | root SRI-3 activity, violation, candidate set, deterministic order and retained harvest | `exact/bpc/cuts/live_sri.py` | complete enumeration of configured triples at the root only |
@@ -139,22 +148,39 @@ manuscript. The current manuscript map is:
 
 ## Frozen Equation Register
 
-### EQ-01 — Timing transition
+### EQ-01 — No-task-wait timing transition
 
 \[
-t_{js}^{\mathrm{arr}}
-=t_{j-1,s}^{\mathrm{cmp}}+\tau_{i_{j-1},i_j}^{\omega_{j-1}},
-\quad
-t_{js}^{\mathrm{start}}=\max\{t_{js}^{\mathrm{arr}},r_{i_j}\},
-\quad
-t_{js}^{\mathrm{cmp}}=t_{js}^{\mathrm{start}}+\sigma_{i_j}.
+\delta_{1,s}=\tau_{0,i_1}^{\omega_0},\qquad
+\delta_{j,s}=\delta_{j-1,s}+\sigma_{i_{j-1}}
++\tau_{i_{j-1},i_j}^{\omega_{j-1}},
 \]
 
-- Source: `src/lunar_ice_bpc/exact/core/columns.py` and Native SPPRC
-  transitions.
-- Draft use: Section 3 and Appendix A.
-- Constraint: use the same timing convention in dominance and terminal
-  feasibility.
+\[
+\underline t_s^0=
+\max\left\{a_s,\max_j(r_{i_j}-\delta_{j,s})\right\},\qquad
+\overline t_s^0=
+\min\left\{\min_j(D_{i_j}-\sigma_{i_j}-\delta_{j,s}),
+H^{\mathrm{mis}}-\chi_s\right\},
+\]
+
+\[
+\underline t_s^0\le\overline t_s^0,\qquad
+t_s^0=\underline t_s^0,\qquad
+t_{i_j,s}^{\mathrm{arr}}=t_{i_j,s}^{\mathrm{start}}
+=t_s^0+\delta_{j,s},\qquad
+t_{i_j,s}^{\mathrm{cmp}}=t_{i_j,s}^{\mathrm{start}}+\sigma_{i_j}.
+\]
+
+- Source: user-confirmed no-task-wait rule; revised manuscript Section 3.2.
+- Draft use: Section 3, exact pricing, Lemma 1, and Appendix A.
+- Constraint: waiting is permitted only at the depot, and task arrival equals
+  service start. The fixed constructor intersects the departure intervals;
+  native pricing shifts one common trip departure when a later release time
+  requires it. In the mathematical model, proof-bearing path-option
+  preprocessing uses equal travel time. The executable comparison is limited
+  to the frozen machine tolerance recorded as part of the numerical proof
+  scope.
 
 ### EQ-01A — Core trip topology, activation, and elementarity
 
@@ -180,7 +206,8 @@ z_{s+1}\le z_s,
 x_{\ell s},y_{is},z_s\in\{0,1\},
 \qquad
 t_{is}^{\mathrm{start}},t_{is}^{\mathrm{cmp}},
-t_s^0,t_s^{\mathrm{return}},t_s^{\mathrm{rch}},t_s^{\mathrm{end}}\ge0,
+t_s^0,t_s^{\mathrm{return}},t_s^{\mathrm{rch}},t_s^{\mathrm{end}},
+\Delta_s^{\mathrm{dep}}\ge0,
 \]
 
 \[
@@ -201,7 +228,7 @@ t_s^0,t_s^{\mathrm{return}},t_s^{\mathrm{rch}},t_s^{\mathrm{end}}\ge0,
   pair-incompatibility, slot-bound, and big-\(M\) tightenings are not base
   constraint families.
 
-### EQ-01B — Time windows, arc propagation, and trip sequencing
+### EQ-01B — Time windows, no-wait propagation, and trip sequencing
 
 \[
 r_i y_{is}\le t_{is}^{\mathrm{start}}
@@ -213,20 +240,25 @@ t_{is}^{\mathrm{cmp}}=t_{is}^{\mathrm{start}}+\sigma_i y_{is},
 \[
 x_{(i,j,\omega),s}=1
 \Rightarrow
-t_{js}^{\mathrm{start}}\ge
+t_{js}^{\mathrm{start}}=
 t_{is}^{\mathrm{cmp}}+\tau_{ij}^{\omega},
+\qquad
+z_1=1\Rightarrow t_1^0=\Delta_1^{\mathrm{dep}},
 \qquad
 z_{s+1}=1
 \Rightarrow
-t_{s+1}^0\ge t_s^{\mathrm{end}}.
+t_{s+1}^0=t_s^{\mathrm{end}}+\Delta_{s+1}^{\mathrm{dep}}.
 \]
 
-- Source: `src/lunar_ice_bpc/exact/solver/gurobi_compact.py`;
-  `src/lunar_ice_bpc/exact/core/columns.py`.
+- Source: `exact/solver/gurobi_compact.py`, `exact/core/columns.py`, and
+  `native/lunar_spprc/src/native_pricer.cpp`.
 - Draft use: Eq. (6a) and the Section 4.3 constraint-to-label mapping.
-- Constraint: the manuscript uses MILP indicator notation; implementation
-  big-\(M\) values must be valid bounds derived from horizons, windows, and
-  travel times rather than fitted coefficients.
+- Constraint: the manuscript uses MILP indicator notation; each equality may
+  be represented by two valid big-\(M\) rows derived from horizons, windows,
+  and travel times. No task-site or en-route waiting variable may be
+  introduced. Depot waiting is a supported-depot standby assumption:
+  base-supplied power and thermal control are outside the current trip-resource
+  boundary, while elapsed mission time continues to advance.
 
 ### EQ-02 — Recharge and trip end
 
@@ -238,7 +270,8 @@ t_s^{\mathrm{end}}=t_s^{\mathrm{return}}+t_s^{\mathrm{rch}}.
 
 - Source: `core/columns.py`; instance vehicle fields.
 - Draft use: trip/multi-trip route compatibility.
-- Constraint: a next trip cannot start before the previous trip ends.
+- Constraint: the first and every later trip may be delayed at the depot; no
+  later trip can start before the previous trip ends.
 
 ### EQ-03 — Trip feasibility
 
@@ -387,6 +420,22 @@ proof/audit record passes.
 - Source: exact-pricing and final-judge contracts; EV004.
 - Draft use: Section 4 exactness proof.
 - Constraint: heuristic or learned pricing results cannot establish EQ-11.
+
+### EQ-11A — No-wait dominance guard
+
+Proof-bearing label comparison is performed only at the depot. The retained
+label must have a nonempty visited-task set contained in that of the removed
+label, no later depot availability, no larger reduced cost, the same
+active-cut state, and branch compatibility that preserves every continuation
+of the removed label. Open-trip dominance is disabled.
+
+- Source: manuscript Eq. (17);
+  `native/lunar_spprc/src/native_pricer.cpp`.
+- Draft use: Section 4.3, Lemma 3, and Appendix A.
+- Constraint: the initial empty-route label cannot dominate a nonempty
+  completed-trip depot label. Subset dominance is unavailable during an
+  active trip, and depot subset dominance is permitted only with the stated
+  cut and branch-continuation guards.
 
 ### EQ-12 — Branch context
 

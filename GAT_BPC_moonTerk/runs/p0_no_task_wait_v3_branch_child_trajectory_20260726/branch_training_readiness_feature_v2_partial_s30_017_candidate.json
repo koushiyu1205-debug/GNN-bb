@@ -1,0 +1,60 @@
+{
+  "checks": {
+    "all_children_observed": true,
+    "gold_count": false,
+    "gold_count_per_scale": false,
+    "instance_count_per_scale": false,
+    "perfect_policy_net_gain_upper_bound_positive": true,
+    "positive_gold_count": false,
+    "scale_scope_exact": true,
+    "state_count": false,
+    "survival_event_count": true,
+    "winner_diversity": true
+  },
+  "deployment_authorized": false,
+  "note": "The oracle upper-bound check is only a direction viability screen. Passing it authorizes shadow training, never online branch changes or an exactness claim.",
+  "observed": {
+    "gold_count": 3,
+    "gold_count_by_scale": {
+      "20": 3,
+      "30": 0
+    },
+    "gold_winner_count_by_rank": {
+      "0": 1,
+      "1": 2,
+      "2": 0
+    },
+    "instance_count_by_scale": {
+      "20": 3,
+      "30": 2
+    },
+    "perfect_policy_bootstrap_instance_cluster_count": 3,
+    "perfect_policy_bootstrap_weighting": "scale_equal_instance_cluster_equal_state_mean",
+    "perfect_policy_net_gain_sec_bootstrap_95ci": [
+      -0.02,
+      72.870365
+    ],
+    "perfect_policy_net_gain_sec_mean_after_overhead": 24.982961000000003,
+    "positive_gold_count": 2,
+    "state_count": 5,
+    "survival_event_count": 20,
+    "survival_observation_count": 30,
+    "trusted_censored_pairwise_comparison_count": 1,
+    "trusted_censored_pairwise_state_count": 1
+  },
+  "records_jsonl": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_child_trajectory_20260726/formal_branch_survival_oneshot_feature_v2_partial_s30_017_candidate.jsonl",
+  "records_sha256": "823162375aba5aea832644c9e0bd70f3a558c4b27e4a98e2c32c235b296ea64e",
+  "sample_threshold_reached": false,
+  "schema_version": "lunar_ice_bpc.branch_training_readiness.v1",
+  "terminate_branch_ranking_direction": false,
+  "thresholds": {
+    "guidance_lifecycle_overhead_sec": 0.02,
+    "minimum_gold_count": 10,
+    "minimum_gold_count_per_scale": 5,
+    "minimum_instance_count_per_scale": 10,
+    "minimum_positive_gold_count": 3,
+    "minimum_state_count": 20,
+    "minimum_survival_event_count": 12
+  },
+  "training_authorized": false
+}

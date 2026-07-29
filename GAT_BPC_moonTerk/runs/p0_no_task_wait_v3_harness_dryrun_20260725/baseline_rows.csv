@@ -1,0 +1,5 @@
+slot_id,scale,instance_key,status,returncode,cold_start_total_sec,root_cg_sec,tree_sec,exact,correctness_pass,objective,historical_p0_v2_objective,objective_delta_vs_historical_p0_v2,historical_p0_v2_sec,time_ratio_vs_historical_p0_v2,peak_process_tree_rss_gb,launcher_termination_reason,engine_build_hash,instance_content_hash,service_timing_policy_id,run_dir
+s005_instance_001,5,instance_001,DRY_RUN,0,,,,False,False,,,,,,,,,acbb081beae2f710,no_task_wait_base_departure_shift_v1,
+s010_instance_001,10,instance_001,DRY_RUN,0,,,,False,False,,,,,,,,,cd08b7418226137b,no_task_wait_base_departure_shift_v1,
+s020_instance_001,20,instance_001,DRY_RUN,0,,,,False,False,,,,,,,,,e4c3d500dfa459de,no_task_wait_base_departure_shift_v1,
+s030_instance_001,30,instance_001,DRY_RUN,0,,,,False,False,,,,,,,,,cf36ed5190d36140,no_task_wait_base_departure_shift_v1,

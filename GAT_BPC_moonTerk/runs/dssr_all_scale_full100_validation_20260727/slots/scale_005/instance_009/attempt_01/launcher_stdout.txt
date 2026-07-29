@@ -1,0 +1,1 @@
+native SPPRC acceptance rows=1 missing_scales=[] output=/home/kai/work/GAT_BPC_moonTerk/runs/dssr_all_scale_full100_validation_20260727/slots/scale_005/instance_009/attempt_01

@@ -1,0 +1,40 @@
+.............................F..................     [100%]
+=================================== FAILURES ===================================
+_ NativeSpprcBackendTests.test_pre_solve_exact_snapshot_survives_without_result _
+
+self = <native.test_native_spprc_backend.NativeSpprcBackendTests testMethod=test_pre_solve_exact_snapshot_survives_without_result>
+
+    def test_pre_solve_exact_snapshot_survives_without_result(self) -> None:
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(
+                cover={
+                    task_id: float(index)
+                    for index, task_id in enumerate(self.data.task_ids)
+                }
+            ),
+            wall_time_limit_sec=10.0,
+            memory_limit_gb=1.0,
+            config_hash="pre-solve-snapshot-config",
+            engine_hash="pre-solve-snapshot-engine",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(
+                os.environ,
+                {"LUNAR_ICE_PRE_SOLVE_EXACT_SNAPSHOT_DIR": directory},
+            ):
+                result = NativeDssrInprocessBackend().solve(request)
+    
+            snapshot_paths = sorted(Path(directory).glob("**/*.json"))
+            self.assertEqual(len(snapshot_paths), 1)
+            snapshot = load_pricing_snapshot(snapshot_paths[0])
+    
+>       self.assertEqual(result.engine_status, "COMPLETE")
+E       AssertionError: 'MAX_SOLUTIONS' != 'COMPLETE'
+E       - MAX_SOLUTIONS
+E       + COMPLETE
+
+tests/native/test_native_spprc_backend.py:1373: AssertionError
+=========================== short test summary info ============================
+FAILED tests/native/test_native_spprc_backend.py::NativeSpprcBackendTests::test_pre_solve_exact_snapshot_survives_without_result
+1 failed, 47 passed, 20 subtests passed in 7.52s

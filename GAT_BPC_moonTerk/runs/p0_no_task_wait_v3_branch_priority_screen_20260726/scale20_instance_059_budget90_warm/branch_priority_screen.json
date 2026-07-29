@@ -1,0 +1,507 @@
+{
+  "active_column_count": 638,
+  "baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "baseline_registry_sha256": "bb0513a72f1a32e6714a25dd6ef79e1483371365736e3dfa7337c39bc434ed5c",
+  "cumulative_screen_wall_sec": 91.584392,
+  "cut_aware_active_cut_context_hash": "0839c0715694d7e9ad272b3c9eeda5d7a8b2a90ea58c0563eb1b5adeafa7b0a7",
+  "cut_aware_active_cut_count": 4,
+  "cut_aware_candidate_count": 3,
+  "cut_aware_certificate_role": "none",
+  "cut_aware_commit_history": [
+    {
+      "activation": {
+        "active_cut_context_hash": "0839c0715694d7e9ad272b3c9eeda5d7a8b2a90ea58c0563eb1b5adeafa7b0a7",
+        "active_cut_count": 4,
+        "added_cut_count": 4,
+        "added_cut_ids": [
+          "sri:d2:n3:ice_site_007,ice_site_008,ice_site_013",
+          "sri:d2:n3:ice_site_008,ice_site_010,ice_site_013",
+          "sri:d2:n3:ice_site_008,ice_site_012,ice_site_013",
+          "sri:d2:n3:ice_site_008,ice_site_013,ice_site_016"
+        ],
+        "addition_cap": 4,
+        "committed": true,
+        "cut_lineage_hash": "7003be8f2978bf19a0a6b9114fe53857850fcffb68defe7e118634ee07626db0",
+        "global_cut_count": 4,
+        "lineage_local_cut_count": 0,
+        "live_cut_policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+        "requested_selected_count": 4,
+        "scope": "global"
+      },
+      "pre_activation_screen": {
+        "certificate_role": "heuristic_cut_commit_gate_only",
+        "commit": true,
+        "min_restricted_rmp_gain": 0.0001,
+        "mutates_official_bound": false,
+        "restricted_primal_integral": false,
+        "restricted_rmp_bound_gain": 0.0006150000000000322,
+        "rmp_bound_after_proposed_cuts": 1.376542,
+        "status": "RESTRICTED_RMP_OPTIMAL"
+      },
+      "rmp_bound_before": 1.375927,
+      "separation": {
+        "divisor": 2,
+        "enumerated_candidate_count": 1140,
+        "expected_candidate_count": 1140,
+        "family_no_violated_sri_certified": false,
+        "full_enumeration_completed": true,
+        "max_violation": 0.3,
+        "positive_primal_column_count": 12,
+        "schema_version": "lunar_ice_bpc.live_sri_separation.v1",
+        "selected": [
+          {
+            "activity": 1.3,
+            "cut": {
+              "cut_id": "sri:d2:n3:ice_site_007,ice_site_008,ice_site_013",
+              "cut_type": "subset_row",
+              "divisor": 2,
+              "rhs": 1.0,
+              "tasks": [
+                "ice_site_007",
+                "ice_site_008",
+                "ice_site_013"
+              ]
+            },
+            "cut_id": "sri:d2:n3:ice_site_007,ice_site_008,ice_site_013",
+            "rhs": 1.0,
+            "subset_size": 3,
+            "support_column_count": 6,
+            "tasks": [
+              "ice_site_007",
+              "ice_site_008",
+              "ice_site_013"
+            ],
+            "violated": true,
+            "violation": 0.3
+          },
+          {
+            "activity": 1.3,
+            "cut": {
+              "cut_id": "sri:d2:n3:ice_site_008,ice_site_010,ice_site_013",
+              "cut_type": "subset_row",
+              "divisor": 2,
+              "rhs": 1.0,
+              "tasks": [
+                "ice_site_008",
+                "ice_site_010",
+                "ice_site_013"
+              ]
+            },
+            "cut_id": "sri:d2:n3:ice_site_008,ice_site_010,ice_site_013",
+            "rhs": 1.0,
+            "subset_size": 3,
+            "support_column_count": 6,
+            "tasks": [
+              "ice_site_008",
+              "ice_site_010",
+              "ice_site_013"
+            ],
+            "violated": true,
+            "violation": 0.3
+          },
+          {
+            "activity": 1.3,
+            "cut": {
+              "cut_id": "sri:d2:n3:ice_site_008,ice_site_012,ice_site_013",
+              "cut_type": "subset_row",
+              "divisor": 2,
+              "rhs": 1.0,
+              "tasks": [
+                "ice_site_008",
+                "ice_site_012",
+                "ice_site_013"
+              ]
+            },
+            "cut_id": "sri:d2:n3:ice_site_008,ice_site_012,ice_site_013",
+            "rhs": 1.0,
+            "subset_size": 3,
+            "support_column_count": 6,
+            "tasks": [
+              "ice_site_008",
+              "ice_site_012",
+              "ice_site_013"
+            ],
+            "violated": true,
+            "violation": 0.3
+          },
+          {
+            "activity": 1.3,
+            "cut": {
+              "cut_id": "sri:d2:n3:ice_site_008,ice_site_013,ice_site_016",
+              "cut_type": "subset_row",
+              "divisor": 2,
+              "rhs": 1.0,
+              "tasks": [
+                "ice_site_008",
+                "ice_site_013",
+                "ice_site_016"
+              ]
+            },
+            "cut_id": "sri:d2:n3:ice_site_008,ice_site_013,ice_site_016",
+            "rhs": 1.0,
+            "subset_size": 3,
+            "support_column_count": 6,
+            "tasks": [
+              "ice_site_008",
+              "ice_site_013",
+              "ice_site_016"
+            ],
+            "violated": true,
+            "violation": 0.3
+          }
+        ],
+        "selected_candidate_count": 4,
+        "selection_cap_reached": true,
+        "selection_capacity": 4,
+        "separator_policy_version": "native_live_sri_complete_enumeration_v1",
+        "subset_sizes": [
+          3
+        ],
+        "unselected_violated_count": 62,
+        "violated_candidate_count": 66,
+        "violation_eps": 1e-06
+      },
+      "separation_round": 1
+    },
+    {
+      "activation": {
+        "active_cut_context_hash": "0839c0715694d7e9ad272b3c9eeda5d7a8b2a90ea58c0563eb1b5adeafa7b0a7",
+        "active_cut_count": 4,
+        "added_cut_count": 0,
+        "added_cut_ids": [],
+        "addition_cap": 0,
+        "committed": false,
+        "cut_lineage_hash": "7003be8f2978bf19a0a6b9114fe53857850fcffb68defe7e118634ee07626db0",
+        "global_cut_count": 4,
+        "lineage_local_cut_count": 0,
+        "live_cut_policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+        "requested_selected_count": 0,
+        "scope": "global"
+      },
+      "rmp_bound_before": 1.376542,
+      "separation": {
+        "divisor": 2,
+        "enumerated_candidate_count": 1140,
+        "expected_candidate_count": 1140,
+        "family_no_violated_sri_certified": false,
+        "full_enumeration_completed": true,
+        "max_violation": 0.333333332,
+        "positive_primal_column_count": 9,
+        "schema_version": "lunar_ice_bpc.live_sri_separation.v1",
+        "selected": [],
+        "selected_candidate_count": 0,
+        "selection_cap_reached": false,
+        "selection_capacity": 0,
+        "separator_policy_version": "native_live_sri_complete_enumeration_v1",
+        "subset_sizes": [
+          3
+        ],
+        "unselected_violated_count": 32,
+        "violated_candidate_count": 32,
+        "violation_eps": 1e-06
+      },
+      "separation_round": 2,
+      "terminal_reason": "POLICY_CAP_REACHED_WITH_UNSELECTED_VIOLATIONS"
+    }
+  ],
+  "cut_aware_cut_lineage_hash": "7003be8f2978bf19a0a6b9114fe53857850fcffb68defe7e118634ee07626db0",
+  "cut_aware_replay_completed": true,
+  "cut_aware_restricted_rmp_objective_bound": 1.376542,
+  "cut_aware_restricted_rmp_primal_column_count": 9,
+  "cut_aware_restricted_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+  "cut_aware_terminal_reason": "POLICY_CAP_REACHED_WITH_UNSELECTED_VIOLATIONS",
+  "cut_aware_top3_candidates": [
+    {
+      "different_child_column_count": 425,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_005",
+            "task_b": "ice_site_008"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.333333334,
+      "same_child_column_count": 393,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_005",
+            "task_b": "ice_site_008"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.666666666,
+      "support_column_count": 2,
+      "task_a": "ice_site_005",
+      "task_b": "ice_site_008"
+    },
+    {
+      "different_child_column_count": 545,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_003",
+            "task_b": "ice_site_006"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.333333334,
+      "same_child_column_count": 489,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_003",
+            "task_b": "ice_site_006"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.666666666,
+      "support_column_count": 2,
+      "task_a": "ice_site_003",
+      "task_b": "ice_site_006"
+    },
+    {
+      "different_child_column_count": 462,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_004",
+            "task_b": "ice_site_008"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.333333334,
+      "same_child_column_count": 358,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_004",
+            "task_b": "ice_site_008"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.666666666,
+      "support_column_count": 2,
+      "task_a": "ice_site_004",
+      "task_b": "ice_site_008"
+    }
+  ],
+  "cut_aware_top3_fractionality_sum": 1.000000002,
+  "deployable": false,
+  "development_only": true,
+  "engine_hash": "439e12be8bf04208",
+  "exact_promotion_recommendation_is_training_target": false,
+  "exact_promotion_recommended": true,
+  "guidance_branch_pair_drop_count": 0,
+  "guidance_filter_count": 0,
+  "instance_content_hash": "315a1f2c64036b8d",
+  "instance_id": "lunar_ice_020_059_seed202807309",
+  "is_branch_training_label": false,
+  "is_certificate": false,
+  "is_exact_opportunity_decision": false,
+  "is_natural_opportunity_rate_evidence": false,
+  "may_permanently_filter_development_instance": false,
+  "note": "No-cut and fixed-pool P0 cut-aware restricted-RMP fractionality are collection schedulers only. Exact promotion requires cut-aware top-3 plus near saturation. At least 25% of development attempts remain content-hash-first to measure screen false negatives.",
+  "priority_key": [
+    0,
+    -1.5,
+    0,
+    -638,
+    "315a1f2c64036b8d"
+  ],
+  "priority_key_fields": [
+    "missing_top3_proxy",
+    "negative_top3_fractionality_sum",
+    "final_round_added_column_count",
+    "negative_active_column_count",
+    "instance_content_hash"
+  ],
+  "priority_key_is_training_target": false,
+  "proxy_candidate_count": 3,
+  "proxy_top3_candidates": [
+    {
+      "different_child_column_count": 533,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_001",
+            "task_b": "ice_site_017"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.5,
+      "same_child_column_count": 357,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_001",
+            "task_b": "ice_site_017"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.5,
+      "support_column_count": 2,
+      "task_a": "ice_site_001",
+      "task_b": "ice_site_017"
+    },
+    {
+      "different_child_column_count": 561,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_001",
+            "task_b": "ice_site_015"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.5,
+      "same_child_column_count": 334,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_001",
+            "task_b": "ice_site_015"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.5,
+      "support_column_count": 2,
+      "task_a": "ice_site_001",
+      "task_b": "ice_site_015"
+    },
+    {
+      "different_child_column_count": 573,
+      "different_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "different_journey",
+            "task_a": "ice_site_001",
+            "task_b": "ice_site_009"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "fractionality": 0.5,
+      "same_child_column_count": 338,
+      "same_child_context": {
+        "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+        "pair_decision_count": 1,
+        "pair_decisions": [
+          {
+            "sense": "same_journey",
+            "task_a": "ice_site_001",
+            "task_b": "ice_site_009"
+          }
+        ],
+        "schema_version": "lunar_ice_bpc.branch_context.v1"
+      },
+      "same_fraction": 0.5,
+      "support_column_count": 2,
+      "task_a": "ice_site_001",
+      "task_b": "ice_site_009"
+    }
+  ],
+  "proxy_top3_fractionality_sum": 1.5,
+  "recent_round_added_column_counts": [
+    14,
+    0
+  ],
+  "required_hash_order_exploration_quota": 0.25,
+  "restricted_frontier_near_saturation": true,
+  "restricted_rmp_objective_bound": 1.375927,
+  "restricted_rmp_primal_column_count": 12,
+  "restricted_rmp_status": "RESTRICTED_RMP_OPTIMAL",
+  "root_prefix_added_column_count": 15,
+  "root_prefix_certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+  "root_prefix_exact_safe": false,
+  "root_prefix_history": [
+    {
+      "addable_negative_count": 1,
+      "added_column_count": 1,
+      "final_judge_wall_time": 10.51605,
+      "node_lp_bound": 1.375927,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 1
+    },
+    {
+      "addable_negative_count": 14,
+      "added_column_count": 14,
+      "final_judge_wall_time": 10.515648,
+      "node_lp_bound": 1.375927,
+      "pricing_state": "FOUND_NEGATIVE",
+      "round": 2
+    },
+    {
+      "addable_negative_count": 0,
+      "added_column_count": 0,
+      "final_judge_wall_time": 39.278296,
+      "node_lp_bound": 1.375927,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "round": 3
+    }
+  ],
+  "root_prefix_pricing_state": "INCOMPLETE_LIMIT",
+  "root_prefix_round_count": 3,
+  "root_prefix_warm_source_certificate_reused": false,
+  "root_prefix_warm_source_columns_only": true,
+  "root_prefix_warm_source_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_priority_screen_20260726/scale20_instance_059_budget90_warm/root_prefix_warm_source.json",
+  "scale": 20,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_priority_screen.v3",
+  "screen_budget_sec": 60.0,
+  "screen_wall_sec": 60.836966,
+  "screen_warm_start": {
+    "active_column_count": 623,
+    "certificate_reused": false,
+    "columns_only": true,
+    "source_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0_no_task_wait_v3_branch_priority_screen_20260726/scale20_instance_059_budget30/root_prefix_warm_source.json",
+    "source_screen_wall_sec": 30.747426,
+    "source_sha256": "23ac42978869d88da5f32568147629362c78e90cd6f78f2d0b5c555ccd5863f8"
+  },
+  "screen_warm_start_certificate_reused": false,
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "split_manifest_hash": "dd76b57d4618663c789d8c4dc2cfc4939597fc7900f8159ebc45b9aab8a68bca",
+  "training_authorized": false
+}

@@ -1,0 +1,2 @@
+timestamp_utc,slot_id,root_pid,elapsed_sec,process_count,tree_rss_gb,tree_swap_gb,effective_memory_limit_gb,available_memory_gb,system_swap_used_gb,disk_free_gb
+2026-07-27T01:56:01.460592+00:00,s005_instance_001,1573334,0.001841,1,0.00511932373046875,0.0,2.0,12.947860717773438,0.8130989074707031,802.0068817138672

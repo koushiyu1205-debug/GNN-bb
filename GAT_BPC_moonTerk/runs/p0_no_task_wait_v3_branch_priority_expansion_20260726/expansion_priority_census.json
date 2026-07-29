@@ -1,0 +1,753 @@
+{
+  "all_precommitted_rows_eventually_screened": true,
+  "completed": [],
+  "content_manifest_hash": "f1598b4115bd1b404cb6f12025e12aa0c6c65eabcc0c652423034edbb46ec0e1",
+  "content_manifest_path": "/home/kai/work/GAT_BPC_moonTerk/data/gat_v3_branch_candidate_pool_expanded_20260726_content_manifest.json",
+  "counts_by_scale": {
+    "20": {
+      "completed": 0,
+      "pending": 60,
+      "precommitted": 60,
+      "priority_hits": 0
+    },
+    "30": {
+      "completed": 0,
+      "pending": 60,
+      "precommitted": 60,
+      "priority_hits": 0
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "failures": [],
+  "is_branch_training_label": false,
+  "is_exact_opportunity_decision": false,
+  "may_permanently_filter_development_instance": false,
+  "pending": [
+    {
+      "instance_content_hash": "000b762166f114b1",
+      "instance_id": "lunar_ice_020_031_seed303807281",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "04cb4679600e8e41",
+      "instance_id": "lunar_ice_030_007_seed303907257",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "0a1e766ad9ecac2a",
+      "instance_id": "lunar_ice_020_058_seed303807308",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "092a90e38d5965fe",
+      "instance_id": "lunar_ice_030_011_seed303907261",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "0f74aae5f71353ec",
+      "instance_id": "lunar_ice_020_021_seed303807271",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "0b2b2a35a9ada9ad",
+      "instance_id": "lunar_ice_030_039_seed303907289",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "0fbd3b7a69dfe58e",
+      "instance_id": "lunar_ice_020_037_seed303807287",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "0f92e53ffa418970",
+      "instance_id": "lunar_ice_030_021_seed303907271",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "11bb8902d05782c1",
+      "instance_id": "lunar_ice_020_055_seed303807305",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "111efcede30520bb",
+      "instance_id": "lunar_ice_030_038_seed303907288",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "14d199b90b26724e",
+      "instance_id": "lunar_ice_020_022_seed303807272",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "166c7675254f1994",
+      "instance_id": "lunar_ice_030_010_seed303907260",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "1615005b26b9d699",
+      "instance_id": "lunar_ice_020_039_seed303807289",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "196ea168998f7c02",
+      "instance_id": "lunar_ice_030_022_seed303907272",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "176a5fd47979ca68",
+      "instance_id": "lunar_ice_020_023_seed303807273",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "1cf2751596a238ac",
+      "instance_id": "lunar_ice_030_051_seed303907301",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "1c854c2befca5c71",
+      "instance_id": "lunar_ice_020_009_seed303807259",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "1db1bb998a242dea",
+      "instance_id": "lunar_ice_030_047_seed303907297",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "22fb3f5441cd65c1",
+      "instance_id": "lunar_ice_020_008_seed303807258",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "1e1d7a15e95a807f",
+      "instance_id": "lunar_ice_030_037_seed303907287",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "25862d4ffe0a76f3",
+      "instance_id": "lunar_ice_020_007_seed303807257",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "235ec6d371eabcf1",
+      "instance_id": "lunar_ice_030_057_seed303907307",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "28e1e402da4e69f6",
+      "instance_id": "lunar_ice_020_053_seed303807303",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "2a2d97db4e8611c7",
+      "instance_id": "lunar_ice_030_045_seed303907295",
+      "pool_role": "UNBIASED_EXPANSION_CENSUS",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "2e8d0288dce23e74",
+      "instance_id": "lunar_ice_020_025_seed303807275",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "2eda758272c49e16",
+      "instance_id": "lunar_ice_030_054_seed303907304",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "2ebb33c09b0adcd0",
+      "instance_id": "lunar_ice_020_003_seed303807253",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "31c415e78587312e",
+      "instance_id": "lunar_ice_030_009_seed303907259",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "2fb99397efe3c0f4",
+      "instance_id": "lunar_ice_020_048_seed303807298",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "34e172f6be8d3899",
+      "instance_id": "lunar_ice_030_003_seed303907253",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "32a940413e84b291",
+      "instance_id": "lunar_ice_020_035_seed303807285",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "381f61710035aea6",
+      "instance_id": "lunar_ice_030_056_seed303907306",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "355c97f671b35335",
+      "instance_id": "lunar_ice_020_029_seed303807279",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "38ef5119fa7b47cd",
+      "instance_id": "lunar_ice_030_060_seed303907310",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "37fe24cd9200cb24",
+      "instance_id": "lunar_ice_020_018_seed303807268",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "3a6842a584377296",
+      "instance_id": "lunar_ice_030_008_seed303907258",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "39bea499a73a0fb4",
+      "instance_id": "lunar_ice_020_011_seed303807261",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "3dcd61a821d8d780",
+      "instance_id": "lunar_ice_030_035_seed303907285",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "3ab53bff9c607597",
+      "instance_id": "lunar_ice_020_036_seed303807286",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "42db58b680ca671d",
+      "instance_id": "lunar_ice_030_027_seed303907277",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "3bb7ebaa9002b3ed",
+      "instance_id": "lunar_ice_020_005_seed303807255",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "45d91e210da875d9",
+      "instance_id": "lunar_ice_030_017_seed303907267",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "3f270a9604da1590",
+      "instance_id": "lunar_ice_020_047_seed303807297",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "46a9ea309ebacf77",
+      "instance_id": "lunar_ice_030_028_seed303907278",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "48ad7d23ad411ba9",
+      "instance_id": "lunar_ice_020_060_seed303807310",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "4b503505cd9dd6af",
+      "instance_id": "lunar_ice_030_004_seed303907254",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "4d3f548f03222337",
+      "instance_id": "lunar_ice_020_046_seed303807296",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "54120d0adcd7cb45",
+      "instance_id": "lunar_ice_030_014_seed303907264",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "4e2490d172957235",
+      "instance_id": "lunar_ice_020_014_seed303807264",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "5694cc28a7c62f16",
+      "instance_id": "lunar_ice_030_040_seed303907290",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "4f4badd5fb5768ec",
+      "instance_id": "lunar_ice_020_016_seed303807266",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "57865e01f5fecca1",
+      "instance_id": "lunar_ice_030_006_seed303907256",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "4fc0ee9cbee86c41",
+      "instance_id": "lunar_ice_020_052_seed303807302",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "6254aff5cc5e3a82",
+      "instance_id": "lunar_ice_030_033_seed303907283",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "583943ce53724d1a",
+      "instance_id": "lunar_ice_020_040_seed303807290",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "7020f7ce4495d522",
+      "instance_id": "lunar_ice_030_050_seed303907300",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "5c92c25deac4d693",
+      "instance_id": "lunar_ice_020_017_seed303807267",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "81d1ea7cdcc09a2b",
+      "instance_id": "lunar_ice_030_029_seed303907279",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "60ecd24d9c3c7052",
+      "instance_id": "lunar_ice_020_024_seed303807274",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "82da904ebdf1fa24",
+      "instance_id": "lunar_ice_030_053_seed303907303",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "6acb5c1c276074d4",
+      "instance_id": "lunar_ice_020_010_seed303807260",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "8440fb9cb01b2e94",
+      "instance_id": "lunar_ice_030_042_seed303907292",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "74044e70c38e3b18",
+      "instance_id": "lunar_ice_020_057_seed303807307",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "875635672e9c8895",
+      "instance_id": "lunar_ice_030_020_seed303907270",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "7aa562843159f3d1",
+      "instance_id": "lunar_ice_020_012_seed303807262",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "87fabab94f05890a",
+      "instance_id": "lunar_ice_030_044_seed303907294",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "8b48a15b65b5cc0f",
+      "instance_id": "lunar_ice_020_042_seed303807292",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "8ded26a8ba6ea96d",
+      "instance_id": "lunar_ice_030_058_seed303907308",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "93be5dbd42203921",
+      "instance_id": "lunar_ice_020_001_seed303807251",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "93488ffb95ead193",
+      "instance_id": "lunar_ice_030_046_seed303907296",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "944607e6f385f920",
+      "instance_id": "lunar_ice_020_020_seed303807270",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "93c79e7b97f2ebe9",
+      "instance_id": "lunar_ice_030_049_seed303907299",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "954a0999e72b9b5f",
+      "instance_id": "lunar_ice_020_041_seed303807291",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "a561283657334446",
+      "instance_id": "lunar_ice_030_036_seed303907286",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "9cb2d6c2f8117443",
+      "instance_id": "lunar_ice_020_019_seed303807269",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "a8d70daa09b84f20",
+      "instance_id": "lunar_ice_030_023_seed303907273",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "9ff57b0cc49f1e20",
+      "instance_id": "lunar_ice_020_027_seed303807277",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "a94b08fe929cc43a",
+      "instance_id": "lunar_ice_030_025_seed303907275",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "a58cfd85e12baa2d",
+      "instance_id": "lunar_ice_020_033_seed303807283",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "aa8921afef898a78",
+      "instance_id": "lunar_ice_030_041_seed303907291",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "a72145457f2e6c01",
+      "instance_id": "lunar_ice_020_056_seed303807306",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "ac498564ef43b418",
+      "instance_id": "lunar_ice_030_032_seed303907282",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "a7fb235d16abb1b5",
+      "instance_id": "lunar_ice_020_043_seed303807293",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "b2f4517aa79f5174",
+      "instance_id": "lunar_ice_030_059_seed303907309",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "b0fa0c60eb0a3d50",
+      "instance_id": "lunar_ice_020_013_seed303807263",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "b5c2298426dc115f",
+      "instance_id": "lunar_ice_030_002_seed303907252",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "b1ffc590eb00638a",
+      "instance_id": "lunar_ice_020_045_seed303807295",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "bb889787f2de432c",
+      "instance_id": "lunar_ice_030_013_seed303907263",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "bb24363c42fae6d0",
+      "instance_id": "lunar_ice_020_026_seed303807276",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "bf9126be7626657f",
+      "instance_id": "lunar_ice_030_031_seed303907281",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "c22016ee5332d485",
+      "instance_id": "lunar_ice_020_004_seed303807254",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "bf972eebe5771e4f",
+      "instance_id": "lunar_ice_030_012_seed303907262",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "c5f2c0c4ad09bce8",
+      "instance_id": "lunar_ice_020_038_seed303807288",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "c1a48abba89de708",
+      "instance_id": "lunar_ice_030_043_seed303907293",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "c6f61d7f5e75f8cd",
+      "instance_id": "lunar_ice_020_059_seed303807309",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "cb4863fe47a001d7",
+      "instance_id": "lunar_ice_030_030_seed303907280",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "c723fecee8e668f8",
+      "instance_id": "lunar_ice_020_030_seed303807280",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "d36ee8349805b496",
+      "instance_id": "lunar_ice_030_019_seed303907269",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "ca6c04cd7905c141",
+      "instance_id": "lunar_ice_020_050_seed303807300",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "d76d54b054902713",
+      "instance_id": "lunar_ice_030_015_seed303907265",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "cac06da887dbf363",
+      "instance_id": "lunar_ice_020_028_seed303807278",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "da34193b23ad7f23",
+      "instance_id": "lunar_ice_030_018_seed303907268",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "cdf84480e459c017",
+      "instance_id": "lunar_ice_020_049_seed303807299",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "dcf94656209371d6",
+      "instance_id": "lunar_ice_030_052_seed303907302",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "d0183af8075df3ae",
+      "instance_id": "lunar_ice_020_051_seed303807301",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "df3e1e76f843e7fd",
+      "instance_id": "lunar_ice_030_048_seed303907298",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "d629ce6d1504dd8d",
+      "instance_id": "lunar_ice_020_015_seed303807265",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "e5775653d25eab30",
+      "instance_id": "lunar_ice_030_016_seed303907266",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "eb137eaa430d4def",
+      "instance_id": "lunar_ice_020_034_seed303807284",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "e6404435063ca198",
+      "instance_id": "lunar_ice_030_005_seed303907255",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "f7bc61409040413a",
+      "instance_id": "lunar_ice_020_044_seed303807294",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "e6943534b37ca07a",
+      "instance_id": "lunar_ice_030_026_seed303907276",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "f873045fdcd34335",
+      "instance_id": "lunar_ice_020_006_seed303807256",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "e85d7e62a3642f48",
+      "instance_id": "lunar_ice_030_024_seed303907274",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "f88209ff5f7be676",
+      "instance_id": "lunar_ice_020_032_seed303807282",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "e9f06d83a000b1da",
+      "instance_id": "lunar_ice_030_034_seed303907284",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "fe8352e4b8688d7f",
+      "instance_id": "lunar_ice_020_002_seed303807252",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "f6ad6619870b51f1",
+      "instance_id": "lunar_ice_030_001_seed303907251",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    },
+    {
+      "instance_content_hash": "ff0cce185d381109",
+      "instance_id": "lunar_ice_020_054_seed303807304",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 20
+    },
+    {
+      "instance_content_hash": "f7b49eebc189f0bd",
+      "instance_id": "lunar_ice_030_055_seed303907305",
+      "pool_role": "BOUNDED_ACTIONABILITY_DISCOVERY_EXPANSION",
+      "scale": 30
+    }
+  ],
+  "precommitted_row_count": 120,
+  "schema_version": "lunar_ice_bpc.no_task_wait_v3_branch_expansion_priority_census.v1",
+  "summary_hash": "9bfcb16c21dd14c111a2cdb0edff7c627df70c469c888164ea66349b612dfd79",
+  "training_authorized": false,
+  "updated_unix_sec": 1785029702.6841218
+}

@@ -1,0 +1,1494 @@
+{
+  "catalog_hash": "8a83fa4e6ab590ac2319533da01df16fb3358eee21c6eedf50258e834c30cbf0",
+  "columns": {
+    "04dbd41c14a6446e35a05d756ad7c6f24b1e1531057e6dfb0e3385eea0d4a80c": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.294557628,
+        "normalized_objective": 0.703473,
+        "normalized_operating_cost": 0.254952416,
+        "normalized_risk": 0.321588916,
+        "normalized_weighted_completion_time": 0.31733004,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 0.703473,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 0.703473,
+        "raw_makespan": 282.775323,
+        "raw_objective_unscaled_weighted_sum": 174.246916,
+        "raw_operating_cost": 87.445896,
+        "raw_risk": 8.020607,
+        "raw_weighted_completion_time": 196.951033,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 0.5,
+          "distance_km": 24.618491,
+          "end_time": 341.024449,
+          "energy_proxy": 62.187596,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 23.546899,
+          "return_time": 317.47755,
+          "risk_integral": 8.020607,
+          "service_cost": 0.639809,
+          "service_starts": {
+            "ice_site_001": 270.0
+          },
+          "shadow_exposure_min": 28.522565,
+          "start_time": 235.151562,
+          "task_completion_times": {
+            "ice_site_001": 282.775323
+          },
+          "tasks": [
+            "ice_site_001"
+          ],
+          "travel_time": 69.550665
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "069737fedca01c505ac7fedaec3f1c78c55ffb4ad8a8d4f15baab489a6523d75": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.295473715,
+        "normalized_objective": 1.427034,
+        "normalized_operating_cost": 0.553111882,
+        "normalized_risk": 0.607674255,
+        "normalized_weighted_completion_time": 0.66561912,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.427034,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.427034,
+        "raw_makespan": 283.654766,
+        "raw_objective_unscaled_weighted_sum": 370.113797,
+        "raw_operating_cost": 189.711339,
+        "raw_risk": 15.155735,
+        "raw_weighted_completion_time": 413.116808,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 2.5,
+          "distance_km": 24.516876,
+          "end_time": 236.031005,
+          "energy_proxy": 73.601863,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_energy",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 26.400466,
+          "return_time": 209.630539,
+          "risk_integral": 7.135128,
+          "service_cost": 4.146704,
+          "service_starts": {
+            "ice_site_004": 56.562925,
+            "ice_site_005": 120.0
+          },
+          "shadow_exposure_min": 77.424209,
+          "start_time": 29.728188,
+          "task_completion_times": {
+            "ice_site_004": 97.045718,
+            "ice_site_005": 193.319766
+          },
+          "tasks": [
+            "ice_site_004",
+            "ice_site_005"
+          ],
+          "travel_time": 66.099792
+        },
+        {
+          "demand": 0.5,
+          "distance_km": 24.618491,
+          "end_time": 341.903892,
+          "energy_proxy": 62.187596,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 23.546899,
+          "return_time": 318.356993,
+          "risk_integral": 8.020607,
+          "service_cost": 0.639809,
+          "service_starts": {
+            "ice_site_001": 270.879443
+          },
+          "shadow_exposure_min": 28.522565,
+          "start_time": 236.031005,
+          "task_completion_times": {
+            "ice_site_001": 283.654766
+          },
+          "tasks": [
+            "ice_site_001"
+          ],
+          "travel_time": 69.550665
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "0a80ec640ea25350c35b5eb77f0a27ac94d0e87d3e313be7ef0aa232009f9afd": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.241797466,
+        "normalized_objective": 0.395186,
+        "normalized_operating_cost": 0.144511829,
+        "normalized_risk": 0.127247754,
+        "normalized_weighted_completion_time": 0.308566144,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 0.395186,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 0.395186,
+        "raw_makespan": 232.125567,
+        "raw_objective_unscaled_weighted_sum": 129.344297,
+        "raw_operating_cost": 49.56598,
+        "raw_risk": 3.17363,
+        "raw_weighted_completion_time": 191.511717,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.0,
+          "distance_km": 13.318759,
+          "end_time": 265.979928,
+          "energy_proxy": 34.953663,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 16.738416,
+          "return_time": 249.241512,
+          "risk_integral": 3.17363,
+          "service_cost": 1.293558,
+          "service_starts": {
+            "ice_site_003": 200.0
+          },
+          "shadow_exposure_min": 31.348509,
+          "start_time": 182.782835,
+          "task_completion_times": {
+            "ice_site_003": 232.125567
+          },
+          "tasks": [
+            "ice_site_003"
+          ],
+          "travel_time": 34.33311
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "22c1d8012be19a78daad958abc181941d5984fd862a26e5dce47197a74a75e50": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.241797466,
+        "normalized_objective": 1.152225,
+        "normalized_operating_cost": 0.45797715,
+        "normalized_risk": 0.493295739,
+        "normalized_weighted_completion_time": 0.502381486,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.152225,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.152225,
+        "raw_makespan": 232.125567,
+        "raw_objective_unscaled_weighted_sum": 294.105554,
+        "raw_operating_cost": 157.081164,
+        "raw_risk": 12.303071,
+        "raw_weighted_completion_time": 311.803297,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.5,
+          "distance_km": 28.507963,
+          "end_time": 167.086688,
+          "energy_proxy": 76.777725,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 27.194431,
+          "return_time": 139.892257,
+          "risk_integral": 9.129441,
+          "service_cost": 2.229496,
+          "service_starts": {
+            "ice_site_002": 30.95557,
+            "ice_site_004": 72.660314
+          },
+          "shadow_exposure_min": 57.474317,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_002": 50.89434,
+            "ice_site_004": 113.143107
+          },
+          "tasks": [
+            "ice_site_002",
+            "ice_site_004"
+          ],
+          "travel_time": 79.470694
+        },
+        {
+          "demand": 1.0,
+          "distance_km": 13.318759,
+          "end_time": 265.979928,
+          "energy_proxy": 34.953663,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 16.738416,
+          "return_time": 249.241512,
+          "risk_integral": 3.17363,
+          "service_cost": 1.293558,
+          "service_starts": {
+            "ice_site_003": 200.0
+          },
+          "shadow_exposure_min": 31.348509,
+          "start_time": 182.782835,
+          "task_completion_times": {
+            "ice_site_003": 232.125567
+          },
+          "tasks": [
+            "ice_site_003"
+          ],
+          "travel_time": 34.33311
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "293855c823b44c0893c0c37a2e2d698919a2e57b892f22bba67f2777a5f54935": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.053014937,
+        "normalized_objective": 0.480005,
+        "normalized_operating_cost": 0.234754855,
+        "normalized_risk": 0.221827154,
+        "normalized_weighted_completion_time": 0.058556698,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 0.480005,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 0.480005,
+        "raw_makespan": 50.89434,
+        "raw_objective_unscaled_weighted_sum": 100.588142,
+        "raw_operating_cost": 80.518353,
+        "raw_risk": 5.532493,
+        "raw_weighted_completion_time": 36.343241,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 0.5,
+          "distance_km": 24.313388,
+          "end_time": 104.552242,
+          "energy_proxy": 55.442758,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 21.860689,
+          "return_time": 82.691552,
+          "risk_integral": 5.532493,
+          "service_cost": 0.762207,
+          "service_starts": {
+            "ice_site_002": 30.95557
+          },
+          "shadow_exposure_min": 19.498584,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_002": 50.89434
+          },
+          "tasks": [
+            "ice_site_002"
+          ],
+          "travel_time": 62.752782
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "32adbb42b82d697fcaacd28b13810b185ae85e6204c501f8da1f222e99056c8c": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.295204932,
+        "normalized_objective": 1.816561,
+        "normalized_operating_cost": 0.661687066,
+        "normalized_risk": 0.826710092,
+        "normalized_weighted_completion_time": 0.820408874,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.816561,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.816561,
+        "raw_makespan": 283.396735,
+        "raw_objective_unscaled_weighted_sum": 451.244909,
+        "raw_operating_cost": 226.951442,
+        "raw_risk": 20.618611,
+        "raw_weighted_completion_time": 509.187139,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.5,
+          "distance_km": 28.507963,
+          "end_time": 167.086688,
+          "energy_proxy": 76.777725,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 27.194431,
+          "return_time": 139.892257,
+          "risk_integral": 9.129441,
+          "service_cost": 2.229496,
+          "service_starts": {
+            "ice_site_002": 30.95557,
+            "ice_site_004": 72.660314
+          },
+          "shadow_exposure_min": 57.474317,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_002": 50.89434,
+            "ice_site_004": 113.143107
+          },
+          "tasks": [
+            "ice_site_002",
+            "ice_site_004"
+          ],
+          "travel_time": 79.470694
+        },
+        {
+          "demand": 1.5,
+          "distance_km": 31.009091,
+          "end_time": 347.722412,
+          "energy_proxy": 86.4938,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_energy",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 29.62345,
+          "return_time": 318.098962,
+          "risk_integral": 11.48917,
+          "service_cost": 1.933367,
+          "service_starts": {
+            "ice_site_001": 270.621412,
+            "ice_site_003": 200.0
+          },
+          "shadow_exposure_min": 67.023844,
+          "start_time": 182.782835,
+          "task_completion_times": {
+            "ice_site_001": 283.396735,
+            "ice_site_003": 232.125567
+          },
+          "tasks": [
+            "ice_site_003",
+            "ice_site_001"
+          ],
+          "travel_time": 90.415237
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "36e4eec48b18c389b29e260b59463eedd197f6eb3d72806ce96e04dff8715985": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.341209099,
+        "normalized_objective": 2.150471,
+        "normalized_operating_cost": 0.750789079,
+        "normalized_risk": 0.927992509,
+        "normalized_weighted_completion_time": 1.179223441,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 2.150471,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 2.150471,
+        "raw_makespan": 327.560735,
+        "raw_objective_unscaled_weighted_sum": 573.411336,
+        "raw_operating_cost": 257.51246,
+        "raw_risk": 23.144651,
+        "raw_weighted_completion_time": 731.885563,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 4.5,
+          "distance_km": 63.619838,
+          "end_time": 417.025548,
+          "energy_proxy": 187.050344,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_energy",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_energy",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 54.762586,
+          "return_time": 362.262962,
+          "risk_integral": 23.144651,
+          "service_cost": 6.842278,
+          "service_starts": {
+            "ice_site_001": 314.785412,
+            "ice_site_002": 30.95557,
+            "ice_site_003": 244.164,
+            "ice_site_004": 72.660314,
+            "ice_site_005": 136.097389
+          },
+          "shadow_exposure_min": 172.146779,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_001": 327.560735,
+            "ice_site_002": 50.89434,
+            "ice_site_003": 276.289567,
+            "ice_site_004": 113.143107,
+            "ice_site_005": 209.417155
+          },
+          "tasks": [
+            "ice_site_002",
+            "ice_site_004",
+            "ice_site_005",
+            "ice_site_003",
+            "ice_site_001"
+          ],
+          "travel_time": 183.620743
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "3e5e2a00ed95638110a6116e1a5edd7352796c0ea37ca073cd44a26e84561c48": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.295204932,
+        "normalized_objective": 1.539526,
+        "normalized_operating_cost": 0.582976599,
+        "normalized_risk": 0.682489261,
+        "normalized_weighted_completion_time": 0.685150229,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.539526,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.539526,
+        "raw_makespan": 283.396735,
+        "raw_objective_unscaled_weighted_sum": 387.071794,
+        "raw_operating_cost": 199.954611,
+        "raw_risk": 17.021663,
+        "raw_weighted_completion_time": 425.2388,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 0.5,
+          "distance_km": 24.313388,
+          "end_time": 104.552242,
+          "energy_proxy": 55.442758,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 21.860689,
+          "return_time": 82.691552,
+          "risk_integral": 5.532493,
+          "service_cost": 0.762207,
+          "service_starts": {
+            "ice_site_002": 30.95557
+          },
+          "shadow_exposure_min": 19.498584,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_002": 50.89434
+          },
+          "tasks": [
+            "ice_site_002"
+          ],
+          "travel_time": 62.752782
+        },
+        {
+          "demand": 1.5,
+          "distance_km": 31.009091,
+          "end_time": 347.722412,
+          "energy_proxy": 86.4938,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_energy",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 29.62345,
+          "return_time": 318.098962,
+          "risk_integral": 11.48917,
+          "service_cost": 1.933367,
+          "service_starts": {
+            "ice_site_001": 270.621412,
+            "ice_site_003": 200.0
+          },
+          "shadow_exposure_min": 67.023844,
+          "start_time": 182.782835,
+          "task_completion_times": {
+            "ice_site_001": 283.396735,
+            "ice_site_003": 232.125567
+          },
+          "tasks": [
+            "ice_site_003",
+            "ice_site_001"
+          ],
+          "travel_time": 90.415237
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "68a91d129c17f68f6423f1f6d7ca41c0978dacd5d42c678190a3bde833839419": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.295204932,
+        "normalized_objective": 1.059521,
+        "normalized_operating_cost": 0.348221745,
+        "normalized_risk": 0.460662107,
+        "normalized_weighted_completion_time": 0.626593531,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.059521,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.059521,
+        "raw_makespan": 283.396735,
+        "raw_objective_unscaled_weighted_sum": 286.483652,
+        "raw_operating_cost": 119.436258,
+        "raw_risk": 11.48917,
+        "raw_weighted_completion_time": 388.895559,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.5,
+          "distance_km": 31.009091,
+          "end_time": 347.722412,
+          "energy_proxy": 86.4938,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_energy",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 29.62345,
+          "return_time": 318.098962,
+          "risk_integral": 11.48917,
+          "service_cost": 1.933367,
+          "service_starts": {
+            "ice_site_001": 270.621412,
+            "ice_site_003": 200.0
+          },
+          "shadow_exposure_min": 67.023844,
+          "start_time": 182.782835,
+          "task_completion_times": {
+            "ice_site_001": 283.396735,
+            "ice_site_003": 232.125567
+          },
+          "tasks": [
+            "ice_site_003",
+            "ice_site_001"
+          ],
+          "travel_time": 90.415237
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "714eeb7c04a1d5c71cbc1bfcff19e33259ad979585bb533a2b8eb70393e6ad29": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.21814287,
+        "normalized_objective": 1.022841,
+        "normalized_operating_cost": 0.399309522,
+        "normalized_risk": 0.445786939,
+        "normalized_weighted_completion_time": 0.44436162,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.022841,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.022841,
+        "raw_makespan": 209.417155,
+        "raw_objective_unscaled_weighted_sum": 258.394279,
+        "raw_operating_cost": 136.958808,
+        "raw_risk": 11.118175,
+        "raw_weighted_completion_time": 275.793241,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 3.0,
+          "distance_km": 32.656699,
+          "end_time": 258.576227,
+          "energy_proxy": 99.393198,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 32.848299,
+          "return_time": 225.727928,
+          "risk_integral": 11.118175,
+          "service_cost": 4.908911,
+          "service_starts": {
+            "ice_site_002": 30.95557,
+            "ice_site_004": 72.660314,
+            "ice_site_005": 136.097389
+          },
+          "shadow_exposure_min": 102.201205,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_002": 50.89434,
+            "ice_site_004": 113.143107,
+            "ice_site_005": 209.417155
+          },
+          "tasks": [
+            "ice_site_002",
+            "ice_site_004",
+            "ice_site_005"
+          ],
+          "travel_time": 91.986599
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "735e0fa958727cfa8e93d2380a9b64666d7fe09c764ef32368bf88932970ae6b": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.294557628,
+        "normalized_objective": 1.460513,
+        "normalized_operating_cost": 0.568417737,
+        "normalized_risk": 0.687636901,
+        "normalized_weighted_completion_time": 0.511145382,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.460513,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.460513,
+        "raw_makespan": 282.775323,
+        "raw_objective_unscaled_weighted_sum": 339.008173,
+        "raw_operating_cost": 194.96108,
+        "raw_risk": 17.150048,
+        "raw_weighted_completion_time": 317.242613,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.5,
+          "distance_km": 28.507963,
+          "end_time": 167.086688,
+          "energy_proxy": 76.777725,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 27.194431,
+          "return_time": 139.892257,
+          "risk_integral": 9.129441,
+          "service_cost": 2.229496,
+          "service_starts": {
+            "ice_site_002": 30.95557,
+            "ice_site_004": 72.660314
+          },
+          "shadow_exposure_min": 57.474317,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_002": 50.89434,
+            "ice_site_004": 113.143107
+          },
+          "tasks": [
+            "ice_site_002",
+            "ice_site_004"
+          ],
+          "travel_time": 79.470694
+        },
+        {
+          "demand": 0.5,
+          "distance_km": 24.618491,
+          "end_time": 341.024449,
+          "energy_proxy": 62.187596,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 23.546899,
+          "return_time": 317.47755,
+          "risk_integral": 8.020607,
+          "service_cost": 0.639809,
+          "service_starts": {
+            "ice_site_001": 270.0
+          },
+          "shadow_exposure_min": 28.522565,
+          "start_time": 235.151562,
+          "task_completion_times": {
+            "ice_site_001": 282.775323
+          },
+          "tasks": [
+            "ice_site_001"
+          ],
+          "travel_time": 69.550665
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "a5c96c1da4b18f9aca05e6ae9ef4f28663c19a5fc89cac40269f7f4c689218d3": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.318958321,
+        "normalized_objective": 1.736829,
+        "normalized_operating_cost": 0.654261938,
+        "normalized_risk": 0.767375854,
+        "normalized_weighted_completion_time": 0.787978784,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.736829,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.736829,
+        "raw_makespan": 306.199988,
+        "raw_objective_unscaled_weighted_sum": 439.167242,
+        "raw_operating_cost": 224.404704,
+        "raw_risk": 19.138782,
+        "raw_weighted_completion_time": 489.059389,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 3.0,
+          "distance_km": 32.656699,
+          "end_time": 258.576227,
+          "energy_proxy": 99.393198,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 32.848299,
+          "return_time": 225.727928,
+          "risk_integral": 11.118175,
+          "service_cost": 4.908911,
+          "service_starts": {
+            "ice_site_002": 30.95557,
+            "ice_site_004": 72.660314,
+            "ice_site_005": 136.097389
+          },
+          "shadow_exposure_min": 102.201205,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_002": 50.89434,
+            "ice_site_004": 113.143107,
+            "ice_site_005": 209.417155
+          },
+          "tasks": [
+            "ice_site_002",
+            "ice_site_004",
+            "ice_site_005"
+          ],
+          "travel_time": 91.986599
+        },
+        {
+          "demand": 0.5,
+          "distance_km": 24.618491,
+          "end_time": 364.449114,
+          "energy_proxy": 62.187596,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 23.546899,
+          "return_time": 340.902215,
+          "risk_integral": 8.020607,
+          "service_cost": 0.639809,
+          "service_starts": {
+            "ice_site_001": 293.424665
+          },
+          "shadow_exposure_min": 28.522565,
+          "start_time": 258.576227,
+          "task_completion_times": {
+            "ice_site_001": 306.199988
+          },
+          "tasks": [
+            "ice_site_001"
+          ],
+          "travel_time": 69.550665
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "ac4550083c57631ea4d52f331016f471d5777b42fd42bf1d9db442d0fb235ad8": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.295204932,
+        "normalized_objective": 1.511887,
+        "normalized_operating_cost": 0.560537011,
+        "normalized_risk": 0.667008533,
+        "normalized_weighted_completion_time": 0.710853256,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.511887,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.511887,
+        "raw_makespan": 283.396735,
+        "raw_objective_unscaled_weighted_sum": 385.3702,
+        "raw_operating_cost": 192.258077,
+        "raw_risk": 16.635565,
+        "raw_weighted_completion_time": 441.191395,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.0,
+          "distance_km": 20.36814,
+          "end_time": 117.978541,
+          "energy_proxy": 50.98639,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_energy",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 20.746598,
+          "return_time": 97.231943,
+          "risk_integral": 5.146395,
+          "service_cost": 1.467289,
+          "service_starts": {
+            "ice_site_004": 30.0
+          },
+          "shadow_exposure_min": 32.697321,
+          "start_time": 3.165263,
+          "task_completion_times": {
+            "ice_site_004": 70.482793
+          },
+          "tasks": [
+            "ice_site_004"
+          ],
+          "travel_time": 53.583887
+        },
+        {
+          "demand": 1.5,
+          "distance_km": 31.009091,
+          "end_time": 347.722412,
+          "energy_proxy": 86.4938,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_energy",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 29.62345,
+          "return_time": 318.098962,
+          "risk_integral": 11.48917,
+          "service_cost": 1.933367,
+          "service_starts": {
+            "ice_site_001": 270.621412,
+            "ice_site_003": 200.0
+          },
+          "shadow_exposure_min": 67.023844,
+          "start_time": 182.782835,
+          "task_completion_times": {
+            "ice_site_001": 283.396735,
+            "ice_site_003": 232.125567
+          },
+          "tasks": [
+            "ice_site_003",
+            "ice_site_001"
+          ],
+          "travel_time": 90.415237
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "b033a363a28483c8cd5d646870f30b8a0cdedefba3671ab803150372c5c0fa23": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.350671776,
+        "normalized_objective": 1.834902,
+        "normalized_operating_cost": 0.646381212,
+        "normalized_risk": 0.746747446,
+        "normalized_weighted_completion_time": 1.104433884,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 1.834902,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 1.834902,
+        "raw_makespan": 336.644905,
+        "raw_objective_unscaled_weighted_sum": 514.512955,
+        "raw_operating_cost": 221.701701,
+        "raw_risk": 18.624298,
+        "raw_weighted_completion_time": 685.46739,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 2.5,
+          "distance_km": 24.516876,
+          "end_time": 236.031005,
+          "energy_proxy": 73.601863,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_energy",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 26.400466,
+          "return_time": 209.630539,
+          "risk_integral": 7.135128,
+          "service_cost": 4.146704,
+          "service_starts": {
+            "ice_site_004": 56.562925,
+            "ice_site_005": 120.0
+          },
+          "shadow_exposure_min": 77.424209,
+          "start_time": 29.728188,
+          "task_completion_times": {
+            "ice_site_004": 97.045718,
+            "ice_site_005": 193.319766
+          },
+          "tasks": [
+            "ice_site_004",
+            "ice_site_005"
+          ],
+          "travel_time": 66.099792
+        },
+        {
+          "demand": 1.5,
+          "distance_km": 31.009091,
+          "end_time": 400.970582,
+          "energy_proxy": 86.4938,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_003"
+            },
+            {
+              "from": "ice_site_003",
+              "path_type": "low_energy",
+              "to": "ice_site_001"
+            },
+            {
+              "from": "ice_site_001",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 29.62345,
+          "return_time": 371.347132,
+          "risk_integral": 11.48917,
+          "service_cost": 1.933367,
+          "service_starts": {
+            "ice_site_001": 323.869582,
+            "ice_site_003": 253.24817
+          },
+          "shadow_exposure_min": 67.023844,
+          "start_time": 236.031005,
+          "task_completion_times": {
+            "ice_site_001": 336.644905,
+            "ice_site_003": 285.373737
+          },
+          "tasks": [
+            "ice_site_003",
+            "ice_site_001"
+          ],
+          "travel_time": 90.415237
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "bc7bd23eed4849375a37820998326bfb755d4475dce2bf58aa04b8bf70b28053": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.201374756,
+        "normalized_objective": 0.374558,
+        "normalized_operating_cost": 0.157809392,
+        "normalized_risk": 0.124233668,
+        "normalized_weighted_completion_time": 0.231287394,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 0.374558,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 0.374558,
+        "raw_makespan": 193.319766,
+        "raw_objective_unscaled_weighted_sum": 114.644806,
+        "raw_operating_cost": 54.126899,
+        "raw_risk": 3.098457,
+        "raw_weighted_completion_time": 143.548626,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.5,
+          "distance_km": 12.591886,
+          "end_time": 227.344438,
+          "energy_proxy": 38.855598,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_005"
+            },
+            {
+              "from": "ice_site_005",
+              "path_type": "low_energy",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 17.7139,
+          "return_time": 209.630539,
+          "risk_integral": 3.098457,
+          "service_cost": 2.679415,
+          "service_starts": {
+            "ice_site_005": 120.0
+          },
+          "shadow_exposure_min": 43.237888,
+          "start_time": 103.752172,
+          "task_completion_times": {
+            "ice_site_005": 193.319766
+          },
+          "tasks": [
+            "ice_site_005"
+          ],
+          "travel_time": 32.558601
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "d629372faf9f26311be89f09a872c265f1f37eaf11b9b65b1fecdf6cd6689537": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.117857403,
+        "normalized_objective": 0.757039,
+        "normalized_operating_cost": 0.313465321,
+        "normalized_risk": 0.366047985,
+        "normalized_weighted_completion_time": 0.193815342,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 0.757039,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 0.757039,
+        "raw_makespan": 113.143107,
+        "raw_objective_unscaled_weighted_sum": 164.761257,
+        "raw_operating_cost": 107.515184,
+        "raw_risk": 9.129441,
+        "raw_weighted_completion_time": 120.29158,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.5,
+          "distance_km": 28.507963,
+          "end_time": 167.086688,
+          "energy_proxy": 76.777725,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_risk",
+              "to": "ice_site_002"
+            },
+            {
+              "from": "ice_site_002",
+              "path_type": "low_time",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 27.194431,
+          "return_time": 139.892257,
+          "risk_integral": 9.129441,
+          "service_cost": 2.229496,
+          "service_starts": {
+            "ice_site_002": 30.95557,
+            "ice_site_004": 72.660314
+          },
+          "shadow_exposure_min": 57.474317,
+          "start_time": 0.0,
+          "task_completion_times": {
+            "ice_site_002": 50.89434,
+            "ice_site_004": 113.143107
+          },
+          "tasks": [
+            "ice_site_002",
+            "ice_site_004"
+          ],
+          "travel_time": 79.470694
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    },
+    "df2c36f9cbb2d1e8b07d1e52227d3bda847e2e8793dd95600f8410403be1bba9": {
+      "objective_breakdown": {
+        "makespan_enters_pricing_objective": false,
+        "mode": "normalized_operating_cost_risk_weighted_completion",
+        "normalized_makespan": 0.073419576,
+        "normalized_objective": 0.452366,
+        "normalized_operating_cost": 0.212315266,
+        "normalized_risk": 0.206346426,
+        "normalized_weighted_completion_time": 0.084259724,
+        "note": "Official objective is normalized additive operating cost, risk, and weighted completion. Makespan is reported as an evaluation metric only.",
+        "objective": 0.452366,
+        "objective_spec_id": "normalized_operating_cost_1+risk_1+weighted_completion_0.4.v1",
+        "official_objective": 0.452366,
+        "raw_makespan": 70.482793,
+        "raw_objective_unscaled_weighted_sum": 98.886548,
+        "raw_operating_cost": 72.821819,
+        "raw_risk": 5.146395,
+        "raw_weighted_completion_time": 52.295836,
+        "schema_version": "lunar_ice_bpc.normalized_additive_objective.v1",
+        "weight_completion": 0.4,
+        "weight_operating_cost": 1.0,
+        "weight_risk": 1.0
+      },
+      "sorties": [
+        {
+          "demand": 1.0,
+          "distance_km": 20.36814,
+          "end_time": 117.978541,
+          "energy_proxy": 50.98639,
+          "feasible": true,
+          "legs": [
+            {
+              "from": "depot",
+              "path_type": "low_energy",
+              "to": "ice_site_004"
+            },
+            {
+              "from": "ice_site_004",
+              "path_type": "low_risk",
+              "to": "depot"
+            }
+          ],
+          "recharge_time": 20.746598,
+          "return_time": 97.231943,
+          "risk_integral": 5.146395,
+          "service_cost": 1.467289,
+          "service_starts": {
+            "ice_site_004": 30.0
+          },
+          "shadow_exposure_min": 32.697321,
+          "start_time": 3.165263,
+          "task_completion_times": {
+            "ice_site_004": 70.482793
+          },
+          "tasks": [
+            "ice_site_004"
+          ],
+          "travel_time": 53.583887
+        }
+      ],
+      "vehicle_id": "snapshot_column"
+    }
+  },
+  "instance_content_hash": "075139c9a86399ff",
+  "instance_id": "lunar_ice_005_054_seed85777001",
+  "schema_version": "lunar_ice_bpc.p0v3_root_policy_column_catalog.v1"
+}

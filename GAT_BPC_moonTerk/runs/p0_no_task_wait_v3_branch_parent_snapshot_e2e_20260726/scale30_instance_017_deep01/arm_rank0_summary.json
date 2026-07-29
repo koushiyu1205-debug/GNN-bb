@@ -1,0 +1,36 @@
+{
+  "arm_binding_hash": "dd3d0f9686545519a9c76275f035a8a3f8b19df09378a6cd3e4bc0b561b17c1a",
+  "certified_parent_pricing_reused": true,
+  "descendant_pricing_certificate_reused": false,
+  "exact_safe": false,
+  "expanded_node_count": 3,
+  "global_lower_bound": 1.401327,
+  "guidance_lifecycle_overhead_sec": 0.0,
+  "incomplete_node_count": 4,
+  "matched_end_to_end_wall_sec": 3489.393804,
+  "matched_scope": "post_certified_deep_parent_continuation",
+  "node_count": 7,
+  "objective": 1.414878,
+  "parent_source_sha256": "25257ed48f3523a5fdca3f404831b4d970a41fab4007256904897d19f5438c41",
+  "requested_rank_index": 0,
+  "root_wall_sec": 0.0,
+  "target_fallback_to_p0": false,
+  "target_legal_branch_shortlist_hash_after_sort": "24ed0d697cfd27faeb86a99b1ec5f65574834f94bef03740fde380d7ccecf8c6",
+  "target_legal_branch_shortlist_hash_before_sort": "24ed0d697cfd27faeb86a99b1ec5f65574834f94bef03740fde380d7ccecf8c6",
+  "target_node_id": "node_001",
+  "target_path_hash": "5c98bcaa8488bb06b85d3e9750bcf5525b789e68c8720d09f9a17407c2065fe5",
+  "target_path_reached_once": true,
+  "target_path_signature": [
+    "ice_site_021:ice_site_028:same_journey"
+  ],
+  "target_selected_candidate_id": "branch_pair:ice_site_002|ice_site_027",
+  "target_selected_rank_index": 0,
+  "target_top3_candidate_ids": [
+    "branch_pair:ice_site_002|ice_site_027",
+    "branch_pair:ice_site_005|ice_site_013",
+    "branch_pair:ice_site_007|ice_site_020"
+  ],
+  "tree_result_sha256": "482c3de15ee622c6e690ea3d5d4bbfe30389f90a449eb41ac40d514c583364f9",
+  "tree_wall_sec": 3489.393804,
+  "universe_safe": true
+}

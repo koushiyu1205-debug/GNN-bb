@@ -1,0 +1,108 @@
+{
+  "active_column_count": 14,
+  "active_column_ids": [
+    "3e5e2a00ed95638110a6116e1a5edd7352796c0ea37ca073cd44a26e84561c48",
+    "32adbb42b82d697fcaacd28b13810b185ae85e6204c501f8da1f222e99056c8c",
+    "36e4eec48b18c389b29e260b59463eedd197f6eb3d72806ce96e04dff8715985",
+    "735e0fa958727cfa8e93d2380a9b64666d7fe09c764ef32368bf88932970ae6b",
+    "68a91d129c17f68f6423f1f6d7ca41c0978dacd5d42c678190a3bde833839419",
+    "ac4550083c57631ea4d52f331016f471d5777b42fd42bf1d9db442d0fb235ad8",
+    "04dbd41c14a6446e35a05d756ad7c6f24b1e1531057e6dfb0e3385eea0d4a80c",
+    "22c1d8012be19a78daad958abc181941d5984fd862a26e5dce47197a74a75e50",
+    "d629372faf9f26311be89f09a872c265f1f37eaf11b9b65b1fecdf6cd6689537",
+    "714eeb7c04a1d5c71cbc1bfcff19e33259ad979585bb533a2b8eb70393e6ad29",
+    "293855c823b44c0893c0c37a2e2d698919a2e57b892f22bba67f2777a5f54935",
+    "0a80ec640ea25350c35b5eb77f0a27ac94d0e87d3e313be7ef0aa232009f9afd",
+    "df2c36f9cbb2d1e8b07d1e52227d3bda847e2e8793dd95600f8410403be1bba9",
+    "bc7bd23eed4849375a37820998326bfb755d4475dce2bf58aa04b8bf70b28053"
+  ],
+  "branch_context": {
+    "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+    "pair_decision_count": 0,
+    "pair_decisions": [],
+    "schema_version": "lunar_ice_bpc.branch_context.v1"
+  },
+  "can_certify": false,
+  "cut_context": {
+    "cut_count": 0,
+    "cuts": [],
+    "note": "Exact cut coefficient context. Current runner records no active cuts by default.",
+    "schema_version": "lunar_ice_bpc.cut_context.v2"
+  },
+  "cut_lineage": {
+    "entries": [],
+    "entry_count": 0,
+    "policy_version": "explicit_cut_context_v1",
+    "schema_version": "lunar_ice_bpc.cut_lineage.v1"
+  },
+  "deployable": false,
+  "development_only": true,
+  "effective_harvest_target": 8,
+  "instance_content_hash": "075139c9a86399ff",
+  "instance_id": "lunar_ice_005_054_seed85777001",
+  "live_cut_policy_hash": "",
+  "max_columns_per_round": 8,
+  "mutates_p0": false,
+  "node_id": "root",
+  "node_lp_bound": 2.150471,
+  "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-2",
+  "rmp_primal": [
+    {
+      "column_index": 2,
+      "end_time": 417.025548,
+      "lambda_value": 1.0,
+      "objective": 2.150471,
+      "sortie_count": 1,
+      "task_count": 5,
+      "tasks": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_004",
+        "ice_site_005"
+      ]
+    }
+  ],
+  "round": 2,
+  "schema_version": "lunar_ice_bpc.p0v3_root_policy_state_snapshot.v1",
+  "separator_policy_version": "",
+  "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+  "source_pass_policy": "harvest_then_proof",
+  "source_pass_strategy": "harvest_then_proof",
+  "source_solver_binding_hash": "5a4fc6b653a6db34b5fcc48fc5a6ec37b45c36268a526d734d260c2ce7c98c53",
+  "split_manifest_hash": "0b8f191c8e9cddcb8e36d56ddc377818827fffec4259a9540e2ff846da6ae951",
+  "state_hash": "8df66163a52827fbba03acccc93ea9c2e49bdc8f650571fa9279075699190dd6",
+  "trajectory_features": {
+    "active_column_count": 14,
+    "active_task_set_count": 14,
+    "dual_l1_delta_from_previous": 0.49704699999999996,
+    "dual_linf_delta_from_previous": 0.21446899999999997,
+    "effective_harvest_target": 8,
+    "node_lp_bound": 2.150471,
+    "node_lp_bound_delta": 0.0,
+    "previous_added_column_count": 8,
+    "previous_best_true_rc": -0.214469,
+    "previous_final_judge_wall_time": 0.019742,
+    "previous_harvest_column_count": 8,
+    "previous_harvest_pass_wall_time": 0.019651,
+    "previous_node_lp_bound": 2.150471,
+    "previous_proof_pass_wall_time": 0.0,
+    "rmp_primal_fractional_count": 0,
+    "rmp_primal_nonzero_count": 1,
+    "round": 2
+  },
+  "true_duals": {
+    "cut_duals": {},
+    "dual_fingerprint": "906d76351a8a0a97bc60329841385b6e691ef840bfe9c6ea084dfd2f9411432d",
+    "dual_source": "master.reduced_cost_context",
+    "fleet_dual": -0.068109,
+    "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-2",
+    "task_duals": {
+      "ice_site_001": 0.771582,
+      "ice_site_002": 0.304674,
+      "ice_site_003": 0.356048,
+      "ice_site_004": 0.452366,
+      "ice_site_005": 0.33391
+    }
+  }
+}

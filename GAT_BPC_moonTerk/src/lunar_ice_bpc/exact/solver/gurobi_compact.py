@@ -103,7 +103,7 @@ def estimate_gurobi_compact_size(
         len(tasks)
         + 2 * vehicle_count * max(0, sortie_slots - 1)
         + vehicle_count * sortie_slots * (12 + 5 * len(tasks))
-        + arc_var_count
+        + 2 * arc_var_count
     )
     return {
         "task_count": len(tasks),
@@ -1615,6 +1615,18 @@ def _time_arc_big_m(
     return float(data.horizon) + float(service) + float(travel)
 
 
+def _time_arc_upper_big_m(data: LunarIceData) -> float:
+    """Safe deactivation constant for the no-wait upper time equality.
+
+    The lower propagation can use the source task's latest start.  That value
+    is not safe for the upper counterpart when an inactive early-window source
+    arc points to an active late-window task.  All service and return times are
+    in ``[0, horizon]``, so the horizon safely deactivates this direction.
+    """
+
+    return float(data.horizon)
+
+
 def _time_window_feasible_path_type_cache(
     data: LunarIceData,
     path_type_cache: dict[tuple[str, str], tuple[str, ...]],
@@ -2569,26 +2581,47 @@ def solve_gurobi_compact_fixed_graph(
                 travel = float(option.travel_time_min)
                 if source == "depot" and target != "depot":
                     time_m = _time_arc_big_m(data, travel=travel)
+                    upper_time_m = _time_arc_upper_big_m(data)
                     model.addConstr(
                         service_start[vehicle, slot, target]
                         >= sortie_start[vehicle, slot] + travel - time_m * (1 - x[key]),
                         name=f"time_depot[{vehicle},{slot},{target},{path_type}]",
                     )
+                    model.addConstr(
+                        service_start[vehicle, slot, target]
+                        <= sortie_start[vehicle, slot] + travel
+                        + upper_time_m * (1 - x[key]),
+                        name=f"time_depot_no_wait[{vehicle},{slot},{target},{path_type}]",
+                    )
                 elif source != "depot" and target != "depot":
                     service = float(data.tasks[source].service_time)
                     time_m = _time_arc_big_m(data, travel=travel, service=service, source=source)
+                    upper_time_m = _time_arc_upper_big_m(data)
                     model.addConstr(
                         service_start[vehicle, slot, target]
                         >= service_start[vehicle, slot, source] + service + travel - time_m * (1 - x[key]),
                         name=f"time_task[{vehicle},{slot},{source},{target},{path_type}]",
                     )
+                    model.addConstr(
+                        service_start[vehicle, slot, target]
+                        <= service_start[vehicle, slot, source] + service + travel
+                        + upper_time_m * (1 - x[key]),
+                        name=f"time_task_no_wait[{vehicle},{slot},{source},{target},{path_type}]",
+                    )
                 elif source != "depot" and target == "depot":
                     service = float(data.tasks[source].service_time)
                     time_m = _time_arc_big_m(data, travel=travel, service=service, source=source)
+                    upper_time_m = _time_arc_upper_big_m(data)
                     model.addConstr(
                         sortie_return[vehicle, slot]
                         >= service_start[vehicle, slot, source] + service + travel - time_m * (1 - x[key]),
                         name=f"time_return[{vehicle},{slot},{source},{path_type}]",
+                    )
+                    model.addConstr(
+                        sortie_return[vehicle, slot]
+                        <= service_start[vehicle, slot, source] + service + travel
+                        + upper_time_m * (1 - x[key]),
+                        name=f"time_return_no_wait[{vehicle},{slot},{source},{path_type}]",
                     )
 
     refs = objective_references(data)
@@ -3045,6 +3078,7 @@ def solve_highs_compact_fixed_graph(
                 x_col = x[key]
                 if source == "depot" and target != "depot":
                     time_m = _time_arc_big_m(data, travel=travel)
+                    upper_time_m = _time_arc_upper_big_m(data)
                     add_ge(
                         {
                             service_start[vehicle, slot, target]: 1.0,
@@ -3053,9 +3087,18 @@ def solve_highs_compact_fixed_graph(
                         },
                         travel - time_m,
                     )
+                    add_le(
+                        {
+                            service_start[vehicle, slot, target]: 1.0,
+                            sortie_start[vehicle, slot]: -1.0,
+                            x_col: upper_time_m,
+                        },
+                        travel + upper_time_m,
+                    )
                 elif source != "depot" and target != "depot":
                     service = float(data.tasks[source].service_time)
                     time_m = _time_arc_big_m(data, travel=travel, service=service, source=source)
+                    upper_time_m = _time_arc_upper_big_m(data)
                     add_ge(
                         {
                             service_start[vehicle, slot, target]: 1.0,
@@ -3064,9 +3107,18 @@ def solve_highs_compact_fixed_graph(
                         },
                         service + travel - time_m,
                     )
+                    add_le(
+                        {
+                            service_start[vehicle, slot, target]: 1.0,
+                            service_start[vehicle, slot, source]: -1.0,
+                            x_col: upper_time_m,
+                        },
+                        service + travel + upper_time_m,
+                    )
                 elif source != "depot" and target == "depot":
                     service = float(data.tasks[source].service_time)
                     time_m = _time_arc_big_m(data, travel=travel, service=service, source=source)
+                    upper_time_m = _time_arc_upper_big_m(data)
                     add_ge(
                         {
                             sortie_return[vehicle, slot]: 1.0,
@@ -3074,6 +3126,14 @@ def solve_highs_compact_fixed_graph(
                             x_col: -time_m,
                         },
                         service + travel - time_m,
+                    )
+                    add_le(
+                        {
+                            sortie_return[vehicle, slot]: 1.0,
+                            service_start[vehicle, slot, source]: -1.0,
+                            x_col: upper_time_m,
+                        },
+                        service + travel + upper_time_m,
                     )
 
     if use_singleton_mip_start or reference_solution:
@@ -5679,6 +5739,7 @@ def solve_highs_compact_single_journey_pricing(
             x_col = x[key]
             if source == "depot" and target != "depot":
                 loose_time_m = _time_arc_big_m(data, travel=travel)
+                upper_time_m = _time_arc_upper_big_m(data)
                 time_m = _time_arc_big_m(
                     data,
                     travel=travel,
@@ -5700,9 +5761,18 @@ def solve_highs_compact_single_journey_pricing(
                     },
                     travel - time_m,
                 )
+                add_le(
+                    {
+                        service_start[vehicle, slot, target]: 1.0,
+                        sortie_start[vehicle, slot]: -1.0,
+                        x_col: upper_time_m,
+                    },
+                    travel + upper_time_m,
+                )
             elif source != "depot" and target != "depot":
                 service = float(data.tasks[source].service_time)
                 time_m = _time_arc_big_m(data, travel=travel, service=service, source=source)
+                upper_time_m = _time_arc_upper_big_m(data)
                 add_ge(
                     {
                         service_start[vehicle, slot, target]: 1.0,
@@ -5711,9 +5781,18 @@ def solve_highs_compact_single_journey_pricing(
                     },
                     service + travel - time_m,
                 )
+                add_le(
+                    {
+                        service_start[vehicle, slot, target]: 1.0,
+                        service_start[vehicle, slot, source]: -1.0,
+                        x_col: upper_time_m,
+                    },
+                    service + travel + upper_time_m,
+                )
             elif source != "depot" and target == "depot":
                 service = float(data.tasks[source].service_time)
                 time_m = _time_arc_big_m(data, travel=travel, service=service, source=source)
+                upper_time_m = _time_arc_upper_big_m(data)
                 add_ge(
                     {
                         sortie_return[vehicle, slot]: 1.0,
@@ -5721,6 +5800,14 @@ def solve_highs_compact_single_journey_pricing(
                         x_col: -time_m,
                     },
                     service + travel - time_m,
+                )
+                add_le(
+                    {
+                        sortie_return[vehicle, slot]: 1.0,
+                        service_start[vehicle, slot, source]: -1.0,
+                        x_col: upper_time_m,
+                    },
+                    service + travel + upper_time_m,
                 )
             slot_mtz_connectivity_effective = bool(
                 mtz_connectivity_effective

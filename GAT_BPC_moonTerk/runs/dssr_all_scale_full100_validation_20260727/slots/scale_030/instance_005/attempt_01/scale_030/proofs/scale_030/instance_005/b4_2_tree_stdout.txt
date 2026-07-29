@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/dssr_all_scale_full100_validation_20260727/slots/scale_030/instance_005/attempt_01/scale_030/proofs/scale_030/instance_005/b4_1_report_zh.md

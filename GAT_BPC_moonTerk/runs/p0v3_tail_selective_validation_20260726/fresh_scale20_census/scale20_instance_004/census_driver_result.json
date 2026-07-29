@@ -1,0 +1,13 @@
+{
+  "actionable_state_count": 0,
+  "candidate_count": 0,
+  "control_exact_safe": true,
+  "driver_wall_sec": 18.5628,
+  "opportunity_node_lp_exact_safe": true,
+  "returncode": 0,
+  "root_exact_safe": true,
+  "root_wall_sec": 15.851738,
+  "status": "EXACT_NONACTIONABLE",
+  "tree_result_is_exact_bpc": false,
+  "tree_wall_sec": 2.361997
+}

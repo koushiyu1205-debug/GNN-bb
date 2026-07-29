@@ -1,0 +1,207 @@
+{
+  "can_certify": false,
+  "column_catalog_hash": "9bdab2417f71697042e8fec0d362fbb6e4610360cbd2814660bd452e4ef82be5",
+  "column_catalog_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/column_catalog.json",
+  "deployable": false,
+  "development_only": true,
+  "instance_content_hash": "d16e0a0e2002ebb6",
+  "instance_id": "lunar_ice_sp50_030_005_seed202907269",
+  "manifest_hash": "6c3c15f9cb11e2bf3453dfafd1daf0a16c0771fd5f7a2353ef6b7690eac2f9fd",
+  "schema_version": "lunar_ice_bpc.p0v3_root_policy_state_snapshot_manifest.v1",
+  "snapshot_count": 32,
+  "snapshots": [
+    {
+      "active_column_count": 34,
+      "round": 1,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0001_692561eb0ae24ab9.json",
+      "state_hash": "692561eb0ae24ab919662a9756701f11aa16a00d4f5878d8ea97048d28f02905"
+    },
+    {
+      "active_column_count": 98,
+      "round": 2,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0002_40d3ab1f114ecb70.json",
+      "state_hash": "40d3ab1f114ecb709b312dc8c6047617bfe54aeb098e5e56c67f2b31c82d4558"
+    },
+    {
+      "active_column_count": 162,
+      "round": 3,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0003_3910e239f4b1484f.json",
+      "state_hash": "3910e239f4b1484ffce6e0a2e1db4671df80ad70c6580d02fb8c3cebe398a42b"
+    },
+    {
+      "active_column_count": 226,
+      "round": 4,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0004_197548640d373ae4.json",
+      "state_hash": "197548640d373ae47bbf2af917eed66c6327ca3ff981dbe5e04ff60a06e56b17"
+    },
+    {
+      "active_column_count": 290,
+      "round": 5,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0005_5ca376f3f90fd946.json",
+      "state_hash": "5ca376f3f90fd946b32a8c73916e9780c4690c1ad4769bef61313d1fca8c564a"
+    },
+    {
+      "active_column_count": 354,
+      "round": 6,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0006_d6d07f21791de350.json",
+      "state_hash": "d6d07f21791de3506d787a72cd54a10739c31000ac5ab99a776984b44bbda08c"
+    },
+    {
+      "active_column_count": 418,
+      "round": 7,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0007_2746ee92c5fbb517.json",
+      "state_hash": "2746ee92c5fbb51796242fca03f4a552b87153b5e7c3556cad97f3861f0b4ec5"
+    },
+    {
+      "active_column_count": 482,
+      "round": 8,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0008_82b506867d680e73.json",
+      "state_hash": "82b506867d680e73519b83ebdb324b82146e34e9023645567cc9fee5f96e1bb4"
+    },
+    {
+      "active_column_count": 546,
+      "round": 9,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0009_c1a1b59fa1f799dd.json",
+      "state_hash": "c1a1b59fa1f799ddb54b62c93dce7d7a5de619647aba54bf1431047e36833666"
+    },
+    {
+      "active_column_count": 610,
+      "round": 10,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0010_c6c6c34a71118535.json",
+      "state_hash": "c6c6c34a711185350355e951ecf8cd1869e8b29bcdfd190dfac9f967cc7bbce8"
+    },
+    {
+      "active_column_count": 674,
+      "round": 11,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0011_3428eb83ea917666.json",
+      "state_hash": "3428eb83ea91766685d792d22abc65ebb4c33d39705ee8bd647dfd9b215e9931"
+    },
+    {
+      "active_column_count": 738,
+      "round": 12,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0012_42fb6e579fc1f57e.json",
+      "state_hash": "42fb6e579fc1f57e0e2cd91304701b29d33986c8014405053e17c23280754801"
+    },
+    {
+      "active_column_count": 802,
+      "round": 13,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0013_14c21f6dad72ad1f.json",
+      "state_hash": "14c21f6dad72ad1f826bcf7e643f8506bce941f5536da7dccd58c497c30fa5eb"
+    },
+    {
+      "active_column_count": 866,
+      "round": 14,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0014_146526223f335641.json",
+      "state_hash": "146526223f335641324331bfc60475976938b6580e822045d02a205a879755de"
+    },
+    {
+      "active_column_count": 930,
+      "round": 15,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0015_50fbabd8cca7625f.json",
+      "state_hash": "50fbabd8cca7625fbd7f5910cbab18e4a98d3337f180891631efb09ac78a6560"
+    },
+    {
+      "active_column_count": 994,
+      "round": 16,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0016_ae779c071fbe57ee.json",
+      "state_hash": "ae779c071fbe57eea23f2e71b338746e28b705cf78ce8fccc8f234ff985800de"
+    },
+    {
+      "active_column_count": 1058,
+      "round": 17,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0017_3213909b11118f78.json",
+      "state_hash": "3213909b11118f78f7b358053ec89e1077410b341a469cef50f9322190059f1c"
+    },
+    {
+      "active_column_count": 1122,
+      "round": 18,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0018_c6ecc9e532b2dc13.json",
+      "state_hash": "c6ecc9e532b2dc13fc92dffd5906aed3eac3dcad8f35918537e775d6d9b012aa"
+    },
+    {
+      "active_column_count": 1186,
+      "round": 19,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0019_74d160e96ae6cba8.json",
+      "state_hash": "74d160e96ae6cba841ca8300feda7a31d099798e480eff9f628c71c1db18a2ed"
+    },
+    {
+      "active_column_count": 1250,
+      "round": 20,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0020_c8686353971bbe76.json",
+      "state_hash": "c8686353971bbe764424a2fb31691538965a8529bd4b12d75524d61c0f812f32"
+    },
+    {
+      "active_column_count": 1254,
+      "round": 21,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0021_ad8cf367032d11ab.json",
+      "state_hash": "ad8cf367032d11ab590ff780eab80a3f73fcf4987eb4792f399fc001c03a52f6"
+    },
+    {
+      "active_column_count": 1318,
+      "round": 22,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0022_15e8762883761756.json",
+      "state_hash": "15e876288376175676ae2ba2e9362f049f59ca4c65835afd935c660cfb4bcd5a"
+    },
+    {
+      "active_column_count": 1382,
+      "round": 23,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0023_59c3a590a1196b72.json",
+      "state_hash": "59c3a590a1196b720d3b18b3a64c7c44d97b5e5f2a6383d899a017b21bab8e9d"
+    },
+    {
+      "active_column_count": 1446,
+      "round": 24,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0024_2f17a45954979508.json",
+      "state_hash": "2f17a459549795083c1165b201d90535633d7e624602cde809083465ee92ea2c"
+    },
+    {
+      "active_column_count": 1510,
+      "round": 25,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0025_d4dce204dc0e6ee3.json",
+      "state_hash": "d4dce204dc0e6ee3b43fb61188ed0f0d0738798489eff58c72314d5d9b37af7c"
+    },
+    {
+      "active_column_count": 1574,
+      "round": 26,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0026_845c2ee90b11f7de.json",
+      "state_hash": "845c2ee90b11f7de916e2afaa324a10d51d51aaf0518bcd5e849e4ce61e2feef"
+    },
+    {
+      "active_column_count": 1638,
+      "round": 27,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0027_d0348f22eff7dfab.json",
+      "state_hash": "d0348f22eff7dfab88b852cbec535109ec28450ef13c861d894835d26b5b2984"
+    },
+    {
+      "active_column_count": 1702,
+      "round": 28,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0028_5adc87db3ed154d5.json",
+      "state_hash": "5adc87db3ed154d5862dd9e1dae5bde0b4e4fd595525c1286780592a15a186cc"
+    },
+    {
+      "active_column_count": 1766,
+      "round": 29,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0029_4316d90cccd263c7.json",
+      "state_hash": "4316d90cccd263c7f333e0aa198d9d23a0385d2524739de4b080370bca454939"
+    },
+    {
+      "active_column_count": 1830,
+      "round": 30,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0030_3485fb3571b369fe.json",
+      "state_hash": "3485fb3571b369feb2e281f20f8e2ebf8e7505e0d666dc91887e02efa3a69cb7"
+    },
+    {
+      "active_column_count": 1874,
+      "round": 31,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0031_2bb8f6f37a9461cb.json",
+      "state_hash": "2bb8f6f37a9461cb1e07f85e8fa6378baaeb227a9f2f008d90d34b0fef58e565"
+    },
+    {
+      "active_column_count": 1893,
+      "round": 32,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/expansion_scale30_instance005_work100000_twostrike_snapshots/round_snapshots/round_0032_3636f2e51b66123b.json",
+      "state_hash": "3636f2e51b66123b4a37e794cfdfb382e266c892c4083fdf76c9fa7ae9061d7d"
+    }
+  ],
+  "source_solver_binding_hash": "11ec4b56e3f871614c633617b77d16c84c48cd0e38acaa9112c47dc13e9695a9"
+}

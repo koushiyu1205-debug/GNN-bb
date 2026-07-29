@@ -15,7 +15,7 @@ import os
 import signal
 import threading
 from time import perf_counter
-from typing import Iterable, Mapping
+from typing import Callable, Iterable, Mapping
 
 from lunar_ice_bpc.exact.bpc.certificates.certificate_ledger import CertificateLedger
 from lunar_ice_bpc.exact.bpc.certificates.proof_debt_queue import ProofDebtQueue
@@ -456,9 +456,15 @@ def solve_node_pricing_with_b2b_r3(
     labeling_final_judge_enabled: bool | None = None,
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
+    labeling_final_judge_harvest_max_processed_labels: int = 0,
     return_active_columns_payload: bool = False,
     harvest_micro_batch_size: int | None = None,
     harvest_deferred_candidate_limit: int = 10000,
+    development_round_snapshot_callback: (
+        Callable[[Mapping[str, object]], None] | None
+    ) = None,
+    development_initial_final_judge_pass_strategy: str | None = None,
+    development_sparse_harvest_strikes_before_proof: int = 1,
 ) -> dict:
     """Solve one B3 branch node with the accepted B2B_R3 pricing order."""
 
@@ -485,6 +491,14 @@ def solve_node_pricing_with_b2b_r3(
     if lineage_issues:
         raise ValueError(",".join(lineage_issues))
     started_at = perf_counter()
+    required_sparse_harvest_strikes = int(
+        development_sparse_harvest_strikes_before_proof
+    )
+    if required_sparse_harvest_strikes < 1:
+        raise ValueError(
+            "development_sparse_harvest_strikes_before_proof "
+            "must be at least one"
+        )
     completion_policy = build_completion_bound_tail_policy(
         pruning_opt_in=False,
         branch_context_active=not active_context.empty,
@@ -635,6 +649,20 @@ def solve_node_pricing_with_b2b_r3(
     next_final_judge_pass_strategy = _initial_labeling_final_judge_pass_strategy(
         final_judge_pass_policy
     )
+    sparse_harvest_strike_count = 0
+    if development_initial_final_judge_pass_strategy is not None:
+        requested_initial_strategy = str(
+            development_initial_final_judge_pass_strategy
+        )
+        if requested_initial_strategy not in {
+            LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
+            LABELING_FINAL_JUDGE_PASS_PROOF_ONLY,
+        }:
+            raise ValueError(
+                "unsupported development initial final-judge pass strategy "
+                f"{requested_initial_strategy!r}"
+            )
+        next_final_judge_pass_strategy = requested_initial_strategy
     final_judge_harvest_time_cap_sec = _adaptive_final_judge_harvest_cap_sec(
         final_judge_pass_policy
     )
@@ -996,6 +1024,39 @@ def solve_node_pricing_with_b2b_r3(
             labeling_final_judge_exact_harvest_target,
             active_task_set_count=len(active_task_sets_for_judge),
         )
+        if development_round_snapshot_callback is not None:
+            development_round_snapshot_callback(
+                {
+                    "round": int(round_index),
+                    "node_id": active_node_id,
+                    "master_columns": tuple(master_columns),
+                    "master": master,
+                    "branch_context": active_context,
+                    "cut_context": active_cut_context,
+                    "cut_lineage": active_cut_lineage,
+                    "live_cut_policy_hash": str(
+                        live_cut_policy_hash or ""
+                    ),
+                    "separator_policy_version": str(
+                        separator_policy_version or ""
+                    ),
+                    "pass_policy": final_judge_pass_policy,
+                    "pass_strategy": next_final_judge_pass_strategy,
+                    "sparse_harvest_strike_count": int(
+                        sparse_harvest_strike_count
+                    ),
+                    "required_sparse_harvest_strikes": int(
+                        required_sparse_harvest_strikes
+                    ),
+                    "effective_harvest_target": int(
+                        effective_exact_harvest_target
+                    ),
+                    "max_columns_per_round": int(
+                        max_columns_per_round
+                    ),
+                    "prior_history": tuple(history),
+                }
+            )
         judge_start = perf_counter()
         judge = run_true_dual_root_final_judge(
             data,
@@ -1015,6 +1076,9 @@ def solve_node_pricing_with_b2b_r3(
             labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
             labeling_final_judge_pass_strategy=next_final_judge_pass_strategy,
             labeling_final_judge_harvest_time_cap_sec=final_judge_harvest_time_cap_sec,
+            labeling_final_judge_harvest_max_processed_labels=(
+                labeling_final_judge_harvest_max_processed_labels
+            ),
         )
         judge_wall_time = perf_counter() - judge_start
         profile_totals["final_judge_wall_time"] += judge_wall_time
@@ -1027,6 +1091,17 @@ def solve_node_pricing_with_b2b_r3(
             judge.pricing_payload,
             max_columns_per_round=max_columns_per_round,
             effective_harvest_target=effective_exact_harvest_target,
+        )
+        (
+            next_final_judge_pass_strategy,
+            sparse_harvest_strike_count,
+        ) = _apply_sparse_harvest_strike_control(
+            policy=final_judge_pass_policy,
+            current_strategy=current_final_judge_pass_strategy,
+            proposed_next_strategy=next_final_judge_pass_strategy,
+            judge_payload=judge.pricing_payload,
+            current_strike_count=sparse_harvest_strike_count,
+            required_strikes=required_sparse_harvest_strikes,
         )
         for column in judge.all_priced_columns:
             signature = column_signature_from_journey(column)
@@ -1213,11 +1288,21 @@ def solve_node_pricing_with_b2b_r3(
                 "labeling_final_judge_harvest_time_cap_sec": judge.pricing_payload.get(
                     "labeling_final_judge_harvest_time_cap_sec"
                 ),
+                "labeling_final_judge_harvest_max_processed_labels": (
+                    judge.pricing_payload.get(
+                        "labeling_final_judge_harvest_max_processed_labels"
+                    )
+                ),
                 "labeling_final_judge_harvest_pass_attempted": judge.pricing_payload.get(
                     "labeling_final_judge_harvest_pass_attempted"
                 ),
                 "labeling_final_judge_harvest_pass_wall_time": judge.pricing_payload.get(
                     "labeling_final_judge_harvest_pass_wall_time"
+                ),
+                "labeling_final_judge_harvest_pass_processed_labels": (
+                    judge.pricing_payload.get(
+                        "labeling_final_judge_harvest_pass_processed_labels"
+                    )
                 ),
                 "labeling_final_judge_harvest_pass_column_count": judge.pricing_payload.get(
                     "labeling_final_judge_harvest_pass_column_count"
@@ -5371,6 +5456,48 @@ def _next_labeling_final_judge_pass_strategy(
         if harvest_count >= target
         else LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
     )
+
+
+def _apply_sparse_harvest_strike_control(
+    *,
+    policy: str,
+    current_strategy: str,
+    proposed_next_strategy: str,
+    judge_payload: Mapping[str, object],
+    current_strike_count: int,
+    required_strikes: int,
+) -> tuple[str, int]:
+    """Apply the development-only consecutive-sparse deterministic control."""
+
+    required = int(required_strikes)
+    if required < 1:
+        raise ValueError("required sparse harvest strikes must be at least one")
+    if (
+        str(policy) != LABELING_FINAL_JUDGE_PASS_POLICY_ADAPTIVE
+        or required == 1
+    ):
+        return str(proposed_next_strategy), 0
+    proof_attempted = bool(
+        judge_payload.get(
+            "labeling_final_judge_proof_pass_attempted"
+        )
+    )
+    sparse_harvest = bool(
+        str(current_strategy)
+        == LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF
+        and not proof_attempted
+        and str(proposed_next_strategy)
+        == LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+    )
+    if not sparse_harvest:
+        return str(proposed_next_strategy), 0
+    strike_count = int(current_strike_count) + 1
+    if strike_count < required:
+        return (
+            LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
+            strike_count,
+        )
+    return str(proposed_next_strategy), strike_count
 
 
 def _labeling_final_judge_adaptive_harvest_schedule() -> tuple[tuple[int, int], ...]:

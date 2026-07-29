@@ -19,7 +19,9 @@ effectiveness; `DIAGNOSTIC` and `BENCHMARK-ONLY` require an adjacent qualifier;
 | Earlier completion of higher-science-weight tasks is the operational interpretation of the third objective term, not an ownership, race or makespan claim | Abstract, Sections 1 and 3.3 | EV003, EV028; LS08 | Implemented objective interpretation | `PASS`; no territorial or named time-sensitive framing appears |
 | Exactness is limited to the fixed logical-path solution space | Abstract, Sections 1, 3, 7, 8 | EV009; CL005 | Proof-scope boundary | `PASS` |
 | Lunar terrain, illumination, PSR, crater, steep-slope and elevation summaries are preprocessing inputs, while uncalibrated mixing coefficients are not presented as optimization-model equations | Section 3.1, Eq. (1) and adjacent scope paragraph | EV029; CL032 | Implemented generator provenance with physical-fidelity boundary | `PASS` |
-| Same-endpoint path options removed before native labeling have a retained componentwise no-worse substitute with unchanged task, cut and branch coefficients | Section 3.1; Lemmas 1 and 3 | EV029, EV031; Native option filter | Exact-safe preprocessing | `PASS`; the reduced dominance representation is explicitly connected to full node-LP closure |
+| Path options removed before proof-bearing labeling have an equal-travel-time retained substitute with unchanged task times and weakly no-worse remaining attributes | Section 3.1; Lemmas 1 and 3 | EV031, EV035--EV036 | Mathematical and implemented exact-safe preprocessing within the frozen numerical tolerance | `PASS`; unequal-time alternatives remain, and the recorded equality tolerance is part of the proof scope |
+| The frozen scale-5--30 implementation baseline validates the revised no-task-wait formulation | Abstract; Introduction contribution 3; Sections 5.2, 5.5, 6.1, 7.1, 7.4, 7.6, 8 and Appendix A | EV036--EV037 | Frozen revised-model evidence | `PASS`; 80/80 rows are exact and correct, but these rows do not replace the pending paired L0 learning control |
+| Historical SRI, state-refinement and scale-50/100 rows validate the revised no-task-wait formulation | Nowhere | EV012--EV025 versus EV035--EV037 | Forbidden without new revised-model runs | `PASS`; all historical rows retain the legacy wait-permitted qualifier |
 | The one-rover route universe, node route set and feasible fleet-schedule solution space use distinct symbols, and \(\bar S=|\mathcal T|\) is a nonrestrictive trip-slot bound | Sections 3.1--3.3 | EV029, EV031; CL032 | Formulation completeness | `PASS` |
 | Core trip-level MILP families cover depot/task flow, activation, task count and uniqueness, binary domains, elementarity, temporal propagation, resource limits, recharge and trip sequencing; they are embedded in feasible multi-trip route columns rather than omitted from the algorithm | Section 3.2, Eqs. (4a)--(7), and Section 4.3 constraint-to-label table | EV029; CL032; `gurobi_compact.py`; Native SPPRC | Implemented compact equivalent and pricing semantics | `PASS` |
 | The sole objective is normalized operating cost + normalized risk + 0.4 times normalized science-weighted completion time | Sections 1, 3, 8 | EV003, EV028; CL002, CL031; EQ-05 | Implemented/frozen | `PASS` |
@@ -38,9 +40,9 @@ effectiveness; `DIAGNOSTIC` and `BENCHMARK-ONLY` require an adjacent qualifier;
 | The complete algorithm has a conditional mathematical exactness proof covering canonical routes, master equivalence, full node-LP closure, valid cuts, exact child partitions, guidance invariance and closed-tree induction | Section 4.7, Lemmas 1--5, Theorem 1 and Eqs. (24)--(27) | EV031; CL035 | Conditional proof within fixed paths and exact arithmetic | `PASS`; incomplete states and numerical tolerances remain explicitly qualified |
 | Every delayed pricing item is registered before its true reduced cost is known and remains a proof obligation until rechecked, processed or covered by context-matched exhaustive repricing | Section 4.6.2, Eq. (23), Algorithm 2 | EV030, EV031 | Exact-safety interface | `PASS`; the \(\bar c_d=\bot\) case and prose now have the same semantics |
 | Variables/changing indices are italic and fixed labels/operators are upright | All displayed mathematics; notation register | CL034; official Elsevier style guidance | Editorial conformance rule | `PASS` |
-| The no-cut baseline closed 20 instances at each scale 5/10/20/30 | Abstract and Section 6.1 | EV014 | Frozen result | `PASS` |
-| Baseline timing values in Table 1 are frozen evidence | Section 6.1 | EV014 | Frozen result | `PASS` |
-| Formal deterministic root-only SRI-3 passed correctness but was not promoted | Abstract, Sections 6.2 and 7 | EV015--EV018 | Frozen result with decision label | `PASS` |
+| The no-task-wait root-only-SRI-3 control closed 20 instances at each scale 5/10/20/30 | Section 6.1 | EV036--EV037 | Frozen revised-model result | `PASS` |
+| Baseline timing values in Table 1 are frozen evidence | Section 6.1 | EV037 | Frozen result | `PASS` |
+| Formal deterministic root-only SRI-3 passed correctness but was not promoted under the legacy timing rule | Sections 6.2 and 7 | EV015--EV018 | Frozen predecessor-model result with decision label | `PASS` |
 | The scale-30 SRI performance gate failed | Section 6.2 | EV018 | Frozen negative result | `PASS` |
 | Exact state projection/packing had zero replay reduced-cost mismatches | Section 6.3 | EV019--EV020 | Frozen audit result | `PASS` |
 | The single timing pair is diagnostic rather than general performance evidence | Section 6.3 | EV021 | Diagnostic only | `PASS`; qualifier adjacent |
@@ -59,9 +61,9 @@ effectiveness; `DIAGNOSTIC` and `BENCHMARK-ONLY` require an adjacent qualifier;
 ## Citation-Key Audit
 
 The manuscript cites exactly the 22 locked keys:
-`C001`, `C002`, `C003`, `C008`, `C009`, `C020`, `C021`, `C022`, `C023`,
-`C025`, `C028`, `C029`, `C030`, `C041`, `C042`, `C044`, `C054`, `C055`,
-`C059`, `C060`, `C061`, and `C062`. Each is represented in the manuscript's draft
+`C001`, `C002`, `C003`, `C008`, `C009`, `C020`, `C021`, `C023`,
+`C028`, `C029`, `C030`, `C041`, `C042`, `C044`, `C054`, `C055`,
+`C059`, `C060`, `C061`, `C062`, `C063`, and `C064`. Each is represented in the manuscript's draft
 reference-key map. These references support context or method positioning, not
 project result values.
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import isfinite
 import os
 from typing import Mapping, Protocol
 
@@ -34,12 +35,14 @@ PROOF_QUEUE_POLICY_Q0 = "Q0"
 PROOF_QUEUE_POLICY_QC0 = "QC0"
 PROOF_QUEUE_POLICY_QD1 = "QD1"
 PROOF_QUEUE_POLICY_QB1 = "QB1"
+PROOF_QUEUE_POLICY_QG1 = "QG1"
 PROOF_QUEUE_POLICIES = frozenset(
     {
         PROOF_QUEUE_POLICY_Q0,
         PROOF_QUEUE_POLICY_QC0,
         PROOF_QUEUE_POLICY_QD1,
         PROOF_QUEUE_POLICY_QB1,
+        PROOF_QUEUE_POLICY_QG1,
     }
 )
 PROOF_QUEUE_EXPERIMENT_ENV = (
@@ -128,6 +131,7 @@ class BackendPricingRequest:
     branch_context: BranchContext = field(default_factory=BranchContext)
     cut_context: CutContext = field(default_factory=CutContext)
     harvest_target: int = 16
+    harvest_max_processed_labels: int = 0
     wall_time_limit_sec: float | None = None
     memory_limit_gb: float = 0.0
     negative_eps: float = 1.0e-6
@@ -137,6 +141,8 @@ class BackendPricingRequest:
     completion_bound_enabled: bool = False
     subset_dominance_enabled: bool = False
     proof_queue_policy_id: str = PROOF_QUEUE_POLICY_Q0
+    proof_queue_guidance_bucket_width: float = 0.01
+    dssr_enabled: bool = False
     cut_dual_projection_enabled: bool = True
     cut_state_enabled: bool = False
     instance_hash: str = ""
@@ -168,6 +174,18 @@ class BackendPricingRequest:
             raise ValueError(f"unsupported backend objective mode {objective_mode!r}")
         object.__setattr__(self, "objective_mode", objective_mode)
         object.__setattr__(self, "harvest_target", max(1, int(self.harvest_target)))
+        object.__setattr__(
+            self,
+            "harvest_max_processed_labels",
+            max(0, int(self.harvest_max_processed_labels)),
+        )
+        if (
+            self.mode == BACKEND_MODE_EXACT_PROOF
+            and self.harvest_max_processed_labels > 0
+        ):
+            raise ValueError(
+                "harvest processed-label budget cannot truncate exact proof"
+            )
         if self.wall_time_limit_sec is not None:
             object.__setattr__(self, "wall_time_limit_sec", max(0.0, float(self.wall_time_limit_sec)))
         object.__setattr__(self, "memory_limit_gb", max(0.0, float(self.memory_limit_gb)))
@@ -206,6 +224,26 @@ class BackendPricingRequest:
             "proof_queue_policy_id",
             proof_queue_policy_id,
         )
+        guidance_bucket_width = float(
+            self.proof_queue_guidance_bucket_width
+        )
+        if (
+            not isfinite(guidance_bucket_width)
+            or guidance_bucket_width <= 0.0
+        ):
+            raise ValueError(
+                "proof_queue_guidance_bucket_width must be finite and positive"
+            )
+        object.__setattr__(
+            self,
+            "proof_queue_guidance_bucket_width",
+            guidance_bucket_width,
+        )
+        object.__setattr__(self, "dssr_enabled", bool(self.dssr_enabled))
+        if self.dssr_enabled and mode != BACKEND_MODE_EXACT_PROOF:
+            raise ValueError(
+                "DSSR relaxation is available only for exact-proof pricing"
+            )
         if proof_queue_selector != PROOF_QUEUE_EXPERIMENT_OFF:
             object.__setattr__(
                 self,

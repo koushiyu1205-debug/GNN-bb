@@ -1,0 +1,12 @@
+{
+  "actionable_state_count": 0,
+  "control_exact_safe": false,
+  "driver_wall_sec": 0.198946,
+  "returncode": 1,
+  "root_exact_safe": false,
+  "root_wall_sec": 0.0,
+  "status": "INFRASTRUCTURE_CENSORED",
+  "stderr_tail": "split manifest service-timing policy mismatch\n",
+  "stdout_tail": "",
+  "tree_wall_sec": 0.0
+}

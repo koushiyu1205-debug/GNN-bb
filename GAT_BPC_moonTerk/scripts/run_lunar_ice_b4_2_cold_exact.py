@@ -396,12 +396,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _official_config(args: argparse.Namespace) -> dict:
+    from lunar_ice_bpc.domain.scenario import SERVICE_TIMING_POLICY_ID
+
     exact_backend = str(
         os.getenv("LUNAR_ICE_SPPRC_EXACT_BACKEND", DEFAULT_EXACT_BACKEND_ID)
     )
     native_runtime_binding = {
         "exact_backend": exact_backend,
         "engine_build_hash": spprc_engine_build_hash(exact_backend),
+        "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
         "memory_limit_gb": float(
             os.getenv("LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB", "0") or 0.0
         ),

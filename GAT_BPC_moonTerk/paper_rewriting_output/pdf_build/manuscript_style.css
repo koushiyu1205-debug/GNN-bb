@@ -1,0 +1,252 @@
+@page {
+  size: A4;
+  margin: 22mm 18mm 24mm 20mm;
+}
+
+@font-face {
+  font-family: "STIX General";
+  src: url("fonts/STIXGeneral.ttf");
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "STIX General";
+  src: url("fonts/STIXGeneralItalic.ttf");
+  font-style: italic;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "STIX General";
+  src: url("fonts/STIXGeneralBol.ttf");
+  font-style: normal;
+  font-weight: 700;
+}
+
+@font-face {
+  font-family: "STIX General";
+  src: url("fonts/STIXGeneralBolIta.ttf");
+  font-style: italic;
+  font-weight: 700;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  background: #ffffff;
+}
+
+body {
+  max-width: none;
+  margin: 0;
+  color: #171717;
+  background: #ffffff;
+  font-family: "Times New Roman", "Liberation Serif", "DejaVu Serif", serif;
+  font-size: 10.5pt;
+  line-height: 1.42;
+  text-align: justify;
+  hyphens: auto;
+  orphans: 3;
+  widows: 3;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: #111111;
+  font-family: Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+  font-weight: 600;
+  text-align: left;
+  break-after: avoid-page;
+  page-break-after: avoid;
+}
+
+h1 {
+  margin: 0 0 5mm;
+  padding-top: 1mm;
+  font-size: 16pt;
+  line-height: 1.22;
+  page-break-before: always;
+}
+
+h1:first-of-type {
+  margin-top: 18mm;
+  font-size: 20pt;
+  line-height: 1.25;
+  text-align: center;
+  page-break-before: avoid;
+}
+
+h2 {
+  margin: 6mm 0 2.4mm;
+  font-size: 13pt;
+}
+
+h3 {
+  margin: 4.5mm 0 2mm;
+  font-size: 11.2pt;
+}
+
+h4 {
+  margin: 4mm 0 1.8mm;
+  font-size: 10.5pt;
+  font-style: italic;
+}
+
+p {
+  margin: 0 0 2.3mm;
+}
+
+h1:first-of-type + h2 {
+  margin-top: 12mm;
+}
+
+strong {
+  font-weight: 700;
+}
+
+em {
+  font-style: italic;
+}
+
+a {
+  color: #174a7e;
+  text-decoration: none;
+}
+
+ol,
+ul {
+  margin: 2mm 0 3mm;
+  padding-left: 7mm;
+}
+
+li {
+  margin: 0 0 1mm;
+}
+
+blockquote {
+  margin: 3.5mm 5mm;
+  padding: 3mm 4mm;
+  border-left: 1.2mm solid #8aa2b7;
+  background: #f4f7f9;
+  color: #2b3842;
+  font-size: 9.4pt;
+  line-height: 1.35;
+  break-inside: avoid-page;
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+table {
+  width: 100%;
+  margin: 3.5mm 0 5mm;
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 8.4pt;
+  line-height: 1.28;
+  text-align: left;
+}
+
+thead {
+  display: table-header-group;
+}
+
+tr {
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+th,
+td {
+  padding: 1.5mm 1.7mm;
+  border: 0.25mm solid #aeb7be;
+  vertical-align: top;
+}
+
+th {
+  background: #e9eef2;
+  font-family: Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+  font-weight: 600;
+}
+
+tbody tr:nth-child(even) {
+  background: #f8fafb;
+}
+
+table.algorithm-table col:first-child {
+  width: 8% !important;
+}
+
+table.algorithm-table col:nth-child(2) {
+  width: 92% !important;
+}
+
+table.algorithm-table th:first-child,
+table.algorithm-table td:first-child {
+  width: 8%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+pre,
+code {
+  font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+}
+
+pre {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  break-inside: avoid-page;
+}
+
+hr {
+  margin: 5mm 0;
+  border: 0;
+  border-top: 0.3mm solid #aeb7be;
+}
+
+mjx-container {
+  color: #111111;
+}
+
+math {
+  font-family: "STIX General", "DejaVu Serif", serif;
+}
+
+mjx-container[display="true"] {
+  margin: 2.4mm 0 !important;
+  font-size: 80% !important;
+  overflow: visible;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+.math.display {
+  display: block;
+  max-width: 100%;
+}
+
+img,
+svg {
+  max-width: 100%;
+  height: auto;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+@media print {
+  a {
+    color: #111111;
+  }
+
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

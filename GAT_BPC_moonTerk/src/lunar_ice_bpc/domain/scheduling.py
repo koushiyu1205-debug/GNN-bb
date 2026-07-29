@@ -14,6 +14,7 @@ from lunar_ice_bpc.domain.scenario import (
     MEAN_WINDOW_WIDTH_CAP_BY_SCALE,
     OPERATION_MODE_SPECS,
     PATH_OPTION_POLICY_ID,
+    SERVICE_TIMING_POLICY_ID,
     RISK_SCHEMA_VERSION,
     SHADOW_CAP_BY_SCALE,
     SYNTHETIC_GENERATOR_ID,
@@ -410,6 +411,7 @@ def generate_instance(scale: int, *, seed: int, index: int = 1, config: LunarIce
             "horizon_min": HORIZON_BY_SCALE[scale],
             "time_bucket_size": config.time_bucket_size,
             "time_window_policy_id": TIME_WINDOW_POLICY_ID,
+            "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
             "operation_modes": list(OPERATION_MODE_SPECS.keys()),
             "operation_mode_mix": {mode: spec.ratio for mode, spec in OPERATION_MODE_SPECS.items()},
             "objective": {
@@ -433,6 +435,7 @@ def generate_instance(scale: int, *, seed: int, index: int = 1, config: LunarIce
             "accepted": False,
             "reason": "reference_solution_infeasible",
             "time_window_policy_id": TIME_WINDOW_POLICY_ID,
+            "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
             "risk_schema_version": RISK_SCHEMA_VERSION,
         }
         return instance
@@ -493,6 +496,7 @@ def generate_instance(scale: int, *, seed: int, index: int = 1, config: LunarIce
         "windows_meet_min_width": bool(windows_meet_min_width),
         "windows_within_effective_cap": bool(windows_within_effective_cap),
         "time_window_policy_id": TIME_WINDOW_POLICY_ID,
+        "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
         "risk_schema_version": RISK_SCHEMA_VERSION,
     }
     return instance

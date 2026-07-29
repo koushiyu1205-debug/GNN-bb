@@ -97,10 +97,128 @@ void verify_upstream_pressure_false_complete_reproduction() {
     assert(pressure.solutions.empty());
 }
 
+void verify_task_waiting_is_forbidden_but_depot_departure_may_shift() {
+    auto value = model();
+    value.structure_hash = "native_no_task_wait_structure_v1";
+    value.max_tasks_per_trip = 2;
+    value.tasks[0].service_time = 5.0;
+    value.tasks[0].ready_time = 20.0;
+    value.tasks[0].due_time = 30.0;
+    value.tasks[0].dual = 100.0;
+    value.tasks[1].service_time = 5.0;
+    value.tasks[1].ready_time = 50.0;
+    value.tasks[1].due_time = 60.0;
+    value.tasks[1].dual = 100.0;
+    for (auto& arc : value.arcs) {
+        arc.travel_time = 50.0;
+        if (arc.source == "depot" && arc.target == "a") {
+            arc.travel_time = 10.0;
+        } else if (arc.source == "a" && arc.target == "b") {
+            arc.travel_time = 5.0;
+        } else if (arc.source == "b" && arc.target == "depot") {
+            arc.travel_time = 10.0;
+        }
+    }
+    value.branch_decisions.push_back({
+        .task_a = 0,
+        .task_b = 1,
+        .task_a_exists = true,
+        .task_b_exists = true,
+        .sense = lunar_spprc::BranchSense::SameJourney,
+    });
+    lunar_spprc::SolveParams params;
+    params.exact_proof = true;
+    const auto result = lunar_spprc::solve(value, params);
+    assert(result.status == "complete");
+    assert(result.search_exhaustive);
+    assert(result.routes.empty());
+}
+
+void verify_dssr_refines_non_elementary_cut_witness_and_certifies() {
+    auto value = model();
+    value.structure_hash = "native_dssr_refinement_structure_v1";
+    value.cost_coefficient = 1.0;
+    value.risk_coefficient = 0.0;
+    value.completion_coefficient = 0.0;
+    value.tasks[0].dual = 0.0;
+    value.tasks[1].dual = 0.0;
+    value.tasks[1].due_time = 0.5;
+    value.cuts.push_back({
+        .id = "sri",
+        .kind = lunar_spprc::CutKind::SubsetRow,
+        .task_mask = {0b11U},
+        .divisor = 2,
+        .dual = 100.0,
+        .state_bit_offset = 0,
+        .state_bit_width = 2,
+        .max_overlap = 2,
+    });
+
+    lunar_spprc::SolveParams exact_params;
+    exact_params.exact_proof = true;
+    const auto elementary = lunar_spprc::solve(value, exact_params);
+    assert(elementary.status == "complete");
+    assert(elementary.search_exhaustive);
+    assert(elementary.frontier_empty);
+    assert(elementary.routes.empty());
+
+    auto dssr_params = exact_params;
+    dssr_params.dssr_enabled = true;
+    dssr_params.completion_bound_enabled = true;
+    dssr_params.subset_dominance_enabled = true;
+    const auto dssr = lunar_spprc::solve(value, dssr_params);
+    assert(dssr.status == "complete");
+    assert(dssr.search_exhaustive);
+    assert(dssr.frontier_empty);
+    assert(!dssr.labels_dropped);
+    assert(dssr.routes.empty());
+    assert(dssr.telemetry.dssr_enabled);
+    assert(dssr.telemetry.dssr_iteration_count >= 2);
+    assert(dssr.telemetry.dssr_refinement_count >= 1);
+    assert(dssr.telemetry.dssr_repeated_witness_count >= 1);
+    assert(dssr.telemetry.dssr_final_critical_task_count >= 1);
+    assert(!dssr.telemetry.dssr_elementary_witness_returned);
+    assert(dssr.telemetry.dssr_relaxation_no_negative_certificate);
+    assert(dssr.telemetry.completion_bound_evaluated_labels == 0);
+    assert(dssr.telemetry.subset_dominance_candidate_checks == 0);
+    assert(
+        std::ranges::any_of(
+            dssr.telemetry.dssr_iteration_trace,
+            [](const lunar_spprc::DssrIterationTraceRow& row) {
+                return row.negative_witness_found &&
+                       !row.witness_elementary &&
+                       row.repeated_task_count > 0;
+            }));
+}
+
+void verify_dssr_returns_only_elementary_negative_witness() {
+    auto params = lunar_spprc::SolveParams{};
+    params.exact_proof = true;
+    params.dssr_enabled = true;
+    const auto result = lunar_spprc::solve(model(), params);
+    assert(result.telemetry.dssr_enabled);
+    assert(result.telemetry.dssr_elementary_witness_returned);
+    assert(!result.telemetry.dssr_relaxation_no_negative_certificate);
+    assert(!result.routes.empty());
+    for (const auto& route : result.routes) {
+        std::vector<std::string> task_ids;
+        for (const auto& sortie : route.sorties) {
+            task_ids.insert(
+                task_ids.end(), sortie.tasks.begin(), sortie.tasks.end());
+        }
+        std::ranges::sort(task_ids);
+        assert(
+            std::ranges::adjacent_find(task_ids) == task_ids.end());
+    }
+}
+
 }  // namespace
 
 int main() {
     verify_upstream_pressure_false_complete_reproduction();
+    verify_task_waiting_is_forbidden_but_depot_departure_may_shift();
+    verify_dssr_refines_non_elementary_cut_witness_and_certifies();
+    verify_dssr_returns_only_elementary_negative_witness();
     lunar_spprc::SolveParams params;
     params.exact_proof = true;
     params.negative_epsilon = 1.0e-6;
@@ -145,6 +263,28 @@ int main() {
         previous_solutions = event.solution_count;
         previous_best = event.best_reduced_cost;
     }
+
+    auto work_limited_params = harvest_params;
+    work_limited_params.harvest_target = 1000;
+    work_limited_params.harvest_max_processed_labels = 1;
+    const auto work_limited_first =
+        lunar_spprc::solve(model(), work_limited_params);
+    const auto work_limited_second =
+        lunar_spprc::solve(model(), work_limited_params);
+    assert(work_limited_first.status == "max_phases");
+    assert(!work_limited_first.search_exhaustive);
+    assert(!work_limited_first.frontier_empty);
+    assert(!work_limited_first.labels_dropped);
+    assert(work_limited_first.telemetry.processed_labels == 1);
+    assert(
+        work_limited_second.status ==
+        work_limited_first.status);
+    assert(
+        work_limited_second.telemetry.processed_labels ==
+        work_limited_first.telemetry.processed_labels);
+    assert(
+        work_limited_second.telemetry.extended_labels ==
+        work_limited_first.telemetry.extended_labels);
 
     auto subset_cut_model = model();
     subset_cut_model.cuts.push_back({
