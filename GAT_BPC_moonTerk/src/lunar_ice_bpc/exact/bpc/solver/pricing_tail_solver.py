@@ -27,6 +27,7 @@ from lunar_ice_bpc.exact.bpc.pricing.completion_bounds import build_completion_b
 from lunar_ice_bpc.exact.bpc.pricing.backends import (
     BACKEND_MODE_EXACT_PROOF,
     BACKEND_OBJECTIVE_PHASE_ONE,
+    PRICING_LIFECYCLE_SCOPE_UNSPECIFIED,
     BackendPricingRequest,
     BackendRegistry,
 )
@@ -41,6 +42,10 @@ from lunar_ice_bpc.exact.bpc.pricing.dual_stabilization import (
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import (
     LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF,
     LABELING_FINAL_JUDGE_PASS_PROOF_ONLY,
+    SPARSE_TAIL_DEVIATION_DEFAULT_NEGATIVE_EPS,
+    SPARSE_TAIL_DEVIATION_DEFAULT_TIME_CAP_SEC,
+    SPARSE_TAIL_DEVIATION_NOOP,
+    SPARSE_TAIL_DEVIATION_TARGETS,
     run_true_dual_root_final_judge,
 )
 from lunar_ice_bpc.exact.bpc.pricing.harvest import (
@@ -440,6 +445,9 @@ def solve_node_pricing_with_b2b_r3(
     live_cut_policy_hash: str = "",
     separator_policy_version: str = "",
     node_id: str = "root",
+    pricing_lifecycle_scope: str = (
+        PRICING_LIFECYCLE_SCOPE_UNSPECIFIED
+    ),
     initial_columns: Iterable[JourneyColumn] | None = None,
     incumbent_objective: float | None = None,
     max_direct_tasks: int = 5,
@@ -463,6 +471,12 @@ def solve_node_pricing_with_b2b_r3(
     development_round_snapshot_callback: (
         Callable[[Mapping[str, object]], None] | None
     ) = None,
+    one_deviation_sparse_tail_policy: (
+        Callable[[Mapping[str, object]], object] | None
+    ) = None,
+    one_deviation_sparse_tail_time_cap_sec: float | None = (
+        SPARSE_TAIL_DEVIATION_DEFAULT_TIME_CAP_SEC
+    ),
     development_initial_final_judge_pass_strategy: str | None = None,
     development_sparse_harvest_strikes_before_proof: int = 1,
 ) -> dict:
@@ -666,6 +680,7 @@ def solve_node_pricing_with_b2b_r3(
     final_judge_harvest_time_cap_sec = _adaptive_final_judge_harvest_cap_sec(
         final_judge_pass_policy
     )
+    sparse_tail_deviation_used = False
 
     def export_active_columns() -> tuple[JourneyColumn, ...] | None:
         if not return_active_columns_payload:
@@ -721,7 +736,48 @@ def solve_node_pricing_with_b2b_r3(
             separator_policy_version=separator_policy_version,
         )
         profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
+        _accumulate_rmp_timing(profile_totals, master.rmp)
         last_master = master
+        if (
+            history
+            and bool(history[-1].get("negative_escape_triggered"))
+            and master.rmp.status == "RESTRICTED_RMP_OPTIMAL"
+        ):
+            previous_bound = _optional_finite_float(
+                history[-1].get("node_lp_bound")
+            )
+            next_bound = _optional_finite_float(
+                master.rmp.objective_bound
+            )
+            history[-1].update(
+                {
+                    "negative_escape_next_cg_round": round_index,
+                    "negative_escape_next_rmp_objective": next_bound,
+                    "negative_escape_next_rmp_objective_improvement": (
+                        None
+                        if previous_bound is None or next_bound is None
+                        else previous_bound - next_bound
+                    ),
+                    "negative_escape_next_rmp_model_assembly_wall_time_sec": (
+                        float(
+                            getattr(
+                                master.rmp,
+                                "rmp_model_assembly_wall_time_sec",
+                                0.0,
+                            )
+                        )
+                    ),
+                    "negative_escape_next_rmp_lp_solve_wall_time_sec": (
+                        float(
+                            getattr(
+                                master.rmp,
+                                "rmp_lp_solve_wall_time_sec",
+                                0.0,
+                            )
+                        )
+                    ),
+                }
+            )
         if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
             phase_one = _recover_branch_rmp_with_phase_one(
                 data,
@@ -733,6 +789,7 @@ def solve_node_pricing_with_b2b_r3(
                 cut_lineage=active_cut_lineage,
                 live_cut_policy_hash=live_cut_policy_hash,
                 separator_policy_version=separator_policy_version,
+                pricing_lifecycle_scope=pricing_lifecycle_scope,
                 max_rounds=max_rounds,
                 max_columns_per_round=max_columns_per_round,
                 negative_eps=negative_eps,
@@ -758,6 +815,9 @@ def solve_node_pricing_with_b2b_r3(
                 {
                     "round": round_index,
                     "node_id": active_node_id,
+                    "pricing_lifecycle_scope": (
+                        pricing_lifecycle_scope
+                    ),
                     "pricing_state": (
                         PricingState.CERTIFIED_NO_NEGATIVE.value
                         if phase_one.get("status") == "NODE_INFEASIBLE_CERTIFIED"
@@ -912,6 +972,7 @@ def solve_node_pricing_with_b2b_r3(
         if not exact_final_judge_first:
             _accumulate_worker_profile(profile_totals, worker.payload)
         if worker.status == PricingState.FOUND_NEGATIVE and worker.selected_columns:
+            harvest_payload = dict(worker.harvest_payload)
             added = _add_selected_to_pool_and_master(
                 pool,
                 view,
@@ -919,8 +980,8 @@ def solve_node_pricing_with_b2b_r3(
                 node_id=active_node_id,
                 branch_context=active_context,
                 cut_context=active_cut_context,
+                timing_payload=harvest_payload,
             )
-            harvest_payload = dict(worker.harvest_payload)
             harvest_payload["added_to_master_count"] = int(added)
             _accumulate_harvest_totals(harvest_totals, harvest_payload)
             added_total += added
@@ -952,6 +1013,12 @@ def solve_node_pricing_with_b2b_r3(
                         "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                         "addable_negative_count": int(harvest_payload["addable_negative_count"]),
                         "selected_count": int(harvest_payload["selected_count"]),
+                        **_batch_master_admission_round_fields(
+                            harvest_payload
+                        ),
+                        **_one_deviation_round_fields(
+                            harvest_payload
+                        ),
                         "added_to_master_count": int(added),
                         "added_column_count": int(added),
                         "branch_context_active": not active_context.empty,
@@ -979,6 +1046,7 @@ def solve_node_pricing_with_b2b_r3(
                 separator_policy_version=separator_policy_version,
             )
             profile_totals["rmp_wall_time"] += perf_counter() - rmp_start
+            _accumulate_rmp_timing(profile_totals, master.rmp)
             last_master = master
             if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
                 profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL_BEFORE_FINAL_JUDGE"
@@ -1024,39 +1092,120 @@ def solve_node_pricing_with_b2b_r3(
             labeling_final_judge_exact_harvest_target,
             active_task_set_count=len(active_task_sets_for_judge),
         )
+        sparse_tail_decision_context = {
+            "round": int(round_index),
+            "node_id": active_node_id,
+            "data": data,
+            "master_columns": tuple(master_columns),
+            "master": master,
+            "branch_context": active_context,
+            "cut_context": active_cut_context,
+            "cut_lineage": active_cut_lineage,
+            "live_cut_policy_hash": str(live_cut_policy_hash or ""),
+            "separator_policy_version": str(
+                separator_policy_version or ""
+            ),
+            "pass_policy": final_judge_pass_policy,
+            "pass_strategy": next_final_judge_pass_strategy,
+            "sparse_harvest_strike_count": int(
+                sparse_harvest_strike_count
+            ),
+            "required_sparse_harvest_strikes": int(
+                required_sparse_harvest_strikes
+            ),
+            "effective_harvest_target": int(
+                effective_exact_harvest_target or 0
+            ),
+            "max_columns_per_round": int(max_columns_per_round),
+            "sparse_tail_time_cap_sec": (
+                one_deviation_sparse_tail_time_cap_sec
+            ),
+            "prior_history": tuple(history),
+        }
+        sparse_tail_pre_harvest_hash_payload = {
+            "schema_version": (
+                "lunar_ice_bpc.sparse_tail_pre_harvest_input.v1"
+            ),
+            "round": int(round_index),
+            "node_id": active_node_id,
+            "instance_content_hash": str(
+                data.instance_content_hash
+            ),
+            "dual_context": _dual_context_payload(
+                master.reduced_cost_context
+            ),
+            "branch_context": active_context.to_payload(),
+            "cut_context_hash": (
+                active_cut_context.active_cut_context_hash
+            ),
+            "cut_lineage_hash": (
+                active_cut_lineage.cut_lineage_hash
+            ),
+            "active_task_sets": sorted(
+                sorted(str(task_id) for task_id in task_set)
+                for task_set in active_task_sets_for_judge
+            ),
+            "pass_strategy": next_final_judge_pass_strategy,
+            "effective_harvest_target": int(
+                effective_exact_harvest_target or 0
+            ),
+        }
+        sparse_tail_pre_harvest_input_hash = stable_payload_hash(
+            sparse_tail_pre_harvest_hash_payload
+        )
+        sparse_tail_decision_context[
+            "one_deviation_sparse_tail_pre_harvest_input_hash"
+        ] = sparse_tail_pre_harvest_input_hash
+        # Retain the old callback field for development snapshot consumers;
+        # deployable GAT binding uses the post-harvest v2 hash below.
+        sparse_tail_decision_context[
+            "one_deviation_sparse_tail_input_hash"
+        ] = sparse_tail_pre_harvest_input_hash
         if development_round_snapshot_callback is not None:
             development_round_snapshot_callback(
+                sparse_tail_decision_context
+            )
+
+        sparse_tail_decision_holder: dict[str, object] = {}
+
+        def resolve_sparse_tail_after_empty_harvest(
+            post_harvest_context: Mapping[str, object],
+        ) -> object:
+            normalized_post_harvest = dict(post_harvest_context)
+            input_hash = stable_payload_hash(
                 {
-                    "round": int(round_index),
-                    "node_id": active_node_id,
-                    "master_columns": tuple(master_columns),
-                    "master": master,
-                    "branch_context": active_context,
-                    "cut_context": active_cut_context,
-                    "cut_lineage": active_cut_lineage,
-                    "live_cut_policy_hash": str(
-                        live_cut_policy_hash or ""
+                    "schema_version": (
+                        "lunar_ice_bpc.sparse_tail_decision_input.v2"
                     ),
-                    "separator_policy_version": str(
-                        separator_policy_version or ""
+                    "pre_harvest": (
+                        sparse_tail_pre_harvest_hash_payload
                     ),
-                    "pass_policy": final_judge_pass_policy,
-                    "pass_strategy": next_final_judge_pass_strategy,
-                    "sparse_harvest_strike_count": int(
-                        sparse_harvest_strike_count
-                    ),
-                    "required_sparse_harvest_strikes": int(
-                        required_sparse_harvest_strikes
-                    ),
-                    "effective_harvest_target": int(
-                        effective_exact_harvest_target
-                    ),
-                    "max_columns_per_round": int(
-                        max_columns_per_round
-                    ),
-                    "prior_history": tuple(history),
+                    "post_harvest": normalized_post_harvest,
                 }
             )
+            policy_context = {
+                **sparse_tail_decision_context,
+                "post_harvest": normalized_post_harvest,
+                "one_deviation_sparse_tail_input_hash": input_hash,
+                "one_deviation_sparse_tail_decision_timing": (
+                    "after_empty_harvest_before_sparse_pass"
+                ),
+            }
+            decision = _resolve_sparse_tail_deviation_decision(
+                policy=one_deviation_sparse_tail_policy,
+                context=policy_context,
+                expected_input_hash=input_hash,
+                node_id=active_node_id,
+                already_used=sparse_tail_deviation_used,
+            )
+            sparse_tail_decision_holder.update(decision)
+            return decision["effective_action"]
+
+        post_harvest_resolver = (
+            resolve_sparse_tail_after_empty_harvest
+            if one_deviation_sparse_tail_policy is not None
+            else None
+        )
         judge_start = perf_counter()
         judge = run_true_dual_root_final_judge(
             data,
@@ -1070,6 +1219,7 @@ def solve_node_pricing_with_b2b_r3(
             column_pool=pool,
             master_view=view,
             node_id=active_node_id,
+            pricing_lifecycle_scope=pricing_lifecycle_scope,
             active_task_sets=active_task_sets_for_judge,
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
@@ -1079,11 +1229,77 @@ def solve_node_pricing_with_b2b_r3(
             labeling_final_judge_harvest_max_processed_labels=(
                 labeling_final_judge_harvest_max_processed_labels
             ),
+            one_deviation_sparse_tail_action=(
+                SPARSE_TAIL_DEVIATION_NOOP
+            ),
+            one_deviation_sparse_tail_negative_eps=(
+                SPARSE_TAIL_DEVIATION_DEFAULT_NEGATIVE_EPS
+            ),
+            one_deviation_sparse_tail_time_cap_sec=(
+                one_deviation_sparse_tail_time_cap_sec
+            ),
+            one_deviation_sparse_tail_action_resolver=(
+                post_harvest_resolver
+            ),
         )
         judge_wall_time = perf_counter() - judge_start
+        remaining_after_candidate_generation = _remaining_wall_time_limit(
+            wall_time_limit_sec,
+            started_at=started_at,
+        )
         profile_totals["final_judge_wall_time"] += judge_wall_time
         profile_totals["final_judge_call_count_profiled"] += 1
         final_judge_call_count += 1
+        if sparse_tail_decision_holder:
+            sparse_tail_decision = dict(
+                sparse_tail_decision_holder
+            )
+        else:
+            sparse_tail_decision = _resolve_sparse_tail_deviation_decision(
+                policy=None,
+                context={},
+                expected_input_hash=(
+                    sparse_tail_pre_harvest_input_hash
+                ),
+                node_id=active_node_id,
+                already_used=False,
+            )
+            sparse_tail_decision["policy_present"] = bool(
+                one_deviation_sparse_tail_policy is not None
+            )
+            if one_deviation_sparse_tail_policy is not None:
+                if sparse_tail_deviation_used:
+                    reason = "one_deviation_already_used"
+                elif str(active_node_id) not in {"root", "node_000"}:
+                    reason = "non_root_node"
+                elif next_final_judge_pass_strategy == (
+                    LABELING_FINAL_JUDGE_PASS_PROOF_ONLY
+                ):
+                    reason = "proof_only_policy_not_invoked"
+                else:
+                    reason = "harvest_found_true_negative"
+                sparse_tail_decision.update(
+                    {
+                        "decision_reason": reason,
+                        "fallback_to_noop": bool(
+                            reason
+                            in {
+                                "one_deviation_already_used",
+                                "non_root_node",
+                                "proof_only_policy_not_invoked",
+                            }
+                        ),
+                    }
+                )
+        judge.pricing_payload.update(
+            _sparse_tail_policy_payload(sparse_tail_decision)
+        )
+        if bool(
+            judge.pricing_payload.get(
+                "one_deviation_sparse_tail_attempted"
+            )
+        ):
+            sparse_tail_deviation_used = True
         last_judge_payload = judge.pricing_payload
         current_final_judge_pass_strategy = next_final_judge_pass_strategy
         next_final_judge_pass_strategy = _next_labeling_final_judge_pass_strategy(
@@ -1142,14 +1358,23 @@ def solve_node_pricing_with_b2b_r3(
             source_phase="b3_node_post_final_judge_addability_harvest",
             guidance_data=data,
             guidance_duals=master.rmp.duals,
-            guidance_wall_time_limit_sec=remaining_for_judge,
+            guidance_wall_time_limit_sec=(
+                remaining_after_candidate_generation
+            ),
+            guidance_memory_limit_gb=max(
+                0.0,
+                float(
+                    os.getenv(
+                        "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB", "0"
+                    )
+                    or 0.0
+                ),
+            ),
             guidance_rmp_iteration_id=(
                 f"b3:{active_node_id}:{round_index}:post_final_judge"
             ),
             guidance_cut_lineage_hash=(
-                ""
-                if cut_lineage is None
-                else cut_lineage.cut_lineage_hash
+                active_cut_lineage.cut_lineage_hash
             ),
             guidance_live_cut_policy_hash=str(
                 live_cut_policy_hash or ""
@@ -1159,7 +1384,127 @@ def solve_node_pricing_with_b2b_r3(
             ),
             deferred_buffer=deferred_harvest_buffer,
             micro_batch_size=harvest_micro_batch_size,
+            one_deviation_memory_adverse_event=(
+                _one_deviation_memory_adverse_event(
+                    judge.pricing_payload
+                )
+            ),
+            counterfactual_state=(
+                _one_deviation_counterfactual_state_payload(
+                    judge_payload=judge.pricing_payload,
+                    cache=cache,
+                    worker_pricer_kind=worker_pricer_kind,
+                )
+            ),
         )
+        harvest_payload["full_audited_route_opportunity"] = (
+            _record_full_audited_route_opportunity(
+                data=data,
+                judge=judge,
+                actual_harvest_payload=harvest_payload,
+                pool=pool,
+                view=view,
+                duals=master.rmp.duals,
+                node_id=active_node_id,
+                negative_eps=negative_eps,
+                max_selected=max_columns_per_round,
+                active_task_sets={
+                    frozenset(column.task_set)
+                    for column in master_columns
+                },
+                branch_context=active_context,
+                cut_context=active_cut_context,
+                wall_time_limit_sec=(
+                    remaining_after_candidate_generation
+                ),
+                memory_limit_gb=max(
+                    0.0,
+                    float(
+                        os.getenv(
+                            "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB", "0"
+                        )
+                        or 0.0
+                    ),
+                ),
+                rmp_iteration_id=(
+                    f"b3:{active_node_id}:{round_index}:"
+                    "post_final_judge"
+                ),
+                cut_lineage_hash=(
+                    active_cut_lineage.cut_lineage_hash
+                ),
+                live_cut_policy_hash=str(
+                    live_cut_policy_hash or ""
+                ),
+                separator_policy_version=str(
+                    separator_policy_version or ""
+                ),
+                counterfactual_state=(
+                    _one_deviation_counterfactual_state_payload(
+                        judge_payload=judge.pricing_payload,
+                        cache=cache,
+                        worker_pricer_kind=worker_pricer_kind,
+                    )
+                ),
+            )
+        )
+        one_deviation_result = _apply_full_audited_one_deviation(
+            data=data,
+            judge=judge,
+            preliminary_harvest_payload=harvest_payload,
+            pool=pool,
+            view=view,
+            duals=master.rmp.duals,
+            node_id=active_node_id,
+            negative_eps=negative_eps,
+            max_selected=max_columns_per_round,
+            active_task_sets={
+                frozenset(column.task_set)
+                for column in master_columns
+            },
+            branch_context=active_context,
+            cut_context=active_cut_context,
+            profiling=profiling,
+            wall_time_limit_sec=(
+                remaining_after_candidate_generation
+            ),
+            memory_limit_gb=max(
+                0.0,
+                float(
+                    os.getenv(
+                        "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB", "0"
+                    )
+                    or 0.0
+                ),
+            ),
+            rmp_iteration_id=(
+                f"b3:{active_node_id}:{round_index}:"
+                "post_final_judge"
+            ),
+            cut_lineage_hash=(
+                active_cut_lineage.cut_lineage_hash
+            ),
+            live_cut_policy_hash=str(
+                live_cut_policy_hash or ""
+            ),
+            separator_policy_version=str(
+                separator_policy_version or ""
+            ),
+            memory_adverse_event=(
+                _one_deviation_memory_adverse_event(
+                    judge.pricing_payload
+                )
+            ),
+            counterfactual_state=(
+                _one_deviation_counterfactual_state_payload(
+                    judge_payload=judge.pricing_payload,
+                    cache=cache,
+                    worker_pricer_kind=worker_pricer_kind,
+                )
+            ),
+        )
+        if one_deviation_result is not None:
+            selected, harvest_payload = one_deviation_result
         added = _add_selected_to_pool_and_master(
             pool,
             view,
@@ -1167,6 +1512,7 @@ def solve_node_pricing_with_b2b_r3(
             node_id=active_node_id,
             branch_context=active_context,
             cut_context=active_cut_context,
+            timing_payload=harvest_payload,
         )
         harvest_payload["added_to_master_count"] = int(added)
         _accumulate_harvest_totals(harvest_totals, harvest_payload)
@@ -1197,6 +1543,9 @@ def solve_node_pricing_with_b2b_r3(
         history.append(
             {
                 "round": round_index,
+                "round_elapsed_wall_time_sec": round(
+                    perf_counter() - started_at, 6
+                ),
                 "node_id": active_node_id,
                 "node_lp_bound": master.rmp.objective_bound,
                 "dual_context": _dual_context_payload(master.reduced_cost_context),
@@ -1207,6 +1556,12 @@ def solve_node_pricing_with_b2b_r3(
                 "exact_final_judge_first_enabled": bool(exact_final_judge_first),
                 **_worker_round_diagnostic_fields(worker.payload),
                 "final_judge_called": True,
+                **_negative_escape_round_fields(
+                    judge.pricing_payload
+                ),
+                **_sparse_tail_deviation_round_fields(
+                    judge.pricing_payload
+                ),
                 **_harvest_discovery_round_fields(
                     judge.pricing_payload
                 ),
@@ -1220,6 +1575,12 @@ def solve_node_pricing_with_b2b_r3(
                 "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                 "addable_negative_count": int(harvest_payload["addable_negative_count"]),
                 "selected_count": int(harvest_payload["selected_count"]),
+                **_batch_master_admission_round_fields(
+                    harvest_payload
+                ),
+                **_one_deviation_round_fields(
+                    harvest_payload
+                ),
                 "micro_batch_enabled": bool(
                     harvest_payload.get("micro_batch_enabled")
                 ),
@@ -2030,7 +2391,55 @@ def _solve_b2b_seeded_tail_cg(
                 f"b2_seeded:root:{round_index}:post_final_judge"
             ),
         )
-        added = _add_selected_to_pool_and_master(pool, view, selected)
+        harvest_payload["full_audited_route_opportunity"] = (
+            _record_full_audited_route_opportunity(
+                data=data,
+                judge=judge,
+                actual_harvest_payload=harvest_payload,
+                pool=pool,
+                view=view,
+                duals=master.rmp.duals,
+                node_id="root",
+                negative_eps=negative_eps,
+                max_selected=max_columns_per_round,
+                active_task_sets={
+                    frozenset(column.task_set)
+                    for column in master_columns
+                },
+                rmp_iteration_id=(
+                    f"b2_seeded:root:{round_index}:"
+                    "post_final_judge"
+                ),
+            )
+        )
+        one_deviation_result = _apply_full_audited_one_deviation(
+            data=data,
+            judge=judge,
+            preliminary_harvest_payload=harvest_payload,
+            pool=pool,
+            view=view,
+            duals=master.rmp.duals,
+            node_id="root",
+            negative_eps=negative_eps,
+            max_selected=max_columns_per_round,
+            active_task_sets={
+                frozenset(column.task_set)
+                for column in master_columns
+            },
+            profiling=profiling,
+            rmp_iteration_id=(
+                f"b2_seeded:root:{round_index}:"
+                "post_final_judge"
+            ),
+        )
+        if one_deviation_result is not None:
+            selected, harvest_payload = one_deviation_result
+        added = _add_selected_to_pool_and_master(
+            pool,
+            view,
+            selected,
+            timing_payload=harvest_payload,
+        )
         harvest_payload["added_to_master_count"] = int(added)
         _accumulate_harvest_totals(harvest_totals, harvest_payload)
         added_total += added
@@ -2055,6 +2464,12 @@ def _solve_b2b_seeded_tail_cg(
                 "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                 "addable_negative_count": int(harvest_payload["addable_negative_count"]),
                 "selected_count": int(harvest_payload["selected_count"]),
+                **_batch_master_admission_round_fields(
+                    harvest_payload
+                ),
+                **_one_deviation_round_fields(
+                    harvest_payload
+                ),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
                 "duplicate_only_audit_status": None if duplicate_audit is None else duplicate_audit.get("status"),
@@ -2296,6 +2711,7 @@ def _solve_b2b_r2_worker_before_final_judge(
         )
         rmp_wall_time = perf_counter() - rmp_start
         profile_totals["rmp_wall_time"] += rmp_wall_time
+        _accumulate_rmp_timing(profile_totals, master.rmp)
         last_master = master
         if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
             profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL"
@@ -2376,8 +2792,13 @@ def _solve_b2b_r2_worker_before_final_judge(
         if not exact_final_judge_first:
             _accumulate_worker_profile(profile_totals, worker.payload)
         if worker.status == PricingState.FOUND_NEGATIVE and worker.selected_columns:
-            added = _add_selected_to_pool_and_master(pool, view, worker.selected_columns)
             harvest_payload = dict(worker.harvest_payload)
+            added = _add_selected_to_pool_and_master(
+                pool,
+                view,
+                worker.selected_columns,
+                timing_payload=harvest_payload,
+            )
             harvest_payload["added_to_master_count"] = int(added)
             _accumulate_harvest_totals(harvest_totals, harvest_payload)
             added_total += added
@@ -2407,6 +2828,12 @@ def _solve_b2b_r2_worker_before_final_judge(
                             "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                             "addable_negative_count": int(harvest_payload["addable_negative_count"]),
                             "selected_count": int(harvest_payload["selected_count"]),
+                            **_batch_master_admission_round_fields(
+                                harvest_payload
+                            ),
+                            **_one_deviation_round_fields(
+                                harvest_payload
+                            ),
                             "added_to_master_count": int(added),
                             "added_column_count": int(added),
                             "completion_bound_pruning_scope": "worker_candidate_search_only",
@@ -2425,6 +2852,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                 )
                 rmp_wall_time = perf_counter() - rmp_start
                 profile_totals["rmp_wall_time"] += rmp_wall_time
+                _accumulate_rmp_timing(profile_totals, master.rmp)
                 last_master = master
                 if master.rmp.status != "RESTRICTED_RMP_OPTIMAL":
                     profile_totals["exit_reason"] = "RMP_NOT_OPTIMAL_AFTER_WORKER_PROGRESS"
@@ -2633,6 +3061,10 @@ def _solve_b2b_r2_worker_before_final_judge(
             harvest_discovery_metadata=oracle_harvest_metadata,
         )
         judge_wall_time = perf_counter() - judge_start
+        remaining_after_candidate_generation = _remaining_wall_time_limit(
+            wall_time_limit_sec,
+            started_at=started_at,
+        )
         if (
             development_oracle_l1_adaptive_penalty_enabled
             and sidecar_penalty > 0.0
@@ -2715,12 +3147,66 @@ def _solve_b2b_r2_worker_before_final_judge(
             source_phase="b2b_r2_post_final_judge_addability_harvest",
             guidance_data=data,
             guidance_duals=master.rmp.duals,
-            guidance_wall_time_limit_sec=remaining_for_judge,
+            guidance_wall_time_limit_sec=(
+                remaining_after_candidate_generation
+            ),
             guidance_rmp_iteration_id=(
                 f"b2b_r2:root:{round_index}:post_final_judge"
             ),
         )
-        added = _add_selected_to_pool_and_master(pool, view, selected)
+        harvest_payload["full_audited_route_opportunity"] = (
+            _record_full_audited_route_opportunity(
+                data=data,
+                judge=judge,
+                actual_harvest_payload=harvest_payload,
+                pool=pool,
+                view=view,
+                duals=master.rmp.duals,
+                node_id="root",
+                negative_eps=negative_eps,
+                max_selected=round_max_columns_per_round,
+                active_task_sets={
+                    frozenset(column.task_set)
+                    for column in master_columns
+                },
+                wall_time_limit_sec=(
+                    remaining_after_candidate_generation
+                ),
+                rmp_iteration_id=(
+                    f"b2b_r2:root:{round_index}:post_final_judge"
+                ),
+            )
+        )
+        one_deviation_result = _apply_full_audited_one_deviation(
+            data=data,
+            judge=judge,
+            preliminary_harvest_payload=harvest_payload,
+            pool=pool,
+            view=view,
+            duals=master.rmp.duals,
+            node_id="root",
+            negative_eps=negative_eps,
+            max_selected=round_max_columns_per_round,
+            active_task_sets={
+                frozenset(column.task_set)
+                for column in master_columns
+            },
+            profiling=profiling,
+            wall_time_limit_sec=(
+                remaining_after_candidate_generation
+            ),
+            rmp_iteration_id=(
+                f"b2b_r2:root:{round_index}:post_final_judge"
+            ),
+        )
+        if one_deviation_result is not None:
+            selected, harvest_payload = one_deviation_result
+        added = _add_selected_to_pool_and_master(
+            pool,
+            view,
+            selected,
+            timing_payload=harvest_payload,
+        )
         harvest_payload["added_to_master_count"] = int(added)
         _accumulate_harvest_totals(harvest_totals, harvest_payload)
         added_total += added
@@ -2776,6 +3262,12 @@ def _solve_b2b_r2_worker_before_final_judge(
                 "candidate_negative_count": int(harvest_payload["candidate_negative_count"]),
                 "addable_negative_count": int(harvest_payload["addable_negative_count"]),
                 "selected_count": int(harvest_payload["selected_count"]),
+                **_batch_master_admission_round_fields(
+                    harvest_payload
+                ),
+                **_one_deviation_round_fields(
+                    harvest_payload
+                ),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
                 **_dual_center_trajectory_collection_fields(
@@ -3562,6 +4054,408 @@ def _harvest_discovery_round_fields(payload: dict) -> dict:
         ),
         "harvest_discovery_stabilized_rmp_center_l1_distance": (
             metadata.get("stabilized_rmp_center_l1_distance")
+        ),
+    }
+
+
+def _negative_escape_round_fields(payload: Mapping[str, object]) -> dict:
+    """Persist the pre-registered escape/diversity telemetry per CG round."""
+
+    keys = (
+        "negative_escape_triggered",
+        "negative_escape_termination_reason",
+        "can_certify_no_negative",
+        "raw_negative_count",
+        "raw_unique_negative_count",
+        "native_raw_unique_negative_count",
+        "audited_raw_unique_negative_count",
+        "raw_distinct_negative_task_set_count",
+        "selected_diverse_negative_count",
+        "harvest_selected_new_task_set_count",
+        "harvest_selected_support_changing_count",
+        "harvest_selected_strong_replacement_count",
+        "harvest_selected_weak_replacement_count",
+        "harvest_avg_pairwise_jaccard",
+        "harvest_max_pairwise_jaccard",
+        "harvest_max_pairwise_containment",
+        "harvest_selected_true_rc_distribution",
+        "true_rc_audit_wall_time_sec",
+        "diversity_selection_wall_time_sec",
+        "negative_escape_zero_addable_fallback_used",
+    )
+    return {
+        key: payload.get(key)
+        for key in keys
+        if key in payload
+    }
+
+
+def _resolve_sparse_tail_deviation_decision(
+    *,
+    policy: Callable[[Mapping[str, object]], object] | None,
+    context: Mapping[str, object],
+    expected_input_hash: str,
+    node_id: str,
+    already_used: bool,
+) -> dict[str, object]:
+    """Resolve one exact-side action hint and fail safely to frozen V5.
+
+    The policy runs outside the exact pricing implementation.  This adapter
+    accepts only the two pre-registered sparse actions, validates GAT binding
+    metadata, and turns every invalid, OOD, or exceptional decision into a
+    no-op.  It never grants certificate authority to the hint.
+    """
+
+    base: dict[str, object] = {
+        "schema_version": (
+            "lunar_ice_bpc.sparse_tail_deviation_decision.v1"
+        ),
+        "policy_present": policy is not None,
+        "policy_kind": "none",
+        "requested_action": SPARSE_TAIL_DEVIATION_NOOP,
+        "effective_action": SPARSE_TAIL_DEVIATION_NOOP,
+        "decision_reason": "policy_not_configured",
+        "fallback_to_noop": False,
+        "runtime_error": "",
+        "ood": False,
+        "hash_valid": True,
+        "expected_input_hash": str(expected_input_hash),
+        "input_hash": "",
+        "manifest_sha256": "",
+        "checkpoint_sha256": "",
+        "exact_engine_hash": "",
+        "exact_runtime_binding_hash": "",
+        "request_config_hash": "",
+        "inference_wall_ms": None,
+        "feature_hash": "",
+        "model_scores": {},
+        "certificate_authority": "none",
+        "next_round_policy": "restore_frozen_v5",
+    }
+    if policy is None:
+        return base
+    if str(node_id) not in {"root", "node_000"}:
+        base.update(
+            {
+                "decision_reason": "non_root_node",
+                "fallback_to_noop": True,
+            }
+        )
+        return base
+    if already_used:
+        base.update(
+            {
+                "decision_reason": "one_deviation_already_used",
+                "fallback_to_noop": True,
+            }
+        )
+        return base
+
+    started = perf_counter()
+    try:
+        raw = policy(context)
+    except Exception as exc:  # fail-safe boundary around development/GAT code
+        base.update(
+            {
+                "decision_reason": "policy_exception",
+                "fallback_to_noop": True,
+                "runtime_error": f"{type(exc).__name__}: {exc}",
+                "inference_wall_ms": round(
+                    (perf_counter() - started) * 1000.0,
+                    6,
+                ),
+            }
+        )
+        return base
+
+    measured_wall_ms = round(
+        (perf_counter() - started) * 1000.0,
+        6,
+    )
+    if isinstance(raw, str):
+        row: Mapping[str, object] = {
+            "action": raw,
+            "policy_kind": "development_fixed",
+            "decision_reason": "development_fixed_action",
+        }
+    elif isinstance(raw, Mapping):
+        row = raw
+    else:
+        base.update(
+            {
+                "decision_reason": "unsupported_policy_result_type",
+                "fallback_to_noop": True,
+                "runtime_error": type(raw).__name__,
+                "inference_wall_ms": measured_wall_ms,
+            }
+        )
+        return base
+
+    requested_action = str(
+        row.get("action") or SPARSE_TAIL_DEVIATION_NOOP
+    ).upper()
+    policy_kind = str(row.get("policy_kind") or "development_fixed")
+    input_hash = str(row.get("input_hash") or "")
+    manifest_sha256 = str(row.get("manifest_sha256") or "")
+    checkpoint_sha256 = str(row.get("checkpoint_sha256") or "")
+    ood = bool(row.get("ood"))
+    explicit_fallback = bool(row.get("fallback_to_noop"))
+    hash_valid = bool(
+        row.get("hash_valid")
+        if row.get("hash_valid") is not None
+        else True
+    )
+    supplied_inference_ms = row.get("inference_wall_ms")
+    inference_wall_ms = measured_wall_ms
+    if supplied_inference_ms is not None:
+        try:
+            supplied = float(supplied_inference_ms)
+            if isfinite(supplied) and supplied >= 0.0:
+                inference_wall_ms = supplied
+        except (TypeError, ValueError):
+            pass
+
+    base.update(
+        {
+            "policy_kind": policy_kind,
+            "requested_action": requested_action,
+            "decision_reason": str(
+                row.get("decision_reason") or "policy_decision"
+            ),
+            "fallback_to_noop": explicit_fallback,
+            "runtime_error": str(row.get("runtime_error") or ""),
+            "ood": ood,
+            "hash_valid": hash_valid,
+            "input_hash": input_hash,
+            "manifest_sha256": manifest_sha256,
+            "checkpoint_sha256": checkpoint_sha256,
+            "exact_engine_hash": str(
+                row.get("exact_engine_hash") or ""
+            ),
+            "exact_runtime_binding_hash": str(
+                row.get("exact_runtime_binding_hash") or ""
+            ),
+            "request_config_hash": str(
+                row.get("request_config_hash") or ""
+            ),
+            "inference_wall_ms": inference_wall_ms,
+            "feature_hash": str(row.get("feature_hash") or ""),
+            "model_scores": dict(row.get("model_scores") or {}),
+        }
+    )
+
+    reject_reason = ""
+    allowed_actions = {
+        SPARSE_TAIL_DEVIATION_NOOP,
+        *SPARSE_TAIL_DEVIATION_TARGETS,
+    }
+    if requested_action not in allowed_actions:
+        reject_reason = "unsupported_action"
+    elif ood:
+        reject_reason = "context_ood"
+    elif not hash_valid:
+        reject_reason = "policy_hash_invalid"
+    elif input_hash and input_hash != str(expected_input_hash):
+        reject_reason = "input_hash_mismatch"
+    elif explicit_fallback:
+        reject_reason = str(
+            row.get("decision_reason")
+            or "policy_requested_noop_fallback"
+        )
+    elif policy_kind == "gat" and requested_action != SPARSE_TAIL_DEVIATION_NOOP:
+        if input_hash != str(expected_input_hash):
+            reject_reason = "gat_input_hash_missing_or_mismatch"
+        elif not _looks_like_sha256(manifest_sha256):
+            reject_reason = "gat_manifest_hash_invalid"
+        elif not _looks_like_sha256(checkpoint_sha256):
+            reject_reason = "gat_checkpoint_hash_invalid"
+
+    if reject_reason:
+        base.update(
+            {
+                "effective_action": SPARSE_TAIL_DEVIATION_NOOP,
+                "decision_reason": reject_reason,
+                "fallback_to_noop": True,
+            }
+        )
+    else:
+        base["effective_action"] = requested_action
+    return base
+
+
+def _looks_like_sha256(value: str) -> bool:
+    normalized = str(value).lower()
+    return len(normalized) == 64 and all(
+        character in "0123456789abcdef"
+        for character in normalized
+    )
+
+
+def _sparse_tail_policy_payload(
+    decision: Mapping[str, object],
+) -> dict[str, object]:
+    return {
+        "one_deviation_sparse_tail_policy_present": bool(
+            decision.get("policy_present")
+        ),
+        "one_deviation_sparse_tail_policy_kind": str(
+            decision.get("policy_kind") or ""
+        ),
+        "one_deviation_sparse_tail_policy_requested_action": str(
+            decision.get("requested_action") or ""
+        ),
+        "one_deviation_sparse_tail_policy_effective_action": str(
+            decision.get("effective_action") or ""
+        ),
+        "one_deviation_sparse_tail_policy_decision_reason": str(
+            decision.get("decision_reason") or ""
+        ),
+        "one_deviation_sparse_tail_policy_fallback_to_noop": bool(
+            decision.get("fallback_to_noop")
+        ),
+        "one_deviation_sparse_tail_policy_runtime_error": str(
+            decision.get("runtime_error") or ""
+        ),
+        "one_deviation_sparse_tail_policy_ood": bool(
+            decision.get("ood")
+        ),
+        "one_deviation_sparse_tail_policy_hash_valid": bool(
+            decision.get("hash_valid")
+        ),
+        "one_deviation_sparse_tail_policy_expected_input_hash": str(
+            decision.get("expected_input_hash") or ""
+        ),
+        "one_deviation_sparse_tail_policy_input_hash": str(
+            decision.get("input_hash") or ""
+        ),
+        "one_deviation_sparse_tail_policy_manifest_sha256": str(
+            decision.get("manifest_sha256") or ""
+        ),
+        "one_deviation_sparse_tail_policy_checkpoint_sha256": str(
+            decision.get("checkpoint_sha256") or ""
+        ),
+        "one_deviation_sparse_tail_policy_exact_engine_hash": str(
+            decision.get("exact_engine_hash") or ""
+        ),
+        "one_deviation_sparse_tail_policy_exact_runtime_binding_hash": str(
+            decision.get("exact_runtime_binding_hash") or ""
+        ),
+        "one_deviation_sparse_tail_policy_request_config_hash": str(
+            decision.get("request_config_hash") or ""
+        ),
+        "one_deviation_sparse_tail_policy_inference_wall_ms": (
+            decision.get("inference_wall_ms")
+        ),
+        "one_deviation_sparse_tail_policy_feature_hash": str(
+            decision.get("feature_hash") or ""
+        ),
+        "one_deviation_sparse_tail_policy_model_scores": dict(
+            decision.get("model_scores") or {}
+        ),
+        "one_deviation_sparse_tail_policy_certificate_authority": "none",
+        "one_deviation_sparse_tail_policy_next_round": (
+            "restore_frozen_v5"
+        ),
+    }
+
+
+def _sparse_tail_deviation_round_fields(
+    payload: Mapping[str, object],
+) -> dict[str, object]:
+    keys = tuple(
+        key
+        for key in payload
+        if str(key).startswith("one_deviation_sparse_tail_")
+    )
+    return {key: payload.get(key) for key in keys}
+
+
+def _batch_master_admission_round_fields(
+    payload: Mapping[str, object],
+) -> dict:
+    """Persist admission profiling beside the pricing/diversity telemetry."""
+
+    keys = (
+        "batch_master_admission_enabled",
+        "batch_master_admission_input_count",
+        "batch_master_admission_branch_feasible_count",
+        "batch_pool_new_count",
+        "batch_master_activated_count",
+        "batch_pool_wall_time_sec",
+        "batch_master_view_wall_time_sec",
+        "batch_master_total_wall_time_sec",
+    )
+    return {
+        key: payload.get(key)
+        for key in keys
+        if key in payload
+    }
+
+
+def _one_deviation_round_fields(
+    payload: Mapping[str, object],
+) -> dict:
+    """Persist auditable one-deviation use without exposing model features."""
+
+    runtime = dict(payload.get("one_deviation_runtime") or {})
+    return {
+        "one_deviation_requested": bool(
+            payload.get("one_deviation_requested")
+        ),
+        "one_deviation_executed": bool(
+            payload.get("one_deviation_executed")
+        ),
+        "one_deviation_intervention_count_this_root": int(
+            payload.get("one_deviation_intervention_count_this_root")
+            or 0
+        ),
+        "one_deviation_next_round_policy": str(
+            payload.get("one_deviation_next_round_policy") or ""
+        ),
+        "one_deviation_reject_reason": str(
+            payload.get("one_deviation_reject_reason") or ""
+        ),
+        "one_deviation_runtime_enabled": bool(
+            runtime.get("one_deviation_runtime_enabled")
+        ),
+        "one_deviation_evaluation_mode": bool(
+            runtime.get("one_deviation_evaluation_mode")
+        ),
+        "one_deviation_fallback_to_noop": bool(
+            runtime.get("one_deviation_fallback_to_noop")
+        ),
+        "one_deviation_runtime_error": str(
+            runtime.get("one_deviation_runtime_error") or ""
+        ),
+        "one_deviation_ood": bool(
+            runtime.get("one_deviation_ood")
+        ),
+        "one_deviation_decision_reason": str(
+            runtime.get("one_deviation_decision_reason") or ""
+        ),
+        "one_deviation_manifest_sha256": str(
+            runtime.get("one_deviation_manifest_sha256") or ""
+        ),
+        "one_deviation_checkpoint_sha256": str(
+            runtime.get("one_deviation_checkpoint_sha256") or ""
+        ),
+        "one_deviation_input_hash": str(
+            runtime.get("one_deviation_input_hash") or ""
+        ),
+        "one_deviation_exact_engine_hash": str(
+            runtime.get("one_deviation_exact_engine_hash") or ""
+        ),
+        "one_deviation_exact_runtime_binding_hash": str(
+            runtime.get("one_deviation_exact_runtime_binding_hash")
+            or ""
+        ),
+        "one_deviation_request_config_hash": str(
+            runtime.get("one_deviation_request_config_hash") or ""
+        ),
+        "one_deviation_inference_wall_ms": (
+            None
+            if runtime.get("one_deviation_inference_wall_ms") is None
+            else float(runtime["one_deviation_inference_wall_ms"])
         ),
     }
 
@@ -4925,6 +5819,229 @@ def _manual_negative_pairs(
     return tuple(pairs)
 
 
+def _record_full_audited_route_opportunity(
+    *,
+    data: LunarIceData,
+    judge,
+    actual_harvest_payload: Mapping[str, object],
+    pool: ColumnPool,
+    view: MasterColumnView,
+    duals: JourneyDuals,
+    node_id: str,
+    negative_eps: float,
+    max_selected: int,
+    active_task_sets: set[frozenset[str]],
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+    wall_time_limit_sec: float | None = None,
+    memory_limit_gb: float = 0.0,
+    rmp_iteration_id: str = "",
+    cut_lineage_hash: str = "",
+    live_cut_policy_hash: str = "",
+    separator_policy_version: str = "",
+    counterfactual_state: Mapping[str, object] | None = None,
+) -> dict:
+    """Record the full P0V4 policy boundary without mutating Exact admission."""
+
+    if (
+        str(node_id) != "root"
+        or not str(
+            os.getenv("LUNAR_ICE_GAT_TRAINING_ROWS_DIR", "")
+        ).strip()
+    ):
+        return {}
+    candidate_order = tuple(
+        getattr(judge, "audited_candidate_order", tuple())
+    )
+    selected_columns = tuple(
+        getattr(judge, "all_priced_columns", tuple())
+    )
+    if len(candidate_order) <= len(selected_columns):
+        return {}
+    p0_selected_ids = tuple(
+        str(value)
+        for value in actual_harvest_payload.get(
+            "p0_selected_candidate_ids_in_execution_order",
+            (),
+        )
+    )
+    if len(p0_selected_ids) != int(max_selected):
+        return {
+            "recorded": False,
+            "reason": "p0_addable_batch_not_full",
+            "audited_candidate_order_count": len(candidate_order),
+            "p0_addable_selected_count": len(p0_selected_ids),
+        }
+    raw_negative_pairs = _manual_negative_pairs(
+        candidate_order,
+        duals=duals,
+        negative_eps=negative_eps,
+        branch_context=branch_context,
+        cut_context=cut_context,
+    )
+    _ignored, observation = harvest_addable_negative_columns(
+        raw_negative_pairs,
+        pool=pool,
+        view=view,
+        node_id=node_id,
+        negative_eps=negative_eps,
+        max_selected=max_selected,
+        active_task_sets=active_task_sets,
+        branch_context=branch_context,
+        cut_context=cut_context,
+        source_phase=(
+            str(
+                actual_harvest_payload.get("harvest_source_phase")
+                or "post_final_judge_addability_harvest"
+            )
+            + "_full_audited_pool_observation"
+        ),
+        guidance_data=data,
+        guidance_duals=duals,
+        guidance_wall_time_limit_sec=wall_time_limit_sec,
+        guidance_memory_limit_gb=memory_limit_gb,
+        guidance_rmp_iteration_id=rmp_iteration_id,
+        guidance_cut_lineage_hash=cut_lineage_hash,
+        guidance_live_cut_policy_hash=live_cut_policy_hash,
+        guidance_separator_policy_version=separator_policy_version,
+        counterfactual_state=counterfactual_state,
+        observation_only=True,
+        preserve_input_candidate_order=True,
+        p0_selected_candidate_ids_override=p0_selected_ids,
+    )
+    training = dict(
+        observation.get("guidance_training_recording") or {}
+    )
+    return {
+        "recorded": bool(training),
+        "audited_candidate_order_count": len(candidate_order),
+        "raw_true_negative_count": len(raw_negative_pairs),
+        "addable_negative_count": int(
+            observation.get("addable_negative_count") or 0
+        ),
+        "p0_addable_selected_count": len(p0_selected_ids),
+        "route_admission_structural_zero": bool(
+            observation.get("route_admission_structural_zero")
+        ),
+        "guidance_training_recording": training,
+    }
+
+
+def _apply_full_audited_one_deviation(
+    *,
+    data: LunarIceData,
+    judge,
+    preliminary_harvest_payload: Mapping[str, object],
+    pool: ColumnPool,
+    view: MasterColumnView,
+    duals: JourneyDuals,
+    node_id: str,
+    negative_eps: float,
+    max_selected: int,
+    active_task_sets: set[frozenset[str]],
+    branch_context: BranchContext | None = None,
+    cut_context: CutContext | None = None,
+    profiling: PruningCounter | None = None,
+    wall_time_limit_sec: float | None = None,
+    memory_limit_gb: float = 0.0,
+    rmp_iteration_id: str = "",
+    cut_lineage_hash: str = "",
+    live_cut_policy_hash: str = "",
+    separator_policy_version: str = "",
+    memory_adverse_event: bool = False,
+    counterfactual_state: Mapping[str, object] | None = None,
+) -> tuple[tuple[JourneyColumn, ...], dict] | None:
+    """Apply the sole calibrated boundary action over the full audited pool."""
+
+    if (
+        str(node_id) != "root"
+        or not str(
+            os.getenv("LUNAR_ICE_ONE_DEVIATION_MANIFEST", "")
+        ).strip()
+    ):
+        return None
+    candidate_order = tuple(
+        getattr(judge, "audited_candidate_order", tuple())
+    )
+    selected_columns = tuple(
+        getattr(judge, "all_priced_columns", tuple())
+    )
+    if len(candidate_order) <= len(selected_columns):
+        return None
+    p0_selected_ids = tuple(
+        str(value)
+        for value in preliminary_harvest_payload.get(
+            "p0_selected_candidate_ids_in_execution_order",
+            (),
+        )
+    )
+    if len(p0_selected_ids) != int(max_selected):
+        return None
+    raw_negative_pairs = _manual_negative_pairs(
+        candidate_order,
+        duals=duals,
+        negative_eps=negative_eps,
+        branch_context=branch_context,
+        cut_context=cut_context,
+    )
+    selected, payload = harvest_addable_negative_columns(
+        raw_negative_pairs,
+        pool=pool,
+        view=view,
+        node_id=node_id,
+        negative_eps=negative_eps,
+        max_selected=max_selected,
+        active_task_sets=active_task_sets,
+        branch_context=branch_context,
+        cut_context=cut_context,
+        profiling=profiling,
+        source_phase=(
+            str(
+                preliminary_harvest_payload.get(
+                    "harvest_source_phase"
+                )
+                or "post_final_judge_addability_harvest"
+            )
+            + "_full_audited_pool_one_deviation"
+        ),
+        guidance_data=data,
+        guidance_duals=duals,
+        guidance_wall_time_limit_sec=wall_time_limit_sec,
+        guidance_memory_limit_gb=memory_limit_gb,
+        guidance_rmp_iteration_id=rmp_iteration_id,
+        guidance_cut_lineage_hash=cut_lineage_hash,
+        guidance_live_cut_policy_hash=live_cut_policy_hash,
+        guidance_separator_policy_version=separator_policy_version,
+        one_deviation_memory_adverse_event=memory_adverse_event,
+        counterfactual_state=counterfactual_state,
+        preserve_input_candidate_order=True,
+        p0_selected_candidate_ids_override=p0_selected_ids,
+        p0_override_is_exact_baseline=True,
+    )
+    payload["preliminary_exact_k_harvest"] = {
+        "candidate_negative_count": int(
+            preliminary_harvest_payload.get(
+                "candidate_negative_count"
+            )
+            or 0
+        ),
+        "addable_negative_count": int(
+            preliminary_harvest_payload.get(
+                "addable_negative_count"
+            )
+            or 0
+        ),
+        "selected_candidate_ids_in_execution_order": list(
+            preliminary_harvest_payload.get(
+                "selected_candidate_ids_in_execution_order",
+                (),
+            )
+        ),
+    }
+    payload["full_audited_one_deviation_path"] = True
+    return selected, payload
+
+
 def _payload_or_fallback(primary: Mapping[str, object], key: str, fallback: Mapping[str, object]) -> object:
     value = primary.get(key)
     return fallback.get(key) if value is None else value
@@ -6259,6 +7376,7 @@ def _recover_branch_rmp_with_phase_one(
     cut_lineage: CutLineage,
     live_cut_policy_hash: str,
     separator_policy_version: str,
+    pricing_lifecycle_scope: str,
     max_rounds: int,
     max_columns_per_round: int,
     negative_eps: float,
@@ -6341,6 +7459,7 @@ def _recover_branch_rmp_with_phase_one(
                 true_duals=phase.duals,
                 mode=BACKEND_MODE_EXACT_PROOF,
                 objective_mode=BACKEND_OBJECTIVE_PHASE_ONE,
+                pricing_lifecycle_scope=pricing_lifecycle_scope,
                 branch_context=branch_context,
                 cut_context=cut_context,
                 harvest_target=max(1, int(max_columns_per_round)),
@@ -6401,6 +7520,7 @@ def _recover_branch_rmp_with_phase_one(
                 node_id=node_id,
                 branch_context=branch_context,
                 cut_context=cut_context,
+                timing_payload=phase_row,
             )
             phase_row["selected_column_count"] = len(selected)
             phase_row["added_column_count"] = int(added)
@@ -6794,9 +7914,71 @@ def _add_selected_to_pool_and_master(
     node_id: str = "root",
     branch_context: BranchContext | None = None,
     cut_context: CutContext | None = None,
+    timing_payload: dict | None = None,
 ) -> int:
-    added = 0
+    started = perf_counter()
     context = cut_context or CutContext()
+    batch_enabled = _env_bool(
+        "LUNAR_ICE_BATCH_MASTER_ADMISSION_ENABLED",
+        default=False,
+    )
+    if not batch_enabled:
+        added = 0
+        for column in columns:
+            allowed = journey_satisfies_branch_context(
+                column, branch_context
+            )
+            if not allowed:
+                continue
+            signature = _column_signature_for_active_context(
+                column,
+                branch_context=branch_context,
+                cut_context=context,
+            )
+            bpc_column = BpcColumn(
+                signature=signature,
+                objective=column.objective,
+                payload=column,
+            )
+            pool.add(
+                bpc_column,
+                {
+                    "master_view": view,
+                    "node_id": node_id,
+                    "is_allowed_by_branch": allowed,
+                    "cut_coefficients": context.coefficients_for(column),
+                    "branch_signature": signature.branch_signature,
+                    "dominance_key": (
+                        _column_dominance_key_for_active_context(
+                            signature
+                        )
+                    ),
+                },
+            )
+            stored = pool.get(signature)
+            if stored is not None and _activate_column_in_master_view(
+                pool,
+                view,
+                stored,
+                node_id=node_id,
+                branch_context=branch_context,
+                cut_context=context,
+            ):
+                added += 1
+        if timing_payload is not None:
+            timing_payload.update(
+                {
+                    "batch_master_admission_enabled": False,
+                    "batch_master_admission_input_count": len(columns),
+                    "batch_master_activated_count": int(added),
+                    "batch_master_total_wall_time_sec": round(
+                        perf_counter() - started, 9
+                    ),
+                }
+            )
+        return added
+    bpc_columns = []
+    node_contexts = []
     for column in columns:
         allowed = journey_satisfies_branch_context(column, branch_context)
         if not allowed:
@@ -6807,8 +7989,8 @@ def _add_selected_to_pool_and_master(
             cut_context=context,
         )
         bpc_column = BpcColumn(signature=signature, objective=column.objective, payload=column)
-        pool.add(
-            bpc_column,
+        bpc_columns.append(bpc_column)
+        node_contexts.append(
             {
                 "master_view": view,
                 "node_id": node_id,
@@ -6816,19 +7998,152 @@ def _add_selected_to_pool_and_master(
                 "cut_coefficients": context.coefficients_for(column),
                 "branch_signature": signature.branch_signature,
                 "dominance_key": _column_dominance_key_for_active_context(signature),
-            },
+            }
         )
-        stored = pool.get(signature)
-        if stored is not None and _activate_column_in_master_view(
-            pool,
-            view,
-            stored,
-            node_id=node_id,
-            branch_context=branch_context,
-            cut_context=context,
-        ):
-            added += 1
+    admission_started = perf_counter()
+    if _root_representative_view_enabled(
+        node_id=node_id,
+        branch_context=branch_context,
+        cut_context=context,
+    ):
+        activate = (
+            lambda scratch_pool, scratch_view, stored, active_node_id: (
+                _activate_root_best_task_set_representative(
+                    scratch_pool,
+                    scratch_view,
+                    stored,
+                    node_id=str(active_node_id),
+                )
+            )
+        )
+    else:
+        activate = None
+    pool_results, activation_results = view.admit_many_atomically(
+        tuple(bpc_columns),
+        node_contexts=tuple(node_contexts),
+        node_id=node_id,
+        pool=pool,
+        activate=activate,
+    )
+    admission_wall = perf_counter() - admission_started
+    added = sum(activation_results)
+    if timing_payload is not None:
+        timing_payload.update(
+            {
+                "batch_master_admission_enabled": True,
+                "batch_master_admission_input_count": len(columns),
+                "batch_master_admission_branch_feasible_count": len(
+                    bpc_columns
+                ),
+                "batch_pool_new_count": sum(
+                    1 for result in pool_results if result.added
+                ),
+                "batch_master_activated_count": int(added),
+                "batch_pool_wall_time_sec": 0.0,
+                "batch_master_view_wall_time_sec": round(
+                    admission_wall, 9
+                ),
+                "batch_master_total_wall_time_sec": round(
+                    perf_counter() - started, 9
+                ),
+            }
+        )
     return added
+
+
+def _one_deviation_counterfactual_state_payload(
+    *,
+    judge_payload: Mapping[str, object],
+    cache: DirectPricingCache,
+    worker_pricer_kind: str,
+) -> dict:
+    telemetry = dict(judge_payload.get("telemetry") or {})
+    backend = dict(
+        judge_payload.get("native_backend_result") or {}
+    )
+    backend_telemetry = dict(backend.get("telemetry") or {})
+    native = {**telemetry, **backend_telemetry}
+    return {
+        "worker_state": {
+            "kind": (
+                "completed_candidate_pool_generation_no_live_worker"
+            ),
+            "worker_pricer_kind": str(worker_pricer_kind),
+            "engine_status": str(
+                backend.get("engine_status")
+                or judge_payload.get("status")
+                or ""
+            ),
+            "host_recycled_after_solve": bool(
+                native.get("host_recycled_after_solve")
+            ),
+            "native_graph_cache_size": int(
+                native.get("graph_cache_size") or 0
+            ),
+        },
+        "queue_state": {
+            "kind": (
+                "source_frontier_discarded_then_empty_fresh_arm_queue"
+            ),
+            "replay_queue_empty": True,
+            "source_frontier_empty": bool(
+                backend.get("frontier_empty")
+                or judge_payload.get("frontier_empty")
+            ),
+            "search_exhaustive": bool(
+                backend.get("search_exhaustive")
+                or judge_payload.get("search_exhaustive")
+            ),
+        },
+        "cache_state": {
+            "kind": "captured_diagnostic_cache_then_fresh_arm_process",
+            "direct_pricing_cache": cache.stats(),
+            "native_graph_cache_size": int(
+                native.get("graph_cache_size") or 0
+            ),
+            "native_graph_cache_build_count": int(
+                native.get("graph_cache_build_count") or 0
+            ),
+            "native_graph_cache_hit_count": int(
+                native.get("graph_cache_hit_count") or 0
+            ),
+        },
+        "thread_state": {
+            "kind": "execution_manifest_bound",
+            "rmp_highs_threads": int(
+                os.getenv("LUNAR_ICE_RMP_HIGHS_THREADS", "1")
+                or 1
+            ),
+            "omp_num_threads": int(
+                os.getenv("OMP_NUM_THREADS", "1") or 1
+            ),
+        },
+        "exact_binary_hash": str(
+            native.get("native_engine_build_hash") or ""
+        ),
+        "exact_engine_hash": str(
+            native.get("native_engine_build_hash") or ""
+        ),
+    }
+
+
+def _one_deviation_memory_adverse_event(
+    judge_payload: Mapping[str, object],
+) -> bool:
+    telemetry = dict(judge_payload.get("telemetry") or {})
+    backend = dict(
+        judge_payload.get("native_backend_result") or {}
+    )
+    backend_telemetry = dict(backend.get("telemetry") or {})
+    values = {**telemetry, **backend_telemetry}
+    return bool(
+        values.get("host_memory_killed")
+        or values.get("memory_pressure_triggered")
+        or str(backend.get("engine_status") or "")
+        == "MEMORY_LIMIT"
+        or str(judge_payload.get("status") or "")
+        == "MEMORY_LIMIT"
+    )
 
 
 def _activate_column_in_master_view(
@@ -7531,19 +8846,79 @@ def _empty_harvest_totals() -> dict:
         "harvest_best_true_rc": None,
         "harvest_worst_selected_true_rc": None,
         "harvest_avg_pairwise_jaccard": None,
+        "one_deviation_runtime_call_count": 0,
+        "one_deviation_requested_count": 0,
+        "one_deviation_executed_count": 0,
+        "one_deviation_noop_count": 0,
+        "one_deviation_runtime_fallback_count": 0,
+        "one_deviation_runtime_error_count": 0,
+        "one_deviation_ood_noop_count": 0,
+        "one_deviation_memory_veto_count": 0,
+        "one_deviation_low_confidence_noop_count": 0,
+        "one_deviation_already_used_noop_count": 0,
     }
 
 
 def _accumulate_harvest_totals(totals: dict, payload: dict) -> None:
     previous_selected_count = int(totals.get("harvest_selected_count") or 0)
+    derived_keys = {
+        "one_deviation_runtime_call_count",
+        "one_deviation_requested_count",
+        "one_deviation_executed_count",
+        "one_deviation_noop_count",
+        "one_deviation_runtime_fallback_count",
+        "one_deviation_runtime_error_count",
+        "one_deviation_ood_noop_count",
+        "one_deviation_memory_veto_count",
+        "one_deviation_low_confidence_noop_count",
+        "one_deviation_already_used_noop_count",
+    }
     for key in list(totals):
         if key in {
             "harvest_best_true_rc",
             "harvest_worst_selected_true_rc",
             "harvest_avg_pairwise_jaccard",
-        }:
+        } | derived_keys:
             continue
         totals[key] += int(payload.get(key) or 0)
+    runtime = dict(payload.get("one_deviation_runtime") or {})
+    runtime_enabled = bool(runtime.get("one_deviation_runtime_enabled"))
+    runtime_attempted = bool(
+        runtime_enabled
+        or runtime.get("one_deviation_fallback_to_noop")
+        or runtime.get("one_deviation_runtime_error")
+    )
+    requested = bool(payload.get("one_deviation_requested"))
+    executed = bool(payload.get("one_deviation_executed"))
+    reason = str(
+        runtime.get("one_deviation_decision_reason")
+        or payload.get("one_deviation_reject_reason")
+        or ""
+    )
+    totals["one_deviation_runtime_call_count"] += int(runtime_attempted)
+    totals["one_deviation_requested_count"] += int(requested)
+    totals["one_deviation_executed_count"] += int(executed)
+    totals["one_deviation_noop_count"] += int(
+        runtime_attempted and not executed
+    )
+    totals["one_deviation_runtime_fallback_count"] += int(
+        bool(runtime.get("one_deviation_fallback_to_noop"))
+    )
+    totals["one_deviation_runtime_error_count"] += int(
+        bool(runtime.get("one_deviation_runtime_error"))
+    )
+    totals["one_deviation_ood_noop_count"] += int(
+        reason == "context_ood"
+    )
+    totals["one_deviation_memory_veto_count"] += int(
+        reason == "memory_adverse_event_veto"
+    )
+    totals["one_deviation_low_confidence_noop_count"] += int(
+        reason == "no_candidate_passed_thresholds"
+    )
+    totals["one_deviation_already_used_noop_count"] += int(
+        reason == "root_intervention_already_used"
+    )
     best_rc = _optional_float(payload.get("harvest_best_true_rc"))
     if best_rc is not None:
         totals["harvest_best_true_rc"] = (
@@ -7580,9 +8955,20 @@ def _optional_float(value: object) -> float | None:
         return None
 
 
+def _optional_finite_float(value: object) -> float | None:
+    numeric = _optional_float(value)
+    return (
+        numeric
+        if numeric is not None and isfinite(numeric)
+        else None
+    )
+
+
 def _empty_profile_totals() -> dict:
     return {
         "rmp_wall_time": 0.0,
+        "rmp_model_assembly_wall_time": 0.0,
+        "rmp_lp_solve_wall_time": 0.0,
         "worker_wall_time": 0.0,
         "final_judge_wall_time": 0.0,
         "time_to_first_negative": None,
@@ -7643,6 +9029,15 @@ def _accumulate_worker_profile(totals: dict, payload: dict) -> None:
     _set_first_int(totals, "labels_generated_before_first_negative", payload.get("labels_generated_before_first_negative"))
 
 
+def _accumulate_rmp_timing(totals: dict, rmp) -> None:
+    totals["rmp_model_assembly_wall_time"] += float(
+        getattr(rmp, "rmp_model_assembly_wall_time_sec", 0.0)
+    )
+    totals["rmp_lp_solve_wall_time"] += float(
+        getattr(rmp, "rmp_lp_solve_wall_time_sec", 0.0)
+    )
+
+
 def _accumulate_pricing_profile(totals: dict, payload: dict) -> None:
     labels = int(payload.get("labels_generated") or payload.get("pareto_label_count") or 0)
     totals["labels_generated"] += labels
@@ -7693,6 +9088,12 @@ def _profile_payload(profile_totals: dict | None, profiling: PruningCounter, fin
     bound_prune_count = int(totals["bound_prune_count"] or pruning.get("labels_pruned_by_completion_bound") or 0)
     payload = {
         "rmp_wall_time": round(float(totals["rmp_wall_time"]), 6),
+        "rmp_model_assembly_wall_time": round(
+            float(totals["rmp_model_assembly_wall_time"]), 6
+        ),
+        "rmp_lp_solve_wall_time": round(
+            float(totals["rmp_lp_solve_wall_time"]), 6
+        ),
         "worker_wall_time": round(float(totals["worker_wall_time"]), 6),
         "final_judge_wall_time": round(float(totals["final_judge_wall_time"]), 6),
         "time_to_first_negative": totals["time_to_first_negative"],

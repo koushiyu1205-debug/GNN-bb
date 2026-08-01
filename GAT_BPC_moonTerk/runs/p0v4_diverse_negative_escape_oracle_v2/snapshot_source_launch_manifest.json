@@ -1,0 +1,23 @@
+{
+  "candidate_features_enabled": false,
+  "command": [
+    "/home/kai/miniconda3/bin/python",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+    "--config",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_source/p0v4_noop_source.yaml",
+    "--scales",
+    "50",
+    "--output-dir",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_source_run",
+    "--no-resume",
+    "--instance",
+    "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json"
+  ],
+  "p0v4_frozen_capsule_modified": false,
+  "production_default_changed": false,
+  "schema_version": "lunar_ice_bpc.p0v4_snapshot_source_launch.v1",
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_source/p0v4_noop_source.yaml",
+  "source_config_sha256": "ff1b112be10549529a7a9edb5dbdaf967c2ed18864bed82d31fba6de891c2e81",
+  "source_instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json",
+  "source_instance_sha256": "7ce78dc6c325be167eb4db9dcfd599227978bea277ffd748949da28f11c02725"
+}

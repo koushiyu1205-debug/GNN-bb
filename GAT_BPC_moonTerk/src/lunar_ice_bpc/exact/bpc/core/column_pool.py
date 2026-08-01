@@ -119,5 +119,38 @@ class ColumnPool:
         self.columns_by_signature[column.signature] = column
         return AddResult(True, "added_to_pool", column.signature, report)
 
+    def add_many(
+        self,
+        columns: tuple[BpcColumn, ...] | list[BpcColumn],
+        node_contexts: tuple[Any, ...] | list[Any] | None = None,
+    ) -> tuple[AddResult, ...]:
+        """Atomically apply an ordered admission batch.
+
+        Checks and decisions are deliberately evaluated in the same order as
+        repeated ``add`` calls.  The live pool is committed only after every
+        row completes, so an exception cannot leave a partially admitted
+        batch.
+        """
+
+        ordered_columns = tuple(columns)
+        contexts = (
+            tuple({} for _column in ordered_columns)
+            if node_contexts is None
+            else tuple(node_contexts)
+        )
+        if len(contexts) != len(ordered_columns):
+            raise ValueError(
+                "node_contexts must have one entry per column"
+            )
+        scratch = ColumnPool(dict(self.columns_by_signature))
+        results = tuple(
+            scratch.add(column, node_context)
+            for column, node_context in zip(
+                ordered_columns, contexts, strict=True
+            )
+        )
+        self.columns_by_signature = scratch.columns_by_signature
+        return results
+
     def get(self, sig: ColumnSemanticSignature) -> BpcColumn | None:
         return self.columns_by_signature.get(sig)

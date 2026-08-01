@@ -1,0 +1,215 @@
+{
+  "algorithm": {
+    "branching": "Ryan-Foster same/different task-pair branching",
+    "cut_policy": "P0 root-only SRI-3 divisor-2",
+    "exactness_contract": "All official RC, bounds, pruning, no-negative and tree certificates require current true-dual exhaustive pricing.",
+    "family": "exact_native_branch_price_and_cut",
+    "guidance_enabled": false,
+    "host_recycle_large_scale_only": true,
+    "model_id": "NATIVE_LIVE_SRI_P0_MEMORY_COMPACT_V4",
+    "native_journey_value_bytes": 184,
+    "native_label_state_bytes": 176,
+    "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+    "source_config_model_id": "NATIVE_LIVE_SRI_P0V3_MEMORY_COMPACT_CANDIDATE_V3",
+    "tree_max_rounds_unchanged": 16
+  },
+  "artifacts": {
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_acceptance_report_zh.md": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_acceptance_report_zh.md",
+      "sha256": "e4e8f478bdb7672d7b669bad95b4fe1ec15e6bd5c6b5b7d7023e8258b74f41c1",
+      "size_bytes": 1316
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_acceptance_summary.json": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_acceptance_summary.json",
+      "sha256": "aaa3c5e09e6488d2bece5ed53aa95d9831ba40c821de63991802a623edb0f870",
+      "size_bytes": 18497
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_b42_summary.json": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_b42_summary.json",
+      "sha256": "ca1e9d20e8eae36223615ded1beb80940211d3423249746f385f9262a9607e23",
+      "size_bytes": 7572
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_report_zh.md": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_report_zh.md",
+      "sha256": "2e785ea8035b47cc3fc8f07f26c2b9ebdc5dee5e2092ed6879962a71013a16be",
+      "size_bytes": 7837
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_rows.csv": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_rows.csv",
+      "sha256": "4b64cc13a655cc7e45b6a16a0ac36fdd297b0c5df622ebfa2fab55935243e15b",
+      "size_bytes": 41890
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_acceptance_report_zh.md": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_acceptance_report_zh.md",
+      "sha256": "41674f48f381804a866410699404da4ba2cf24cdb5d92671e8040d7e0e052dc0",
+      "size_bytes": 1309
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_acceptance_summary.json": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_acceptance_summary.json",
+      "sha256": "1cfe181e45602bac4fcf8f5d8dcb820e0523d96363936e439991606a99e2aeaf",
+      "size_bytes": 13935
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_b42_summary.json": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_b42_summary.json",
+      "sha256": "b94b29b92a282ceef2727c41e25c84001352da44f015a6f42d031d7c45b29960",
+      "size_bytes": 7541
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_probe_report_zh.md": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_probe_report_zh.md",
+      "sha256": "21fbea13116c48c31f601fd937479ab7d33ee04606d45f7cf5eefc7dfcb549c5",
+      "size_bytes": 7278
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_report_zh.md": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_report_zh.md",
+      "sha256": "f2e29844428afd259ed7667a571f01004537f5741bce755611eda71195d2f729",
+      "size_bytes": 3314
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_rows.csv": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale50_rows.csv",
+      "sha256": "37f6dff6cf06a624ba410c7f6aab99ddb754cc44e5f438c52f7e18fbf008ae5c",
+      "size_bytes": 7368
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/validation_summary.json": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/validation_summary.json",
+      "sha256": "a44727827c63c942098358bc8be9448222d8e1b58e75d042229b23e817275c75",
+      "size_bytes": 1414
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/frozen_config.yaml": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/frozen_config.yaml",
+      "sha256": "9859a8e3d04d6eb966656c0b01858ed13ef98e6ab9e38ea7c403b893de50cfab",
+      "size_bytes": 3082
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/native/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/native/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+      "sha256": "4cd7e3a118acfa835108975e70dc5f9fa18f5495142c30eb1ec106fad05f4f8c",
+      "size_bytes": 11154120
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/source_bundle.tar.gz": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/source_bundle.tar.gz",
+      "sha256": "5e84099146e68222b944ea44e457b196ad615095fe8d35fd3ff4fd1b01ac2446",
+      "size_bytes": 867385
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/source_bundle_manifest.json": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/source_bundle_manifest.json",
+      "sha256": "e11854b5d77ca10e955fcef992f302fc87258d9b720312eb76ae72d15e4a36df",
+      "size_bytes": 31172
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/tests/test_results.json": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/tests/test_results.json",
+      "sha256": "c5d1f73275ce02850c477837ff2d8ab633cf9bbe94d2f83c6494b55ad4ec68e4",
+      "size_bytes": 976
+    },
+    "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/verify_freeze.py": {
+      "path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/verify_freeze.py",
+      "sha256": "4feed977f2e1c40dd5ad98ed027e2121dac6ea6c32b1053d9736a094bcd48b96",
+      "size_bytes": 4641
+    }
+  },
+  "binding_mode": "frozen_binary_config_and_content_addressed_source_archive",
+  "created_at_utc": "2026-07-29T09:21:13.042105+00:00",
+  "engine_hashes": {
+    "native_rcspp_host": "08d49ee235c7c456",
+    "native_rcspp_inprocess": "ab4496a8a8ef5cf4"
+  },
+  "formal_full120_complete": false,
+  "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_MEMORY_COMPACT_BASELINE_V4",
+  "historical_control_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "historical_control_preserved": true,
+  "native_build_info": {
+    "best_reduced_cost_event_trace": "harvest_improvements_v1",
+    "branch_support": "ryan_foster_same_different_feasibility",
+    "build_type": "RelWithDebInfo",
+    "compiler": "13.3.0",
+    "completion_bound": "positive_cover_dual_threshold_pruning_v1",
+    "cut_state_bytes": "8",
+    "cut_state_max_bits": "48",
+    "cut_state_schema": "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+    "cut_support": "sri3_sri5_divisor2_threshold_crossing_v1",
+    "cxx_standard": "23",
+    "dssr_certificate_kind": "DSSR_RELAXATION_LOWER_BOUND",
+    "dssr_v2_policy": "multi_sortie_counterexample_pressure_refinement_v2",
+    "guidance_ordering": "negative_harvest_task_arc_priority_v1",
+    "harvest_work_budget": "deterministic_processed_labels_v1",
+    "journey_resource_bytes": "184",
+    "journey_value_bytes": "184",
+    "label_memory_representation": "u16_counts_single_component_variant_compact_bucket_v2",
+    "label_state_bytes": "176",
+    "large_scale_exact_pricer": "multi_sortie_counterexample_refinement_v1",
+    "max_active_cuts": "16",
+    "memory_pressure_policy": "disabled_for_exact_hard_limit_only",
+    "ng_dssr_v3_compiled": "true",
+    "ng_dssr_v3_policy": "multi_sortie_ng_memory_counterexample_refinement_v3",
+    "rcspp_commit": "2f1d53ba6806844e30ce43ee9c41041a5a1b4e79",
+    "rcspp_journey_component_object_bytes": "240",
+    "rcspp_label_object_bytes": "64",
+    "rcspp_outer_resource_object_bytes": "96",
+    "service_timing_policy_id": "no_task_wait_base_departure_shift_v1"
+  },
+  "new_baseline_freeze_authorized_by_user": true,
+  "performance": {
+    "freeze_scope": {
+      "scale30_full20_required": true,
+      "scale50_full_run_requested": false,
+      "scale50_singleton_boundary_preserved": true,
+      "six_scale_promotion_claimed": false
+    },
+    "historical_control_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+    "scale30": {
+      "candidate_max_sec": 846.962641,
+      "candidate_mean_sec": 151.2165995,
+      "candidate_p50_sec": 63.3728365,
+      "candidate_total_sec": 3024.33199,
+      "control_max_sec": 1157.471105,
+      "control_mean_sec": 197.31347915,
+      "control_p50_sec": 79.579199,
+      "control_total_sec": 3946.2695830000002,
+      "exact_count": 20,
+      "improved_count": 19,
+      "incomplete_count": 0,
+      "instance_content_hash_mismatch_count": 0,
+      "max_objective_delta": 1.000000000139778e-06,
+      "mean_ratio": 0.7663774423897487,
+      "objective_tolerance": 1.1e-06,
+      "paired_geometric_mean_ratio": 0.7631794932365457,
+      "paired_median_ratio": 0.7325719721260242,
+      "redline_count": 0,
+      "regressed_count": 1,
+      "row_count": 20
+    },
+    "scale50_instance001": {
+      "effective_memory_limit_gb": 10.867122,
+      "exact_count": 0,
+      "exact_root_closure": false,
+      "fail_closed_count": 1,
+      "full_scale50_run_complete": false,
+      "redlines_zero": true,
+      "root_added_column_count": 13173,
+      "solver_wall_sec": 3594.280144,
+      "status": "FAIL_CLOSED"
+    },
+    "schema_version": "lunar_ice_bpc.p0v4_validation_summary.v1"
+  },
+  "production_default_policy": "no_cut",
+  "production_default_switch_authorized": false,
+  "repository_head_at_freeze": "d05b9a4168ddcc5f5bb11070310d4c5d599153b3",
+  "role": "active_experiment_baseline_and_gat_foundation",
+  "schema_version": "lunar_ice_bpc.baseline_freeze_manifest.v4",
+  "source_bundle_archive_sha256": "5e84099146e68222b944ea44e457b196ad615095fe8d35fd3ff4fd1b01ac2446",
+  "source_bundle_hash": "416dfb71b03d85bc2cbed5e5d394d940feba16c0db5871ca6b07a0b99a2e28fb",
+  "validation_scope": {
+    "known_boundary_preserved": true,
+    "scale100": "NOT_RUN",
+    "scale10_v4_binary": "NOT_RERUN",
+    "scale20_v4_binary": "NOT_RERUN",
+    "scale30_full20": "EXACT_CLOSED",
+    "scale50_full": "NOT_RUN_BY_USER_DIRECTION",
+    "scale50_instance001_3600sec": "BPC_INCOMPLETE_PRICING",
+    "scale5_v4_binary": "NOT_RERUN",
+    "six_scale_promotion_complete": false
+  },
+  "verification": {
+    "command": "/home/kai/miniconda3/bin/python runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/verify_freeze.py",
+    "expected_valid": true
+  },
+  "worktree_clean_at_freeze": false
+}

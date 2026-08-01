@@ -1,0 +1,186 @@
+{
+  "can_certify_no_negative": false,
+  "config_path": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v4_bidirectional_feasibility_v1.yaml",
+  "config_sha256": "23aa1f89428e04aa5aeee77e0fe91827ac2e859dc042fe789dec0a61dd7d38d0",
+  "experiment_id": "P0V4_FROZEN_DUAL_BIDIRECTIONAL_FEASIBILITY_V1",
+  "frozen_control_audit": {
+    "artifact_count": 18,
+    "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_MEMORY_COMPACT_BASELINE_V4",
+    "issues": [],
+    "known_scale50_boundary_preserved": true,
+    "native_build_info": {
+      "best_reduced_cost_event_trace": "harvest_improvements_v1",
+      "branch_support": "ryan_foster_same_different_feasibility",
+      "build_type": "RelWithDebInfo",
+      "compiler": "13.3.0",
+      "completion_bound": "positive_cover_dual_threshold_pruning_v1",
+      "cut_state_bytes": "8",
+      "cut_state_max_bits": "48",
+      "cut_state_schema": "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+      "cut_support": "sri3_sri5_divisor2_threshold_crossing_v1",
+      "cxx_standard": "23",
+      "dssr_certificate_kind": "DSSR_RELAXATION_LOWER_BOUND",
+      "dssr_v2_policy": "multi_sortie_counterexample_pressure_refinement_v2",
+      "guidance_ordering": "negative_harvest_task_arc_priority_v1",
+      "harvest_work_budget": "deterministic_processed_labels_v1",
+      "journey_resource_bytes": "184",
+      "journey_value_bytes": "184",
+      "label_memory_representation": "u16_counts_single_component_variant_compact_bucket_v2",
+      "label_state_bytes": "176",
+      "large_scale_exact_pricer": "multi_sortie_counterexample_refinement_v1",
+      "max_active_cuts": "16",
+      "memory_pressure_policy": "disabled_for_exact_hard_limit_only",
+      "ng_dssr_v3_compiled": "true",
+      "ng_dssr_v3_policy": "multi_sortie_ng_memory_counterexample_refinement_v3",
+      "rcspp_commit": "2f1d53ba6806844e30ce43ee9c41041a5a1b4e79",
+      "rcspp_journey_component_object_bytes": "240",
+      "rcspp_label_object_bytes": "64",
+      "rcspp_outer_resource_object_bytes": "96",
+      "service_timing_policy_id": "no_task_wait_base_departure_shift_v1"
+    },
+    "schema_version": "lunar_ice_bpc.baseline_freeze_verification.v4",
+    "valid": true
+  },
+  "frozen_control_files": {
+    "config": {
+      "expected_sha256": "9859a8e3d04d6eb966656c0b01858ed13ef98e6ab9e38ea7c403b893de50cfab",
+      "match": true,
+      "observed_sha256": "9859a8e3d04d6eb966656c0b01858ed13ef98e6ab9e38ea7c403b893de50cfab",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/frozen_config.yaml"
+    },
+    "manifest": {
+      "expected_sha256": "d7063b403a6c2592c35009dfd6bbf3188e1100499766091a0a74e0d06f81a976",
+      "match": true,
+      "observed_sha256": "d7063b403a6c2592c35009dfd6bbf3188e1100499766091a0a74e0d06f81a976",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/baseline_freeze_manifest.json"
+    }
+  },
+  "gate_pass": true,
+  "heavy_snapshots": [
+    {
+      "match": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_source_run/scale_050/pre_solve_pricing_snapshots/6f10a7c64933bf0b/cd6f49474665f6b45e3445987ccd0910760bc69eaa9bbf11f2f18c69dd646c01.json",
+      "registry_sha256": "3f7685fb9a8ae4077b43c241507f8db16bca452d8d06a0dc1dc9abb42061758f",
+      "sha256": "3f7685fb9a8ae4077b43c241507f8db16bca452d8d06a0dc1dc9abb42061758f",
+      "source_final_judge_wall_time_sec": 544.509408
+    },
+    {
+      "match": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_source_run/scale_050/pre_solve_pricing_snapshots/6f10a7c64933bf0b/76afe476478da617965afb2975ec49f10eee7e68c670d1fe7be88dfdd725f784.json",
+      "registry_sha256": "7750d7cb1056d0f3b9a4fd071519166290188fee0497c86682b015af8368ac59",
+      "sha256": "7750d7cb1056d0f3b9a4fd071519166290188fee0497c86682b015af8368ac59",
+      "source_final_judge_wall_time_sec": 511.51826
+    },
+    {
+      "match": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_source_run/scale_050/pre_solve_pricing_snapshots/6f10a7c64933bf0b/6046c113a5fe00da1bcec45579caf5ce383d007fff6b1b35e0c87b40a6c81bc8.json",
+      "registry_sha256": "8c760611509c0cc95c867ee38c8a171dfbe5f7ddc9a9116c89761d643751a237",
+      "sha256": "8c760611509c0cc95c867ee38c8a171dfbe5f7ddc9a9116c89761d643751a237",
+      "source_final_judge_wall_time_sec": 489.344598
+    },
+    {
+      "match": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_source_run/scale_050/pre_solve_pricing_snapshots/6f10a7c64933bf0b/abbfdc7422c18f69e8085863426f0356dde203b49598e4df7a92d5cf59603785.json",
+      "registry_sha256": "9ed08c0a2b3cd80f8b14236a4bdde703cdb9b3a212c9976ee7ed774289a9b8df",
+      "sha256": "9ed08c0a2b3cd80f8b14236a4bdde703cdb9b3a212c9976ee7ed774289a9b8df",
+      "source_final_judge_wall_time_sec": 478.793672
+    }
+  ],
+  "isolated_native_build": {
+    "build_info": {
+      "best_reduced_cost_event_trace": "harvest_improvements_v1",
+      "bidirectional_feasibility_certificate_authority": "none",
+      "bidirectional_feasibility_compiled": "true",
+      "bidirectional_feasibility_policy": "p0v4_frozen_dual_depot_meet_max_plus_v1",
+      "bidirectional_journey_probe_policy": "p0v4_frozen_dual_task_meet_journey_label_v1",
+      "bidirectional_midpoint_meet_policy": "p0v4_frozen_dual_depot_midpoint_meet_v1",
+      "bidirectional_task_meet_policy": "p0v4_frozen_dual_task_meet_max_plus_v1",
+      "branch_support": "ryan_foster_same_different_feasibility",
+      "build_type": "RelWithDebInfo",
+      "compiler": "13.3.0",
+      "completion_bound": "positive_cover_dual_threshold_pruning_v1",
+      "cut_state_bytes": "8",
+      "cut_state_max_bits": "48",
+      "cut_state_schema": "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+      "cut_support": "sri3_sri5_divisor2_threshold_crossing_v1",
+      "cxx_standard": "23",
+      "dssr_certificate_kind": "DSSR_RELAXATION_LOWER_BOUND",
+      "dssr_v2_policy": "multi_sortie_counterexample_pressure_refinement_v2",
+      "exact_negative_escape_certificate_semantics": "partial_fail_closed_v1",
+      "exact_negative_escape_policy": "diverse_raw_4x_then_p0v4_selector_v1",
+      "guidance_ordering": "negative_harvest_task_arc_priority_v1",
+      "harvest_work_budget": "deterministic_processed_labels_v1",
+      "journey_resource_bytes": "184",
+      "journey_value_bytes": "184",
+      "label_memory_representation": "u16_counts_single_component_variant_compact_bucket_v2",
+      "label_state_bytes": "176",
+      "large_scale_exact_pricer": "multi_sortie_counterexample_refinement_v1",
+      "max_active_cuts": "16",
+      "memory_pressure_policy": "disabled_for_exact_hard_limit_only",
+      "ng_dssr_v3_compiled": "true",
+      "ng_dssr_v3_policy": "multi_sortie_ng_memory_counterexample_refinement_v3",
+      "rcspp_commit": "2f1d53ba6806844e30ce43ee9c41041a5a1b4e79",
+      "rcspp_journey_component_object_bytes": "240",
+      "rcspp_label_object_bytes": "64",
+      "rcspp_outer_resource_object_bytes": "96",
+      "service_timing_policy_id": "no_task_wait_base_departure_shift_v1"
+    },
+    "module_in_isolated_install": true,
+    "module_path": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1/install/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+    "probe_callable": true
+  },
+  "issues": [],
+  "next_required_stage": "small-differential",
+  "p0v4_runtime_path_mutated": false,
+  "policy_id": "p0v4_frozen_dual_depot_meet_max_plus_v1",
+  "production_default_changed": false,
+  "schema_version": "lunar_ice_bpc.p0v4_bidirectional_feasibility_prepare.v1",
+  "source_files": [
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/native/lunar_spprc/CMakeLists.txt",
+      "sha256": "b93476175d6ea5a5568bdb5cd45dd3cfa4bbeea61074f29c39068741ab4fff83"
+    },
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/native/lunar_spprc/include/lunar_spprc/bidirectional_feasibility.hpp",
+      "sha256": "752a1b99676407e354b3a274a0cf7c7378e0407e7a7cb7c979b0aca11b591b47"
+    },
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/native/lunar_spprc/src/bidirectional_feasibility.cpp",
+      "sha256": "107bff2a093875c6c48fc94a01d821e3d305e10264a5129cf5df0f237382a7f1"
+    },
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/native/lunar_spprc/src/pybind_module.cpp",
+      "sha256": "3ff2989ca629208419e0463883fa5e316def0bab004b83dca08c79e37c2467f0"
+    },
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/exact/bpc/pricing/bidirectional_feasibility.py",
+      "sha256": "61c47b0383d96348cbf165be24ea7d726c86b9d57e8751d4cb06dc404a8e235b"
+    },
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/exact/bpc/pricing/backends/native_bidirectional_hybrid.py",
+      "sha256": "1621426239e1979e4800c619d592dd48b9296423b4e4b1515c4250ecde9dab87"
+    },
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/scripts/run_p0v4_bidirectional_feasibility.py",
+      "sha256": "e879fbe9381ddf2a75a57792fe74f4949786969d4c6c1e67e0a29d68f94966ac"
+    },
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v4_diverse_escape_batch_one_deviation.py",
+      "sha256": "7f0f1647312ca481ea1ecc293325b59f69da4efdfac6756ce194f2773ca00fe1"
+    },
+    {
+      "exists": true,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/tests/native/test_native_spprc_backend.py",
+      "sha256": "06c0f6072a795f4613837853aa5d3ec230313d4570a3f70957f6205852f02e54"
+    }
+  ],
+  "status": "PREPARED"
+}

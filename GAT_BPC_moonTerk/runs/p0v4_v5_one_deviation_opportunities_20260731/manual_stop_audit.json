@@ -1,0 +1,12 @@
+{
+  "schema_version": "lunar_ice_bpc.manual_run_stop_audit.v1",
+  "run_scope": "scale30 route-opportunity collection",
+  "stopped_process": "instance_006 exact tree-closure subprocess",
+  "reason": "The natural root-pool trajectory and all route-opportunity rows had already been persisted. Continuing exact tree closure could not add root-level one-deviation contexts.",
+  "signal": "SIGTERM",
+  "collector_returncode": -15,
+  "preserved_route_admission_snapshot_count": 47,
+  "certificate_claimed_for_stopped_instance": false,
+  "exact_result_claimed_for_stopped_instance": false,
+  "subsequent_policy": "Use explicit diagnostic root-pool collection-only mode; never use collection-only rows as exact/certificate evidence."
+}

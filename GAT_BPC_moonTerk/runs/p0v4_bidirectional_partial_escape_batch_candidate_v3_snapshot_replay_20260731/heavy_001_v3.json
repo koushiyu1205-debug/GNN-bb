@@ -1,0 +1,39 @@
+{
+  "backend_id": "native_rcspp_bidirectional_midpoint_partial_hybrid_v2",
+  "best_found_rc": -0.391111125,
+  "can_certify_another_run": false,
+  "can_enter_certificate_audit": false,
+  "certificate_blockers": [
+    "native_exact_search_incomplete",
+    "native_frontier_not_empty",
+    "native_exact_negative_escape_partial"
+  ],
+  "column_count": 512,
+  "elapsed_wall_sec": 0.8814717570785433,
+  "engine_hash": "c116ed790031db21",
+  "engine_status": "FOUND_NEGATIVE_PARTIAL",
+  "frontier_empty": false,
+  "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json",
+  "mutates_production_policy": false,
+  "partial_columns_valid": true,
+  "schema_version": "lunar_ice_bpc.p0v4_bidirectional_snapshot_replay.v1",
+  "search_exhaustive": false,
+  "snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_source_run/scale_050/pre_solve_pricing_snapshots/6f10a7c64933bf0b/cd6f49474665f6b45e3445987ccd0910760bc69eaa9bbf11f2f18c69dd646c01.json",
+  "snapshot_hash": "cd6f49474665f6b45e3445987ccd0910760bc69eaa9bbf11f2f18c69dd646c01",
+  "source_binding_hash": "fce7bfb4bc45b1c99eaba22c56ec8ace9d38fbf1ef026027ea5c4dac4effc024",
+  "telemetry": {
+    "bidirectional_midpoint_hybrid_accepted": true,
+    "bidirectional_midpoint_hybrid_attempted": true,
+    "bidirectional_midpoint_hybrid_fallback_used": false,
+    "bidirectional_midpoint_hybrid_policy_id": "p0v4_midpoint_partial_witness_hybrid_v2",
+    "bidirectional_midpoint_partial_witness_accepted": false,
+    "bidirectional_midpoint_prepass_wall_sec": 0.85018949,
+    "bidirectional_midpoint_raw_route_count": 512,
+    "bidirectional_midpoint_raw_search_exhaustive": true,
+    "bidirectional_midpoint_raw_status": "MIDPOINT_MEET_COMPLETE_DIAGNOSTIC_ONLY",
+    "negative_escape_termination_reason": "BIDIRECTIONAL_MIDPOINT_EXHAUSTIVE_NEGATIVE_POOL",
+    "negative_escape_triggered": true,
+    "raw_unique_negative_count": 512,
+    "wall_time_seconds": 0.832187853
+  }
+}

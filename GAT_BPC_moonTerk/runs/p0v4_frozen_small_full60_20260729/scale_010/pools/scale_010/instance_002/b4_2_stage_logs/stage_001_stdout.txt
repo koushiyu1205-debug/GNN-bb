@@ -1,0 +1,2 @@
+{"stage_count": 1, "latest_stage": 1, "latest_scope": "DIAGNOSTIC_PRICING_FRONTIER", "latest_state": "INCOMPLETE_LIMIT", "latest_compact_final_judge_profile": "V4SH", "latest_compact_final_judge_phase_mode": "harvest_then_proof", "latest_final_best_reduced_cost": null, "latest_final_dual_bound": null, "latest_active_column_count": 83, "latest_added_column_count": 74}
+report /home/kai/work/GAT_BPC_moonTerk/runs/p0v4_frozen_small_full60_20260729/scale_010/pools/scale_010/instance_002/staged_resume_report_zh.md

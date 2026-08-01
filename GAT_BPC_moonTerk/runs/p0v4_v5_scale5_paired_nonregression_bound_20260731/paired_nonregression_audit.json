@@ -1,0 +1,132 @@
+{
+  "blocks": [
+    {
+      "block_id": "block01",
+      "candidate_loss_count": 5,
+      "candidate_win_count": 15,
+      "engine_bindings": {
+        "P0V4": {
+          "child_observed_hash": "9447815e6725fa4f",
+          "end_hash": "9447815e6725fa4f",
+          "expected_hash": "9447815e6725fa4f",
+          "valid": true
+        },
+        "V5": {
+          "child_observed_hash": "a3be48f74fb8ec8a",
+          "end_hash": "a3be48f74fb8ec8a",
+          "expected_hash": "a3be48f74fb8ec8a",
+          "valid": true
+        }
+      },
+      "geometric_mean_ratio": 0.9058965727945842,
+      "issues": [],
+      "median_ratio": 0.9600914146549839,
+      "paired_instance_count": 20,
+      "source_files": {
+        "P0V4": {
+          "rows": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block01_P0V4/scale_005/b4_2_cold_exact_rows.csv",
+          "rows_sha256": "6453970660aefb0e69e37be679e8d5505e6b1dfb6896426936b993f01cfaaf5d",
+          "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block01_P0V4/native_spprc_acceptance_summary.json",
+          "summary_sha256": "9a97792df9646853c4835cca74f398baf1d62cbc1d16efac770a09409ea61de5"
+        },
+        "V5": {
+          "rows": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block01_V5/scale_005/b4_2_cold_exact_rows.csv",
+          "rows_sha256": "0072daa1b88cc791a1a3a07ac16847ed9107bedcc270274845d3f23226438916",
+          "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block01_V5/native_spprc_acceptance_summary.json",
+          "summary_sha256": "63b0ba1ba9cfe4c97592032cadd17c63ed31b5ecb7de9d68881d83ab6e799106"
+        }
+      }
+    },
+    {
+      "block_id": "block02",
+      "candidate_loss_count": 12,
+      "candidate_win_count": 8,
+      "engine_bindings": {
+        "P0V4": {
+          "child_observed_hash": "9447815e6725fa4f",
+          "end_hash": "9447815e6725fa4f",
+          "expected_hash": "9447815e6725fa4f",
+          "valid": true
+        },
+        "V5": {
+          "child_observed_hash": "a3be48f74fb8ec8a",
+          "end_hash": "a3be48f74fb8ec8a",
+          "expected_hash": "a3be48f74fb8ec8a",
+          "valid": true
+        }
+      },
+      "geometric_mean_ratio": 1.032462500647779,
+      "issues": [],
+      "median_ratio": 1.0511139753706842,
+      "paired_instance_count": 20,
+      "source_files": {
+        "P0V4": {
+          "rows": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block02_P0V4/scale_005/b4_2_cold_exact_rows.csv",
+          "rows_sha256": "564ea96b82394247a3460d991a2c02fe7825afb87a4a0fb3bfab0b463dfe84f3",
+          "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block02_P0V4/native_spprc_acceptance_summary.json",
+          "summary_sha256": "4ab6d88b1a36c0c1be6583bbfa0529aac8161a3471a93e2170738f9214fe1177"
+        },
+        "V5": {
+          "rows": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block02_V5/scale_005/b4_2_cold_exact_rows.csv",
+          "rows_sha256": "e72fb098c718e210020b05894fde3327ce9fc75cd897d7026d7db7b328e679f9",
+          "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block02_V5/native_spprc_acceptance_summary.json",
+          "summary_sha256": "4a17911fe38d9aaa64565b2588399767c5c513a9417a7603627543fea584f6e7"
+        }
+      }
+    },
+    {
+      "block_id": "block03",
+      "candidate_loss_count": 10,
+      "candidate_win_count": 10,
+      "engine_bindings": {
+        "P0V4": {
+          "child_observed_hash": "9447815e6725fa4f",
+          "end_hash": "9447815e6725fa4f",
+          "expected_hash": "9447815e6725fa4f",
+          "valid": true
+        },
+        "V5": {
+          "child_observed_hash": "a3be48f74fb8ec8a",
+          "end_hash": "a3be48f74fb8ec8a",
+          "expected_hash": "a3be48f74fb8ec8a",
+          "valid": true
+        }
+      },
+      "geometric_mean_ratio": 0.9983203813463581,
+      "issues": [],
+      "median_ratio": 0.9991690205543791,
+      "paired_instance_count": 20,
+      "source_files": {
+        "P0V4": {
+          "rows": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block03_P0V4/scale_005/b4_2_cold_exact_rows.csv",
+          "rows_sha256": "4251dfee221a448ce3c48341be6be8fd18db977488311a216268ada976dd4fd7",
+          "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block03_P0V4/native_spprc_acceptance_summary.json",
+          "summary_sha256": "2e178dcd8c9d463d04c2428a7f44fc2f20ee93ba7bc8ba732f1ffd08df255cd4"
+        },
+        "V5": {
+          "rows": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block03_V5/scale_005/b4_2_cold_exact_rows.csv",
+          "rows_sha256": "7f63b8aa1d0489c4c04697b35bb33f7e65d707364992132d2482c08fb6ec2e14",
+          "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731/block03_V5/native_spprc_acceptance_summary.json",
+          "summary_sha256": "bd24a51b79acf9ee1b8a395d14e354d8d92cd330000bbf7cd493bc202797baa2"
+        }
+      }
+    }
+  ],
+  "candidate": "V5",
+  "candidate_loss_count": 27,
+  "candidate_win_count": 33,
+  "control": "P0V4",
+  "expected_instances_per_block": 20,
+  "issues": [],
+  "minimum_blocks": 3,
+  "observed_block_count": 3,
+  "paired_observation_count": 60,
+  "pass": true,
+  "pooled_geometric_mean_ratio": 0.9774043788702922,
+  "pooled_median_ratio": 0.9938953089990226,
+  "pooled_relative_improvement": 0.02259562112970781,
+  "ratio_max": 1.03,
+  "run_root": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_scale5_paired_nonregression_bound_20260731",
+  "scale": 5,
+  "schema_version": "lunar_ice_bpc.p0v4_v5_paired_nonregression.v1"
+}

@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 from time import perf_counter
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
@@ -136,6 +136,15 @@ def harvest_addable_negative_columns(
     guidance_separator_policy_version: str = "",
     deferred_buffer: DeferredHarvestBuffer | None = None,
     micro_batch_size: int | None = None,
+    one_deviation_candidate_id: str | None = None,
+    one_deviation_allowed: bool = False,
+    one_deviation_root_already_used: bool = False,
+    one_deviation_memory_adverse_event: bool = False,
+    counterfactual_state: Mapping[str, Any] | None = None,
+    observation_only: bool = False,
+    preserve_input_candidate_order: bool = False,
+    p0_selected_candidate_ids_override: Sequence[str] | None = None,
+    p0_override_is_exact_baseline: bool = False,
 ) -> tuple[tuple[JourneyColumn, ...], dict]:
     """Select true-RC negative candidates that can actually enter the master."""
 
@@ -258,7 +267,11 @@ def harvest_addable_negative_columns(
             HarvestCandidateReport(
                 candidate_id=candidate_id,
                 signature=signature,
-                true_reduced_cost=round(float(true_rc), 9),
+                # Preserve the audited value used by the strict negative-eps
+                # decision.  Rounding here could turn a legal
+                # ``rc < -eps`` candidate into exactly ``-eps`` in the
+                # replay snapshot and falsely invalidate opportunity data.
+                true_reduced_cost=float(true_rc),
                 task_set=task_set,
                 is_negative=True,
                 would_enter_master=would_enter_master,
@@ -294,6 +307,11 @@ def harvest_addable_negative_columns(
             or bool(
                 str(
                     os.getenv("LUNAR_ICE_GAT_TRAINING_ROWS_DIR", "")
+                ).strip()
+            )
+            or bool(
+                str(
+                    os.getenv("LUNAR_ICE_ONE_DEVIATION_MANIFEST", "")
                 ).strip()
             )
         )
@@ -391,21 +409,161 @@ def harvest_addable_negative_columns(
         priorities={},
         guidance_enabled=False,
     )
-    p0_ordered_rows = _select_harvest_rows(
-        addable,
-        active_task_set_lookup=active_task_set_lookup,
-        max_selected=len(addable),
-        priorities={},
-        guidance_enabled=False,
+    p0_ordered_rows = (
+        list(addable)
+        if preserve_input_candidate_order
+        else _select_harvest_rows(
+            addable,
+            active_task_set_lookup=active_task_set_lookup,
+            max_selected=len(addable),
+            priorities={},
+            guidance_enabled=False,
+        )
     )
-    selected_rows = _select_harvest_rows(
-        addable,
-        active_task_set_lookup=active_task_set_lookup,
-        max_selected=selection_limit,
-        priorities=harvest_priorities,
-        guidance_enabled=guidance_effective,
+    if p0_selected_candidate_ids_override is not None:
+        row_by_id = {
+            str(row[4]): row for row in p0_ordered_rows
+        }
+        requested_ids = tuple(
+            str(candidate_id)
+            for candidate_id in p0_selected_candidate_ids_override
+        )
+        p0_selected_rows = [
+            row_by_id[candidate_id]
+            for candidate_id in requested_ids
+            if candidate_id in row_by_id
+        ]
+        if preserve_input_candidate_order:
+            selected_id_set = {
+                str(row[4]) for row in p0_selected_rows
+            }
+            p0_ordered_rows = [
+                *p0_selected_rows,
+                *(
+                    row
+                    for row in p0_ordered_rows
+                    if str(row[4]) not in selected_id_set
+                ),
+            ]
+    one_deviation_runtime_diagnostics: dict = {}
+    if (
+        not observation_only
+        and one_deviation_candidate_id is None
+        and str(node_id) == "root"
+        and guidance_request is not None
+        and bool(
+            str(
+                os.getenv("LUNAR_ICE_ONE_DEVIATION_MANIFEST", "")
+            ).strip()
+        )
+    ):
+        try:
+            from lunar_ice_bpc.guidance.one_deviation_runtime import (
+                infer_one_deviation_from_environment,
+            )
+
+            runtime_decision, one_deviation_runtime_diagnostics = (
+                infer_one_deviation_from_environment(
+                    request=guidance_request,
+                    ordered_candidates=tuple(
+                        {
+                            "candidate_id": str(row[4]),
+                            "task_ids": tuple(row[2]),
+                            "context": (
+                                float(row[1]),
+                                1.0 if row[0] else 0.0,
+                                (
+                                    0.0
+                                    if frozenset(row[2])
+                                    in active_task_set_lookup
+                                    else 1.0
+                                ),
+                                len(row[2])
+                                / max(
+                                    1.0,
+                                    float(guidance_request.data.scale),
+                                ),
+                            ),
+                        }
+                        for row in p0_ordered_rows
+                    ),
+                    batch_size=selection_limit,
+                    root_key=(
+                        f"{guidance_request.data.instance_content_hash}:"
+                        f"{node_id}"
+                    ),
+                    adverse_memory_event=bool(
+                        one_deviation_memory_adverse_event
+                    ),
+                )
+            )
+            if runtime_decision.promotes:
+                one_deviation_candidate_id = (
+                    runtime_decision.promoted_candidate_id
+                )
+                one_deviation_allowed = True
+            # The one-deviation product path is mutually exclusive with the
+            # historical arbitrary harvest-priority guidance.
+            guidance_effective = False
+            harvest_priorities = {}
+        except Exception as exc:
+            one_deviation_runtime_diagnostics = {
+                "one_deviation_fallback_to_noop": True,
+                "one_deviation_runtime_error": repr(exc),
+            }
+    selected_rows = (
+        list(p0_selected_rows)
+        if observation_only or p0_override_is_exact_baseline
+        else _select_harvest_rows(
+            addable,
+            active_task_set_lookup=active_task_set_lookup,
+            max_selected=selection_limit,
+            priorities=harvest_priorities,
+            guidance_enabled=guidance_effective,
+        )
     )
-    selected = tuple(row[3] for row in selected_rows)
+    one_deviation_requested = bool(
+        one_deviation_allowed and one_deviation_candidate_id
+    )
+    one_deviation_executed = False
+    one_deviation_reject_reason = ""
+    if one_deviation_requested:
+        ordered_by_id = {
+            str(row[4]): (rank, row)
+            for rank, row in enumerate(p0_ordered_rows, start=1)
+        }
+        promoted = ordered_by_id.get(
+            str(one_deviation_candidate_id)
+        )
+        if str(node_id) != "root":
+            one_deviation_reject_reason = "non_root_context"
+        elif one_deviation_root_already_used:
+            one_deviation_reject_reason = (
+                "root_intervention_already_consumed"
+            )
+        elif promoted is None:
+            one_deviation_reject_reason = (
+                "candidate_not_in_audited_addable_universe"
+            )
+        elif not (
+            selection_limit + 1
+            <= promoted[0]
+            <= selection_limit + 32
+        ):
+            one_deviation_reject_reason = (
+                "candidate_outside_rank_k_plus_1_to_k_plus_32"
+            )
+        elif not p0_selected_rows:
+            one_deviation_reject_reason = "empty_p0_batch"
+        else:
+            selected_rows = list(p0_selected_rows)
+            selected_rows[-1] = promoted[1]
+            one_deviation_executed = True
+    selected = (
+        tuple()
+        if observation_only
+        else tuple(row[3] for row in selected_rows)
+    )
     selected_candidate_ids = tuple(str(row[4]) for row in selected_rows)
     p0_selected_candidate_ids = tuple(
         str(row[4]) for row in p0_selected_rows
@@ -578,6 +736,21 @@ def harvest_addable_negative_columns(
         "route_admission_treatment_effective": bool(
             promotion_requested and guidance_admission_set_changed
         ),
+        "one_deviation_requested": one_deviation_requested,
+        "one_deviation_executed": one_deviation_executed,
+        "one_deviation_candidate_id": (
+            None
+            if one_deviation_candidate_id is None
+            else str(one_deviation_candidate_id)
+        ),
+        "one_deviation_reject_reason": one_deviation_reject_reason,
+        "one_deviation_intervention_count_this_root": int(
+            one_deviation_executed
+        ),
+        "one_deviation_next_round_policy": (
+            "restore_frozen_exact_p0_order"
+        ),
+        "one_deviation_runtime": one_deviation_runtime_diagnostics,
         "route_admission_structural_zero": bool(
             len(addable) <= selection_limit
         ),
@@ -585,6 +758,13 @@ def harvest_addable_negative_columns(
             "all_addable_routes_fit_p0_admission_budget"
             if len(addable) <= selection_limit
             else ""
+        ),
+        "observation_only": bool(observation_only),
+        "preserve_input_candidate_order": bool(
+            preserve_input_candidate_order
+        ),
+        "p0_override_is_exact_baseline": bool(
+            p0_override_is_exact_baseline
         ),
         "legal_action_universe_hash_before_sort": legal_universe_hash,
         "legal_action_universe_hash_after_sort": legal_universe_hash,
@@ -655,6 +835,7 @@ def harvest_addable_negative_columns(
         selection_limit=selection_limit,
         pool=pool,
         view=view,
+        counterfactual_state=counterfactual_state,
     )
     if training_recording:
         payload["guidance_training_recording"] = training_recording
@@ -745,6 +926,7 @@ def _maybe_record_harvest_training_rows(
     selection_limit: int,
     pool: ColumnPool,
     view: MasterColumnView,
+    counterfactual_state: Mapping[str, Any] | None,
 ) -> dict:
     root_value = str(
         os.getenv("LUNAR_ICE_GAT_TRAINING_ROWS_DIR", "")
@@ -954,7 +1136,10 @@ def _maybe_record_harvest_training_rows(
         output_dir.mkdir(parents=True, exist_ok=True)
         snapshot = None
         route_admission_boundary_active = bool(
-            int(label_counts["addable_negative"]) > int(selection_limit)
+            int(label_counts["addable_negative"])
+            >= int(selection_limit) + 8
+            and len(p0_selected_candidate_ids)
+            == int(selection_limit)
         )
         route_admission_snapshot_eligible = bool(
             route_admission_boundary_active
@@ -1031,6 +1216,16 @@ def _maybe_record_harvest_training_rows(
                 separator_policy_version=(
                     request.separator_policy_version
                 ),
+                candidate_pool_audit_complete=True,
+                true_rc_audit_complete=True,
+                remaining_solve_budget_sec=(
+                    request.wall_time_limit_sec
+                ),
+                remaining_budget_observation_stage=(
+                    "post_candidate_generation_pre_admission"
+                ),
+                memory_limit_gb=float(request.memory_limit_gb),
+                counterfactual_state=counterfactual_state,
             )
         paths = []
         for row in rows:

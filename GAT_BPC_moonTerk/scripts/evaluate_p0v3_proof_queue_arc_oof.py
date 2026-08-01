@@ -87,6 +87,14 @@ def main() -> int:
         type=float,
         default=0.01,
     )
+    parser.add_argument(
+        "--native-build-dir",
+        default="build/native-spprc",
+        help=(
+            "Native extension build used by fresh replay processes. "
+            "This is part of the reported evaluation binding."
+        ),
+    )
     args = parser.parse_args()
 
     cv_path = (ROOT / args.cv_summary).resolve()
@@ -95,8 +103,9 @@ def main() -> int:
     allowed_scales = {int(value) for value in args.scale}
     cv = _load(cv_path)
     env = dict(os.environ)
+    native_build_dir = (ROOT / args.native_build_dir).resolve()
     env["PYTHONPATH"] = (
-        f"{ROOT / 'src'}:{ROOT / 'build/native-spprc'}"
+        f"{ROOT / 'src'}:{native_build_dir}"
     )
     records = []
     rows = [
@@ -329,6 +338,7 @@ def main() -> int:
             0.0, float(args.inference_overhead_sec)
         ),
         "guidance_bucket_width": float(args.guidance_bucket_width),
+        "native_build_dir": str(native_build_dir),
         "records": records,
         "state_rows": state_rows,
         "aggregate": aggregate,

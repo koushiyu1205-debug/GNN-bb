@@ -1,0 +1,43 @@
+{
+  "schema_version": "lunar_ice_bpc.one_deviation_action_decision.v1",
+  "status": "ONE_COLUMN_PROMOTION_SIGNAL_GATE_FAILED",
+  "action_definition": "one_root_event_replace_rank_k_with_one_candidate_from_rank_k_plus_1_through_k_plus_32_then_restore_exact_order",
+  "scale": 30,
+  "structural_gate_pass": true,
+  "signal_gate_pass": false,
+  "gat_training_authorized": false,
+  "gat_deployment_authorized": false,
+  "formal_claim_authorized": false,
+  "exact_candidate_universe_mutated": false,
+  "certificate_or_pruning_paths_mutated": false,
+  "correctness_redline_count": 0,
+  "five_instance_pilot": {
+    "context_count": 5,
+    "instance_count": 5,
+    "promotion_arm_count_per_context": 2,
+    "best_gain_mean": 0.006048527284548765,
+    "best_gain_median": 0.002912427270952589,
+    "best_gain_max": 0.012980408548006065,
+    "strong_signal_threshold": 0.05,
+    "strong_signal_context_count": 0,
+    "gate": "engineering_smoke_gate.json",
+    "gate_sha256": "f152b91cbef0ca319a631c9250bbf25597e96ac1be3fe3d784ec9bc79be2e928",
+    "suite_manifest": "suite_manifest.json",
+    "suite_manifest_sha256": "7673effbf3a0dbff260ff6d7517924f595c4cb5705c33d805b27e15d65ddc78e"
+  },
+  "rank_sweep": {
+    "context_count": 1,
+    "promotion_arm_count": 8,
+    "promoted_from_ranks": [65, 69, 74, 78, 83, 87, 92, 96],
+    "observed_action_count": 7,
+    "right_censored_action_count": 1,
+    "positive_observed_action_count": 1,
+    "best_observed_relative_gain": 0.0003841018394911058,
+    "strong_signal_action_count": 0,
+    "validation_pass": true,
+    "package": "../p0v4_v5_one_deviation_engineering_smoke_rank_sweep_scale30_20260731/context_19ba0d7f/one_deviation_rollout_package.json",
+    "package_sha256": "34316145ee9d1aa6da1c4be2a2c37195a3e4bdaa25e5b8baf1784a0424d2c659"
+  },
+  "decision": "do_not_expand_labels_do_not_train_do_not_deploy",
+  "next_step": "return_to_exact_v5_validation_or_revise_the_intervention_before_reopening_gat"
+}

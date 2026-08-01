@@ -20,6 +20,7 @@ import json
 from math import isfinite
 import os
 from pathlib import Path
+import signal
 import shutil
 import subprocess
 import sys
@@ -78,6 +79,64 @@ LABELING_SUPPORT_CONTINUATION_MAX_NEIGHBORS = _DEFAULT_LABELING_WORKER_CONFIG.su
 LABELING_SUPPORT_CONTINUATION_PROTECTED_SEED_COUNT = (
     _DEFAULT_LABELING_WORKER_CONFIG.support_continuation_protected_seed_count
 )
+
+
+def _run_process_tree(
+    command: list[str],
+    *,
+    cwd: str,
+    env: dict[str, str],
+    text: bool,
+    capture_output: bool,
+    check: bool,
+    timeout: float,
+) -> subprocess.CompletedProcess:
+    if not capture_output:
+        raise ValueError("B4.2 process-tree runner requires captured output")
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        text=text,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=float(timeout))
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            stdout, stderr = process.communicate(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(
+            cmd=command,
+            timeout=float(timeout),
+            output=stdout,
+            stderr=stderr,
+        )
+    completed = subprocess.CompletedProcess(
+        args=command,
+        returncode=int(process.returncode or 0),
+        stdout=stdout,
+        stderr=stderr,
+    )
+    if check and completed.returncode:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            command,
+            output=stdout,
+            stderr=stderr,
+        )
+    return completed
 LARGE_TASK_DIRECT_WORKER_ENABLED = True
 LARGE_TASK_DIRECT_WORKER_MAX_TASKS = 12
 LARGE_TASK_DIRECT_WORKER_MAX_CANDIDATE_SETS = 240
@@ -88,6 +147,32 @@ LARGE_TASK_DIRECT_WORKER_NEIGHBORHOOD_WIDTH = 5
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
+    if (
+        args.one_deviation_sparse_tail_fixed_action != "NOOP"
+        and str(args.one_deviation_sparse_tail_gat_manifest).strip()
+    ):
+        parser.error("fixed sparse-tail action and GAT manifest are exclusive")
+    if (
+        args.one_deviation_sparse_tail_gat_evaluation_mode
+        and not str(args.one_deviation_sparse_tail_gat_manifest).strip()
+    ):
+        parser.error("sparse-tail GAT evaluation mode requires a manifest")
+    if str(args.one_deviation_sparse_tail_gat_manifest).strip():
+        gat_manifest_path = _resolve(
+            args.one_deviation_sparse_tail_gat_manifest
+        ).resolve()
+        if not gat_manifest_path.is_file():
+            parser.error(
+                f"sparse-tail GAT manifest is missing: {gat_manifest_path}"
+            )
+        args.one_deviation_sparse_tail_gat_manifest = str(
+            gat_manifest_path
+        )
+        args.one_deviation_sparse_tail_gat_manifest_sha256 = (
+            _file_sha256(gat_manifest_path)
+        )
+    else:
+        args.one_deviation_sparse_tail_gat_manifest_sha256 = ""
     output_dir = _resolve(args.output_dir)
     if not args.resume and _has_checkpoint(output_dir):
         parser.error(
@@ -327,6 +412,40 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--pool-tail-max-rounds-per-stage", type=int, default=1)
     parser.add_argument("--pool-batch-target", type=int, default=32)
+    parser.add_argument(
+        "--one-deviation-sparse-tail-fixed-action",
+        choices=("NOOP", "S1", "S4"),
+        default="NOOP",
+        help=(
+            "Development-only root-pool action; it is not forwarded to "
+            "tree closure and defaults to frozen NOOP."
+        ),
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-time-cap-sec",
+        type=float,
+        default=60.0,
+        help=(
+            "Development-only root-pool sparse action cap. The action remains "
+            "certificate-free and falls back to the frozen official proof."
+        ),
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-gat-manifest",
+        default="",
+        help=(
+            "Optional context-level GAT manifest for the root pool. It is "
+            "mutually exclusive with fixed S1/S4."
+        ),
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-gat-evaluation-mode",
+        action="store_true",
+        help=(
+            "Allow an evaluation-authorized manifest to act; otherwise the "
+            "GAT is shadow-only and returns NOOP."
+        ),
+    )
     parser.add_argument("--pool-negative-search-cap-sec", type=float, default=90.0)
     parser.add_argument("--pool-optimization-harvest-target", type=int, default=16)
     parser.add_argument(
@@ -377,8 +496,34 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tree-closure-max-nodes", type=int, default=31)
     parser.add_argument("--tree-closure-max-branch-depth", type=int, default=4)
     parser.add_argument(
+        "--route-opportunity-collection-only-root-pool",
+        action="store_true",
+        default=False,
+        help=(
+            "Stop after the natural root-pool trajectory has been persisted. "
+            "This diagnostic scope never runs tree closure and never issues "
+            "an exact or no-negative certificate."
+        ),
+    )
+    parser.add_argument(
+        "--route-opportunity-collection-root-pool-time-cap-sec",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional diagnostic wall cap for the natural root trajectory. "
+            "It is ignored outside collection-only mode and is not part of "
+            "the Exact solver configuration hash."
+        ),
+    )
+    parser.add_argument(
         "--live-sri-policy",
-        choices=("no_cut", "P0", "P1", "P2"),
+        choices=(
+            "no_cut",
+            "P0",
+            "P0_GROUP_SCREEN_V1",
+            "P1",
+            "P2",
+        ),
         default="no_cut",
     )
     parser.add_argument("--route-template-pre-harvest-target", type=int, default=32)
@@ -418,6 +563,21 @@ def _official_config(args: argparse.Namespace) -> dict:
             "LUNAR_ICE_SPPRC_SUBSET_DOMINANCE"
         ),
         "cut_state_enabled": _environment_flag("LUNAR_ICE_SPPRC_CUT_STATE"),
+        "exact_negative_escape_enabled": _environment_flag(
+            "LUNAR_ICE_EXACT_NEGATIVE_ESCAPE_ENABLED"
+        ),
+        "exact_admission_batch_size": int(
+            args.labeling_final_judge_exact_harvest_target
+        ),
+        "exact_raw_negative_pool_size": (
+            4 * int(args.labeling_final_judge_exact_harvest_target)
+        ),
+        "exact_negative_escape_policy_id": (
+            "diverse_raw_4x_then_p0v4_selector_v1"
+        ),
+        "batch_master_admission_enabled": _environment_flag(
+            "LUNAR_ICE_BATCH_MASTER_ADMISSION_ENABLED"
+        ),
         "worker_ng_sizes": [
             int(value)
             for value in str(
@@ -437,6 +597,9 @@ def _official_config(args: argparse.Namespace) -> dict:
         ),
         "adaptive_harvest_cap_sec": _environment_optional_float(
             "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC"
+        ),
+        "adaptive_harvest_schedule": os.getenv(
+            "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE"
         ),
     }
     return {
@@ -472,6 +635,9 @@ def _official_config(args: argparse.Namespace) -> dict:
         "labeling_final_judge_mode": str(args.labeling_final_judge_mode),
         "labeling_final_judge_max_exact_tasks": int(args.labeling_final_judge_max_exact_tasks),
         "labeling_final_judge_exact_harvest_target": int(args.labeling_final_judge_exact_harvest_target),
+        "labeling_final_judge_adaptive_harvest_schedule": os.getenv(
+            "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE"
+        ),
         "labeling_support_continuation_seed_enabled": bool(
             args.labeling_support_continuation_seed_enabled
         ),
@@ -504,6 +670,22 @@ def _official_config(args: argparse.Namespace) -> dict:
         "pool_tail_one_round_active_threshold": int(args.pool_tail_one_round_active_threshold),
         "pool_tail_max_rounds_per_stage": int(args.pool_tail_max_rounds_per_stage),
         "pool_batch_target": int(args.pool_batch_target),
+        "one_deviation_sparse_tail_fixed_action": str(
+            args.one_deviation_sparse_tail_fixed_action
+        ),
+        "one_deviation_sparse_tail_time_cap_sec": float(
+            args.one_deviation_sparse_tail_time_cap_sec
+        ),
+        "one_deviation_sparse_tail_gat_manifest": str(
+            args.one_deviation_sparse_tail_gat_manifest or ""
+        ),
+        "one_deviation_sparse_tail_gat_manifest_sha256": str(
+            getattr(args, "one_deviation_sparse_tail_gat_manifest_sha256", "")
+            or ""
+        ),
+        "one_deviation_sparse_tail_gat_evaluation_mode": bool(
+            args.one_deviation_sparse_tail_gat_evaluation_mode
+        ),
         "pool_negative_search_cap_sec": float(args.pool_negative_search_cap_sec),
         "pool_optimization_harvest_target": int(args.pool_optimization_harvest_target),
         "pool_optimization_harvest_no_good_scope": str(args.pool_optimization_harvest_no_good_scope),
@@ -559,6 +741,14 @@ def _environment_optional_float(name: str) -> float | None:
 def _config_hash(config: dict) -> str:
     payload = json.dumps(config, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _enforce_resume_config(
@@ -662,6 +852,25 @@ def _run_instance_cold(
         if str(latest.get("certificate_scope") or "") == "BPC_NODE_LP_CERTIFIED":
             break
         remaining = float(args.row_limit_sec) - (perf_counter() - started)
+        collection_cap = max(
+            0.0,
+            float(
+                args.route_opportunity_collection_root_pool_time_cap_sec
+            ),
+        )
+        if (
+            bool(args.route_opportunity_collection_only_root_pool)
+            and collection_cap > 0.0
+        ):
+            collection_remaining = collection_cap - (
+                perf_counter() - pool_started
+            )
+            if collection_remaining <= 1.0:
+                stage_error = (
+                    "diagnostic root-trajectory collection time cap reached"
+                )
+                break
+            remaining = min(remaining, collection_remaining)
         if remaining <= 1.0:
             stage_error = "row time limit reached before root pool certificate"
             break
@@ -786,6 +995,22 @@ def _run_instance_cold(
     _apply_root_pool_harvest(row, _root_pool_harvest_fields(stages))
     _apply_root_pool_support_continuation(row, latest_probe)
     _apply_root_pool_large_task_direct_worker(row, latest_probe)
+    if bool(args.route_opportunity_collection_only_root_pool):
+        row.update(
+            _route_opportunity_collection_stop_fields(
+                latest_stage=latest_stage,
+                latest_probe=latest_probe,
+                root_pool_certified=bool(pool_certified),
+                time_cap_sec=max(
+                    0.0,
+                    float(
+                        args.route_opportunity_collection_root_pool_time_cap_sec
+                    ),
+                ),
+                pool_wall_sec=float(pool_wall),
+            )
+        )
+        return _finish_timing(row, started)
     if bool(args.root_partition_proof) and latest_probe is not None and not pool_certified:
         feedback_row = _run_partition_feedback_rounds(
             args,
@@ -957,6 +1182,59 @@ def _run_instance_cold(
     return _finish_timing(row, started)
 
 
+def _route_opportunity_collection_stop_fields(
+    *,
+    latest_stage: dict,
+    latest_probe: Path | None,
+    root_pool_certified: bool,
+    time_cap_sec: float = 0.0,
+    pool_wall_sec: float = 0.0,
+) -> dict:
+    """Return the fail-closed terminal row for root-only data collection."""
+
+    trajectory_persisted = latest_probe is not None
+    capped = bool(
+        time_cap_sec > 0.0
+        and pool_wall_sec >= max(0.0, 0.9 * time_cap_sec)
+        and not root_pool_certified
+    )
+    return {
+        "algorithm_status": (
+            "GAT_COLLECTION_ROOT_TRAJECTORY_PERSISTED"
+            if trajectory_persisted
+            else "GAT_COLLECTION_ROOT_TRAJECTORY_MISSING"
+        ),
+        "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+        "pricing_state": str(
+            latest_stage.get("pricing_state") or "INCOMPLETE_LIMIT"
+        ),
+        "exact_certificate": False,
+        "bpc_tree_optimal": False,
+        "under_300": False,
+        "under_acceptance_limit": False,
+        "under_500": False,
+        "row_terminal": True,
+        "route_opportunity_collection_only": True,
+        "route_opportunity_collection_root_trajectory_persisted": bool(
+            trajectory_persisted
+        ),
+        "route_opportunity_collection_root_pool_certified": bool(
+            root_pool_certified
+        ),
+        "route_opportunity_collection_root_pool_time_cap_sec": float(
+            time_cap_sec
+        ),
+        "route_opportunity_collection_root_pool_time_cap_reached": capped,
+        "route_opportunity_collection_tree_closure_skipped": True,
+        "route_opportunity_collection_certificate_suppressed": True,
+        "fail_reason": (
+            "diagnostic route-opportunity collection stopped after the "
+            "configured natural root trajectory; tree closure was "
+            "intentionally skipped and no certificate was issued"
+        ),
+    }
+
+
 def _run_partition_feedback_rounds(
     args: argparse.Namespace,
     *,
@@ -1123,6 +1401,10 @@ def _run_stage(
         str(args.worker_pricer_kind),
         "--batch-target",
         str(int(args.pool_batch_target)),
+        "--one-deviation-sparse-tail-fixed-action",
+        str(args.one_deviation_sparse_tail_fixed_action),
+        "--one-deviation-sparse-tail-time-cap-sec",
+        str(float(args.one_deviation_sparse_tail_time_cap_sec)),
         "--negative-search-cap-sec",
         str(float(args.pool_negative_search_cap_sec)),
         "--compact-optimization-harvest-target",
@@ -1140,6 +1422,17 @@ def _run_stage(
         "--compact-pair-energy-infeasible-cut",
         "--compact-triple-time-window-infeasible-cut",
     ]
+    if str(args.one_deviation_sparse_tail_gat_manifest).strip():
+        command.extend(
+            (
+                "--one-deviation-sparse-tail-gat-manifest",
+                str(args.one_deviation_sparse_tail_gat_manifest),
+            )
+        )
+        if bool(args.one_deviation_sparse_tail_gat_evaluation_mode):
+            command.append(
+                "--one-deviation-sparse-tail-gat-evaluation-mode"
+            )
     if bool(args.tail_dual_stabilization_enabled):
         command.append("--tail-dual-stabilization-enabled")
     command.extend(
@@ -1157,7 +1450,7 @@ def _run_stage(
             + max(0.0, float(getattr(args, "pool_stage_batch_time_reserve_sec", 0.0) or 0.0))
             + 5.0
         )
-        completed = subprocess.run(
+        completed = _run_process_tree(
             command,
             cwd=str(ROOT),
             env=env,
@@ -1265,7 +1558,7 @@ def _run_tree_closure(
     env["LUNAR_ICE_COMPACT_FINAL_JUDGE_PHASE_MODE"] = "proof_only"
     started = perf_counter()
     try:
-        completed = subprocess.run(
+        completed = _run_process_tree(
             command,
             cwd=str(ROOT),
             env=env,
@@ -1492,7 +1785,7 @@ def _run_root_partition_proof(
     env = _solver_env(args)
     started = perf_counter()
     try:
-        completed = subprocess.run(
+        completed = _run_process_tree(
             command,
             cwd=str(ROOT),
             env=env,
@@ -1837,7 +2130,7 @@ def _run_partition_worker(
     }
     started = perf_counter()
     try:
-        completed = subprocess.run(
+        completed = _run_process_tree(
             command,
             cwd=str(ROOT),
             env=env,
@@ -2572,9 +2865,43 @@ def _worker_safety_redline_fields(
     tail_dual_stabilization_enabled: bool,
 ) -> dict:
     worker_payload = worker_payload if isinstance(worker_payload, dict) else {}
-    worker_can_certify = _truthy(worker_payload.get("can_certify_no_negative"))
-    worker_uses_true_dual = _truthy(worker_payload.get("uses_true_dual_bpc_certificate"))
-    worker_root_lp_bound_official = _truthy(worker_payload.get("root_lp_bound_official"))
+    final_judge_called = _truthy(worker_payload.get("final_judge_called"))
+    # Tree history rows flatten worker diagnostics and the exact final-judge
+    # result into one mapping.  Once the final judge has run, the unqualified
+    # certificate fields describe that exact result, not the candidate worker.
+    # Continue to fail closed on every worker-qualified certificate claim.
+    explicit_worker_certificate_fields = (
+        "worker_certificate_leak",
+        "worker_can_certify_no_negative",
+        "worker_no_column_can_certify",
+        "no_column_certificate_allowed",
+        "relaxed_candidate_search_can_certify_no_negative",
+        "resource_extension_label_columns_can_certify_no_negative",
+        "support_continuation_can_certify_no_negative",
+        "large_task_direct_worker_can_certify_no_negative",
+        "large_task_direct_worker_no_column_can_certify",
+    )
+    worker_can_certify = bool(
+        any(_truthy(worker_payload.get(key)) for key in explicit_worker_certificate_fields)
+        or (
+            not final_judge_called
+            and _truthy(worker_payload.get("can_certify_no_negative"))
+        )
+    )
+    worker_uses_true_dual = bool(
+        _truthy(worker_payload.get("worker_uses_true_dual_bpc_certificate"))
+        or (
+            not final_judge_called
+            and _truthy(worker_payload.get("uses_true_dual_bpc_certificate"))
+        )
+    )
+    worker_root_lp_bound_official = bool(
+        _truthy(worker_payload.get("worker_root_lp_bound_official"))
+        or (
+            not final_judge_called
+            and _truthy(worker_payload.get("root_lp_bound_official"))
+        )
+    )
     completion_bound_certifies = _truthy(worker_payload.get("completion_bound_can_certify_no_negative"))
     tail_dual_no_column_can_certify = _truthy(worker_payload.get("tail_dual_no_column_can_certify"))
     worker_certificate_leak = bool(
@@ -2594,16 +2921,28 @@ def _worker_safety_redline_fields(
     )
     official_dual_source = str(worker_payload.get("official_dual_source") or "")
     true_dual_rc_recompute_missing = bool(
-        tail_dual_stabilization_enabled and worker_payload and not true_dual_rc_recomputed
+        _truthy(worker_payload.get("true_dual_rc_recompute_missing"))
+        or (
+            tail_dual_stabilization_enabled
+            and worker_payload
+            and not true_dual_rc_recomputed
+        )
     )
     tail_dual_certificate_leak = bool(
-        tail_dual_stabilization_enabled
-        and (
-            worker_certificate_leak
-            or tail_dual_no_column_can_certify
-            or (worker_payload and not worker_dual_only)
-            or true_dual_rc_recompute_missing
-            or (worker_payload and official_dual_source not in {"", "current_true_rmp_dual"})
+        _truthy(worker_payload.get("tail_dual_certificate_leak"))
+        or (
+            tail_dual_stabilization_enabled
+            and (
+                worker_certificate_leak
+                or tail_dual_no_column_can_certify
+                or (worker_payload and not worker_dual_only)
+                or true_dual_rc_recompute_missing
+                or (
+                    worker_payload
+                    and official_dual_source
+                    not in {"", "current_true_rmp_dual"}
+                )
+            )
         )
     )
     return {
@@ -2730,6 +3069,9 @@ def _base_row(
         "labeling_final_judge_mode": str(args.labeling_final_judge_mode),
         "labeling_final_judge_max_exact_tasks": int(args.labeling_final_judge_max_exact_tasks),
         "labeling_final_judge_exact_harvest_target": int(args.labeling_final_judge_exact_harvest_target),
+        "labeling_final_judge_adaptive_harvest_schedule": os.getenv(
+            "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE"
+        ),
         "labeling_support_continuation_seed_enabled": bool(
             args.labeling_support_continuation_seed_enabled
         ),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 from time import perf_counter
-from typing import Iterable, Mapping
+from typing import Callable, Iterable, Mapping
 
 from lunar_ice_bpc.domain.scenario import SERVICE_TIMING_POLICY_ID
 from lunar_ice_bpc.exact.bpc.certificates.certificate_ledger import CertificateLedger
@@ -19,6 +19,9 @@ from lunar_ice_bpc.exact.bpc.guidance.contracts import (
     canonical_universe_hash,
 )
 from lunar_ice_bpc.exact.bpc.master.journey_master import solve_root_journey_master
+from lunar_ice_bpc.exact.bpc.pricing.backends import (
+    PRICING_LIFECYCLE_SCOPE_TREE_NODE,
+)
 from lunar_ice_bpc.exact.bpc.pricing.final_judge import run_true_dual_root_final_judge
 from lunar_ice_bpc.exact.bpc.pricing.status import AlgorithmStatus, CertificateScope, PricingState
 from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (
@@ -101,6 +104,9 @@ def solve_b3_branch_price_tree_baseline(
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
     live_sri_policy: LiveSriPolicy | str | None = None,
+    one_deviation_sparse_tail_policy: (
+        Callable[[Mapping[str, object]], object] | None
+    ) = None,
     development_branch_rank_index: int = 0,
     development_branch_rank_by_path: (
         Mapping[tuple[str, ...], int] | None
@@ -343,6 +349,9 @@ def solve_b3_branch_price_tree_baseline(
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,
             labeling_final_judge_exact_harvest_target=labeling_final_judge_exact_harvest_target,
             live_sri_policy=active_live_policy,
+            one_deviation_sparse_tail_policy=(
+                one_deviation_sparse_tail_policy
+            ),
         )
         node_priced_columns = tuple(node.pop("_all_priced_columns", tuple()) or tuple())
         node_cut_context = node.pop("_active_cut_context", queued.cut_context)
@@ -752,6 +761,9 @@ def _solve_b3_node(
     labeling_final_judge_max_exact_tasks: int | None = None,
     labeling_final_judge_exact_harvest_target: int | None = None,
     live_sri_policy: LiveSriPolicy | None = None,
+    one_deviation_sparse_tail_policy: (
+        Callable[[Mapping[str, object]], object] | None
+    ) = None,
 ) -> dict:
     active_live_policy = live_sri_policy or LiveSriPolicy.named("no_cut")
     if use_complete_universe_audit and universe and not active_live_policy.enabled:
@@ -776,6 +788,9 @@ def _solve_b3_node(
         "cut_context": queued.cut_context,
         "cut_lineage": queued.cut_lineage,
         "node_id": queued.node_id,
+        "pricing_lifecycle_scope": (
+            PRICING_LIFECYCLE_SCOPE_TREE_NODE
+        ),
         "initial_columns": initial_columns,
         "incumbent_objective": incumbent_objective_at_entry,
         "max_direct_tasks": max_direct_tasks,
@@ -791,6 +806,9 @@ def _solve_b3_node(
         "labeling_final_judge_enabled": labeling_final_judge_enabled,
         "labeling_final_judge_max_exact_tasks": labeling_final_judge_max_exact_tasks,
         "labeling_final_judge_exact_harvest_target": labeling_final_judge_exact_harvest_target,
+        "one_deviation_sparse_tail_policy": (
+            one_deviation_sparse_tail_policy
+        ),
     }
     if active_live_policy.enabled:
         engine = solve_node_pricing_with_live_sri(
@@ -958,6 +976,9 @@ def _solve_b3_node_with_complete_universe_audit(
             column_pool=pool,
             master_view=view,
             node_id=queued.node_id,
+            pricing_lifecycle_scope=(
+                PRICING_LIFECYCLE_SCOPE_TREE_NODE
+            ),
             active_task_sets={frozenset(column.task_set) for column in master_columns},
             labeling_final_judge_enabled=labeling_final_judge_enabled,
             labeling_final_judge_max_exact_tasks=labeling_final_judge_max_exact_tasks,

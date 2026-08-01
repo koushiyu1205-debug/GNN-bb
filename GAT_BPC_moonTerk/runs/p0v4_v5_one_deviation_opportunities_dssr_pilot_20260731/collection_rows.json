@@ -1,0 +1,60 @@
+[
+  {
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+      "--config",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+      "--scales",
+      "30",
+      "--instance-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_030",
+      "--limit",
+      "5",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/exact_runs/scale_030",
+      "--no-resume",
+      "--route-opportunity-collection-only-root-pool"
+    ],
+    "execution_scope": "diagnostic_root_pool_collection_only",
+    "native_build_dir": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1",
+    "peak_process_tree_rss_gb": 1.9157676696777344,
+    "returncode": -15,
+    "route_opportunity_rows_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows",
+    "run_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/exact_runs/scale_030",
+    "scale": 30,
+    "stderr": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/exact_runs/scale_030/collector_stderr.log",
+    "stdout": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/exact_runs/scale_030/collector_stdout.log",
+    "termination_reason": "",
+    "wall_time_sec": 780.9248589089839
+  },
+  {
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+      "--config",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+      "--scales",
+      "50",
+      "--instance-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_050",
+      "--limit",
+      "5",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/exact_runs/scale_050",
+      "--no-resume",
+      "--route-opportunity-collection-only-root-pool"
+    ],
+    "execution_scope": "diagnostic_root_pool_collection_only",
+    "native_build_dir": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1",
+    "peak_process_tree_rss_gb": 1.4340782165527344,
+    "returncode": -15,
+    "route_opportunity_rows_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows",
+    "run_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/exact_runs/scale_050",
+    "scale": 50,
+    "stderr": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/exact_runs/scale_050/collector_stderr.log",
+    "stdout": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/exact_runs/scale_050/collector_stdout.log",
+    "termination_reason": "",
+    "wall_time_sec": 20.023712147958577
+  }
+]

@@ -1,0 +1,435 @@
+{
+  "aggregate": {
+    "all_safe": true,
+    "bootstrap_95_interval_geomean_net_ratio": [
+      1.012558589518751,
+      1.1657149548607684
+    ],
+    "five_percent_win_count": 3,
+    "median_net_ratio": 1.1466321364765406,
+    "paired_geometric_mean_net_ratio": 1.0895072365823915,
+    "repeat_count": 15,
+    "state_count": 15,
+    "win_count": 4
+  },
+  "deployable": false,
+  "development_only": true,
+  "gate": {
+    "passes_oof_exact_replay": false,
+    "permits_online_deployment": false,
+    "reason": "OOF exact replay did not meet the 5 percent gate"
+  },
+  "guidance_bucket_width": 0.0001,
+  "native_build_dir": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1",
+  "records": [
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "32e7e2804578fa0a",
+      "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_20087c306e2373b8/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_20087c306e2373b8/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.320703172,
+      "qg1_measured_wall_sec": 0.408364617,
+      "qg1_net_vs_q0_ratio": 1.3045228533006217,
+      "qg1_net_wall_sec": 0.418364617,
+      "repeat": 1,
+      "scale": 30,
+      "source_state_hash": "20087c306e2373b8e6f20562b94ba2e1f6576fee792e3da0cf185a6ad831b7a3"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "39f5c5475211f753",
+      "instance_id": "lunar_ice_sp50_030_003_seed202907263",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_b31dd4f05efcfb44/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_b31dd4f05efcfb44/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.263555751,
+      "qg1_measured_wall_sec": 0.279661272,
+      "qg1_net_vs_q0_ratio": 1.099051228823309,
+      "qg1_net_wall_sec": 0.289661272,
+      "repeat": 1,
+      "scale": 30,
+      "source_state_hash": "b31dd4f05efcfb44ddd9b77e101f39f16929ff63a0cab096904db236e4d1c27d"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "103e4ad5fa78176f",
+      "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_f6c917aa3c08453d/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_f6c917aa3c08453d/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.0738019,
+      "qg1_measured_wall_sec": 0.077801998,
+      "qg1_net_vs_q0_ratio": 1.1896983410996191,
+      "qg1_net_wall_sec": 0.08780199799999999,
+      "repeat": 1,
+      "scale": 20,
+      "source_state_hash": "f6c917aa3c08453dd980a163fd624a0f2590e8bac0cba10fc6ffe47226b860f0"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "4fd39191a233502d",
+      "instance_id": "lunar_ice_sp50_030_003_seed2026372703",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_79636bff694a03d2/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_79636bff694a03d2/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.663314636,
+      "qg1_measured_wall_sec": 0.673793779,
+      "qg1_net_vs_q0_ratio": 1.0308739501415134,
+      "qg1_net_wall_sec": 0.683793779,
+      "repeat": 1,
+      "scale": 30,
+      "source_state_hash": "79636bff694a03d222a24532a6451c86cdade12f779f296fab06ebce868a7cae"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "2fb79d2d6afd0eb1",
+      "instance_id": "lunar_ice_sp50_020_006_seed202807272",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_a9033653744a3e93/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_a9033653744a3e93/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.095458767,
+      "qg1_measured_wall_sec": 0.106514701,
+      "qg1_net_vs_q0_ratio": 1.220576220097207,
+      "qg1_net_wall_sec": 0.116514701,
+      "repeat": 1,
+      "scale": 20,
+      "source_state_hash": "a9033653744a3e932222aac1f91ecb5d37e7da47f4fa4fff0b5ecfdd9651cd7f"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "4fc392d5ac545bbd",
+      "instance_id": "lunar_ice_sp50_020_002_seed202807262",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_27af815e322664f1/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_27af815e322664f1/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.057917303,
+      "qg1_measured_wall_sec": 0.065452055,
+      "qg1_net_vs_q0_ratio": 1.3027549815294401,
+      "qg1_net_wall_sec": 0.07545205499999999,
+      "repeat": 1,
+      "scale": 20,
+      "source_state_hash": "27af815e322664f1367797ff3c64ab71eee6ab78b70d5697caf2d6b2066183a5"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "4c368eccc957e6bd",
+      "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_5a75daca93efaf55/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_5a75daca93efaf55/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.354611661,
+      "qg1_measured_wall_sec": 0.399162828,
+      "qg1_net_vs_q0_ratio": 1.1538335396139159,
+      "qg1_net_wall_sec": 0.40916282800000003,
+      "repeat": 1,
+      "scale": 30,
+      "source_state_hash": "5a75daca93efaf55335982854b0d08954b74a0d8a10f42be5b004d0a9f499bc3"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "4277d0edc78aaeff",
+      "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_a26830c90f5f45bc/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_a26830c90f5f45bc/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.231094195,
+      "qg1_measured_wall_sec": 0.205386053,
+      "qg1_net_vs_q0_ratio": 0.9320271026279999,
+      "qg1_net_wall_sec": 0.21538605300000002,
+      "repeat": 1,
+      "scale": 20,
+      "source_state_hash": "a26830c90f5f45bc3bdd59459830272affbf5fd12bc695a95d44dc768df0404f"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "5c27cdbd962c734d",
+      "instance_id": "lunar_ice_sp50_030_002_seed202907262",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_d908c5b2ab294402/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_d908c5b2ab294402/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.960458709,
+      "qg1_measured_wall_sec": 0.86612954,
+      "qg1_net_vs_q0_ratio": 0.9121990688305581,
+      "qg1_net_wall_sec": 0.87612954,
+      "repeat": 1,
+      "scale": 30,
+      "source_state_hash": "d908c5b2ab294402e408b7a7c80100e02f3bce093490a3d54935f1eba88bda0e"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "c37a19389e5c5fcf",
+      "instance_id": "lunar_ice_sp50_030_007_seed202907271",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_e458c2c5bb61c693/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_e458c2c5bb61c693/qg1_rep1.json"
+      },
+      "q0_wall_sec": 8.72895574,
+      "qg1_measured_wall_sec": 6.891616484,
+      "qg1_net_vs_q0_ratio": 0.7906577475669501,
+      "qg1_net_wall_sec": 6.901616484,
+      "repeat": 1,
+      "scale": 30,
+      "source_state_hash": "e458c2c5bb61c693fcc5de8c6bfb6f492029fd3876113842fd96b84eb04ce7f9"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "82ea214bf17d5c38",
+      "instance_id": "lunar_ice_sp50_030_006_seed202907270",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_dd6ea10251fdbafa/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_dd6ea10251fdbafa/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.965364639,
+      "qg1_measured_wall_sec": 0.916274207,
+      "qg1_net_vs_q0_ratio": 0.9595070811372447,
+      "qg1_net_wall_sec": 0.926274207,
+      "repeat": 1,
+      "scale": 30,
+      "source_state_hash": "dd6ea10251fdbafa74a14ffbc6a4f7cb3f201e5c1a15fa25733c3653d80c2809"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "348fca29db1913f6",
+      "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_fb2d376982cda29f/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_fb2d376982cda29f/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.108264628,
+      "qg1_measured_wall_sec": 0.104477535,
+      "qg1_net_vs_q0_ratio": 1.057386305340651,
+      "qg1_net_wall_sec": 0.11447753499999999,
+      "repeat": 1,
+      "scale": 20,
+      "source_state_hash": "fb2d376982cda29f8ed09b21e70c80e0532278b69d18b54b00be70a08dfa0180"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "d16e0a0e2002ebb6",
+      "instance_id": "lunar_ice_sp50_030_005_seed202907269",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_3636f2e51b66123b/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/30_3636f2e51b66123b/qg1_rep1.json"
+      },
+      "q0_wall_sec": 1.224715334,
+      "qg1_measured_wall_sec": 1.39429796,
+      "qg1_net_vs_q0_ratio": 1.1466321364765406,
+      "qg1_net_wall_sec": 1.40429796,
+      "repeat": 1,
+      "scale": 30,
+      "source_state_hash": "3636f2e51b66123b4a37e794cfdfb382e266c892c4083fdf76c9fa7ae9061d7d"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "37037d48065d317b",
+      "instance_id": "lunar_ice_sp50_020_001_seed202807261",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_60fba12c2773232a/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_60fba12c2773232a/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.071317956,
+      "qg1_measured_wall_sec": 0.072307439,
+      "qg1_net_vs_q0_ratio": 1.1540913903926242,
+      "qg1_net_wall_sec": 0.082307439,
+      "repeat": 1,
+      "scale": 20,
+      "source_state_hash": "60fba12c2773232ab43d0fa2d6fcc3c6bbb11548b9571896f49525084b27b96b"
+    },
+    {
+      "exact_match": true,
+      "exact_safe": true,
+      "inference_overhead_sec": 0.01,
+      "instance_content_hash": "4a7b82692a2ab385",
+      "instance_id": "lunar_ice_sp50_020_005_seed202807271",
+      "paths": {
+        "q0": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_ca6ad6737a215420/q0_rep1.json",
+        "qg1": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1/20_ca6ad6737a215420/qg1_rep1.json"
+      },
+      "q0_wall_sec": 0.163254813,
+      "qg1_measured_wall_sec": 0.192853289,
+      "qg1_net_vs_q0_ratio": 1.242556254681447,
+      "qg1_net_wall_sec": 0.20285328900000002,
+      "repeat": 1,
+      "scale": 20,
+      "source_state_hash": "ca6ad6737a21542038769d4d2a56824c9faf5b171471bfe75ad4417c7ee6b6da"
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_proof_queue_gat_exact_replay.v1",
+  "source_cv_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/grouped_oof_summary.json",
+  "state_rows": [
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_030_001_seed2026372701",
+      "q0_median_wall_sec": 0.320703172,
+      "qg1_net_median_wall_sec": 0.418364617,
+      "qg1_net_vs_q0_ratio": 1.3045228533006217,
+      "scale": 30,
+      "source_state_hash": "20087c306e2373b8e6f20562b94ba2e1f6576fee792e3da0cf185a6ad831b7a3"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_020_002_seed202807262",
+      "q0_median_wall_sec": 0.057917303,
+      "qg1_net_median_wall_sec": 0.07545205499999999,
+      "qg1_net_vs_q0_ratio": 1.3027549815294401,
+      "scale": 20,
+      "source_state_hash": "27af815e322664f1367797ff3c64ab71eee6ab78b70d5697caf2d6b2066183a5"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_030_005_seed202907269",
+      "q0_median_wall_sec": 1.224715334,
+      "qg1_net_median_wall_sec": 1.40429796,
+      "qg1_net_vs_q0_ratio": 1.1466321364765406,
+      "scale": 30,
+      "source_state_hash": "3636f2e51b66123b4a37e794cfdfb382e266c892c4083fdf76c9fa7ae9061d7d"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_030_004_seed2026372704",
+      "q0_median_wall_sec": 0.354611661,
+      "qg1_net_median_wall_sec": 0.40916282800000003,
+      "qg1_net_vs_q0_ratio": 1.1538335396139159,
+      "scale": 30,
+      "source_state_hash": "5a75daca93efaf55335982854b0d08954b74a0d8a10f42be5b004d0a9f499bc3"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_020_001_seed202807261",
+      "q0_median_wall_sec": 0.071317956,
+      "qg1_net_median_wall_sec": 0.082307439,
+      "qg1_net_vs_q0_ratio": 1.1540913903926242,
+      "scale": 20,
+      "source_state_hash": "60fba12c2773232ab43d0fa2d6fcc3c6bbb11548b9571896f49525084b27b96b"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_030_003_seed2026372703",
+      "q0_median_wall_sec": 0.663314636,
+      "qg1_net_median_wall_sec": 0.683793779,
+      "qg1_net_vs_q0_ratio": 1.0308739501415134,
+      "scale": 30,
+      "source_state_hash": "79636bff694a03d222a24532a6451c86cdade12f779f296fab06ebce868a7cae"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+      "q0_median_wall_sec": 0.231094195,
+      "qg1_net_median_wall_sec": 0.21538605300000002,
+      "qg1_net_vs_q0_ratio": 0.9320271026279999,
+      "scale": 20,
+      "source_state_hash": "a26830c90f5f45bc3bdd59459830272affbf5fd12bc695a95d44dc768df0404f"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_020_006_seed202807272",
+      "q0_median_wall_sec": 0.095458767,
+      "qg1_net_median_wall_sec": 0.116514701,
+      "qg1_net_vs_q0_ratio": 1.220576220097207,
+      "scale": 20,
+      "source_state_hash": "a9033653744a3e932222aac1f91ecb5d37e7da47f4fa4fff0b5ecfdd9651cd7f"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_030_003_seed202907263",
+      "q0_median_wall_sec": 0.263555751,
+      "qg1_net_median_wall_sec": 0.289661272,
+      "qg1_net_vs_q0_ratio": 1.099051228823309,
+      "scale": 30,
+      "source_state_hash": "b31dd4f05efcfb44ddd9b77e101f39f16929ff63a0cab096904db236e4d1c27d"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_020_005_seed202807271",
+      "q0_median_wall_sec": 0.163254813,
+      "qg1_net_median_wall_sec": 0.20285328900000002,
+      "qg1_net_vs_q0_ratio": 1.242556254681447,
+      "scale": 20,
+      "source_state_hash": "ca6ad6737a21542038769d4d2a56824c9faf5b171471bfe75ad4417c7ee6b6da"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_030_002_seed202907262",
+      "q0_median_wall_sec": 0.960458709,
+      "qg1_net_median_wall_sec": 0.87612954,
+      "qg1_net_vs_q0_ratio": 0.9121990688305581,
+      "scale": 30,
+      "source_state_hash": "d908c5b2ab294402e408b7a7c80100e02f3bce093490a3d54935f1eba88bda0e"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_030_006_seed202907270",
+      "q0_median_wall_sec": 0.965364639,
+      "qg1_net_median_wall_sec": 0.926274207,
+      "qg1_net_vs_q0_ratio": 0.9595070811372447,
+      "scale": 30,
+      "source_state_hash": "dd6ea10251fdbafa74a14ffbc6a4f7cb3f201e5c1a15fa25733c3653d80c2809"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_030_007_seed202907271",
+      "q0_median_wall_sec": 8.72895574,
+      "qg1_net_median_wall_sec": 6.901616484,
+      "qg1_net_vs_q0_ratio": 0.7906577475669501,
+      "scale": 30,
+      "source_state_hash": "e458c2c5bb61c693fcc5de8c6bfb6f492029fd3876113842fd96b84eb04ce7f9"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_020_003_seed2026272703",
+      "q0_median_wall_sec": 0.0738019,
+      "qg1_net_median_wall_sec": 0.08780199799999999,
+      "qg1_net_vs_q0_ratio": 1.1896983410996191,
+      "scale": 20,
+      "source_state_hash": "f6c917aa3c08453dd980a163fd624a0f2590e8bac0cba10fc6ffe47226b860f0"
+    },
+    {
+      "all_safe": true,
+      "instance_id": "lunar_ice_sp50_020_001_seed2026272701",
+      "q0_median_wall_sec": 0.108264628,
+      "qg1_net_median_wall_sec": 0.11447753499999999,
+      "qg1_net_vs_q0_ratio": 1.057386305340651,
+      "scale": 20,
+      "source_state_hash": "fb2d376982cda29f8ed09b21e70c80e0532278b69d18b54b00be70a08dfa0180"
+    }
+  ]
+}

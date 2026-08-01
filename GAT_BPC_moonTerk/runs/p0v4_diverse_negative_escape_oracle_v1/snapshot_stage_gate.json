@@ -1,0 +1,12 @@
+{
+  "downstream_fixed_k_selection_authorized": false,
+  "downstream_gat_oracle_authorized": false,
+  "observed_heavy_snapshot_count": 4,
+  "observed_ordinary_snapshot_count": 2,
+  "required_heavy_snapshot_count": 4,
+  "required_ordinary_snapshot_count": 12,
+  "schema_version": "lunar_ice_bpc.p0v4_snapshot_stage_gate.v1",
+  "snapshot_registry": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_registry.json",
+  "snapshot_registry_sha256": "12586a9e774aede893030f2c2afe8f1fd93ceb71922f1ef821664aacbe20c8e3",
+  "status": "BLOCKED_INSUFFICIENT_UNIQUE_PROOF_CONTEXTS"
+}

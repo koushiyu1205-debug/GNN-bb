@@ -28,6 +28,9 @@ from lunar_ice_bpc.exact.core.cuts import (
 
 
 LIVE_SRI_POLICY_VERSION = "native_live_sri_bpc_v1"
+LIVE_SRI_GROUP_SCREEN_POLICY_VERSION = (
+    "native_live_sri_bpc_top16_group4_screen_v1"
+)
 LIVE_SRI_SEPARATOR_VERSION = "native_live_sri_complete_enumeration_v1"
 LIVE_SRI_VIOLATION_EPS = 1.0e-6
 
@@ -45,6 +48,8 @@ class LiveSriPolicy:
     violation_eps: float = LIVE_SRI_VIOLATION_EPS
     max_separation_rounds: int = 8
     min_restricted_rmp_gain: float = 1.0e-4
+    candidate_group_screening_enabled: bool = False
+    candidate_group_count: int = 1
     version: str = LIVE_SRI_POLICY_VERSION
 
     def __post_init__(self) -> None:
@@ -60,6 +65,15 @@ class LiveSriPolicy:
             raise ValueError("Live SRI V1 violation_eps is frozen at 1e-6")
         if float(self.min_restricted_rmp_gain) < 0.0:
             raise ValueError("min_restricted_rmp_gain must be nonnegative")
+        if int(self.candidate_group_count) < 1:
+            raise ValueError("candidate_group_count must be positive")
+        if (
+            not bool(self.candidate_group_screening_enabled)
+            and int(self.candidate_group_count) != 1
+        ):
+            raise ValueError(
+                "candidate_group_count must be one when screening is disabled"
+            )
         object.__setattr__(self, "name", str(self.name))
         object.__setattr__(self, "root_subset_sizes", root_sizes)
         object.__setattr__(self, "node_subset_sizes", node_sizes)
@@ -76,7 +90,7 @@ class LiveSriPolicy:
         return self.root_subset_sizes if int(depth) == 0 else self.node_subset_sizes
 
     def to_payload(self) -> dict:
-        return {
+        payload = {
             "version": self.version,
             "name": self.name,
             "root_subset_sizes": list(self.root_subset_sizes),
@@ -89,6 +103,22 @@ class LiveSriPolicy:
             "min_restricted_rmp_gain": float(self.min_restricted_rmp_gain),
             "completion_bound_with_active_cuts": False,
         }
+        if self.candidate_group_screening_enabled:
+            payload.update(
+                {
+                    "candidate_group_screening_enabled": True,
+                    "candidate_group_count": int(
+                        self.candidate_group_count
+                    ),
+                    "candidate_group_size_policy": (
+                        "remaining_cut_capacity"
+                    ),
+                    "candidate_group_acceptance_policy": (
+                        "first_integral_or_min_restricted_rmp_gain"
+                    ),
+                }
+            )
+        return payload
 
     @classmethod
     def named(cls, name: str) -> "LiveSriPolicy":
@@ -97,6 +127,18 @@ class LiveSriPolicy:
             return cls(name="no_cut")
         if normalized == "P0":
             return cls(name="P0", root_subset_sizes=(3,))
+        if normalized in {
+            "P0_GROUP_SCREEN",
+            "P0_GROUP_SCREEN_V1",
+            "P0_TOP16_GROUP4_SCREEN_V1",
+        }:
+            return cls(
+                name="P0_GROUP_SCREEN_V1",
+                root_subset_sizes=(3,),
+                candidate_group_screening_enabled=True,
+                candidate_group_count=4,
+                version=LIVE_SRI_GROUP_SCREEN_POLICY_VERSION,
+            )
         if normalized == "P1":
             return cls(name="P1", root_subset_sizes=(3, 5))
         if normalized == "P2":

@@ -1,0 +1,81 @@
+schema_version: "lunar_ice_bpc.p0v4_one_deviation_gat_experiment.v1"
+experiment_id: "P0V4_FIXED_EXACT_ONE_DEVIATION_GAT_V1"
+fixed_k_selection: "runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json"
+fixed_k_required_status: "FIXED_K_SELECTED"
+fixed_k_minimum_scale50_exact: 7
+opportunity_collection_runner: "scripts/collect_p0v4_route_opportunities.py"
+opportunity_census_runner: "scripts/run_p0v4_route_opportunity_census.py"
+matched_rollout_runner: "scripts/run_p0v4_one_deviation_oracle.py"
+matched_arm_runner: "scripts/run_p0v4_one_deviation_arm.py"
+matched_rollout_suite_runner: "scripts/run_p0v4_one_deviation_oracle_suite.py"
+oracle_audit_runner: "scripts/audit_p0v4_one_deviation_oracle.py"
+training_runner: "scripts/train_p0v4_one_deviation_gat.py"
+heldout_evaluation_runner: "scripts/run_p0v4_one_deviation_heldout.py"
+heldout_promotion_runner: "scripts/promote_p0v4_one_deviation_gat.py"
+
+opportunity_census:
+  required_scales: [30, 50]
+  minimum_contexts_per_scale: 20
+  minimum_instances_per_scale: 5
+  minimum_omitted_candidates: 8
+  extend_native_search_to_create_opportunities: false
+
+counterfactual_oracle:
+  intervention_count_per_root: 1
+  omitted_rank_window: 32
+  minimum_promotion_arms_per_context: 2
+  blocked_replicates: 3
+  rollout_horizon_cg_rounds: 3
+  matched_budget_sec:
+    "20": 120
+    "30": 120
+    "50": 300
+  minimum_contexts_per_required_scale: 20
+  minimum_instances_per_required_scale: 5
+  pilot_minimum_promotion_arms_per_context: 2
+  final_target_contexts:
+    "30": 100
+    "50": 60
+  final_target_instances_per_scale: 10
+  perfect_oracle_paired_speedup_min: 0.10
+  instance_bootstrap_mean_relative_gain_lcb: 0.08
+  instance_bootstrap_positive_context_fraction_lcb: 0.20
+  learned_policy_held_out_speedup_min: 0.05
+  right_censored_label_policy: "masked_survival_aware_never_forced_negative"
+  exact_order_after_intervention: "restore_frozen_exact_p0_order"
+
+model:
+  schema_version: "lunar_ice_bpc.two_head_one_deviation_gat.v1"
+  architecture: "gat_2x24x2"
+  probability_head: "P(delta_time_gt_0)"
+  positive_magnitude_head: "E(relative_time_gain_given_positive)"
+  magnitude_normalization: "delta_time_divided_by_p0_remaining_time"
+  deployment_score: "probability_times_conditional_relative_gain"
+  action_relative_features:
+    - "rank_offset_div_32"
+    - "true_rc_gap_to_rank_k"
+    - "task_jaccard_to_rank_k"
+    - "mean_task_jaccard_to_selected_batch"
+    - "max_task_jaccard_to_selected_batch"
+    - "exact_task_set_match_in_selected_batch"
+    - "support_change_delta_to_rank_k"
+    - "new_task_set_delta_to_rank_k"
+  explicit_noop_action: true
+  memory_adverse_event_training_label: true
+  memory_adverse_event_deployment_veto: true
+
+calibration:
+  harmful_promotion_rate_95_upper_max: 0.05
+  beneficial_action_precision_95_lower_min: 0.80
+  ood_fallback: "noop"
+  invalid_hash_fallback: "noop"
+  low_confidence_fallback: "noop"
+  inference_p99_limit_ms: 10
+
+deployment:
+  mutates_legal_candidate_universe: false
+  mutates_native_label_order: false
+  mutates_bound_or_pruning: false
+  mutates_certificate_paths: false
+  maximum_interventions_per_root: 1
+  default_action: "noop"

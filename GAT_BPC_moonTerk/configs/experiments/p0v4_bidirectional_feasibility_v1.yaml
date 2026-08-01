@@ -1,0 +1,101 @@
+schema_version: "lunar_ice_bpc.p0v4_bidirectional_feasibility.v1"
+experiment_id: "P0V4_FROZEN_DUAL_BIDIRECTIONAL_FEASIBILITY_V1"
+scope: "diagnostic_feasibility_only"
+policy_id: "p0v4_frozen_dual_depot_meet_max_plus_v1"
+
+frozen_control:
+  freeze_id: "FROZEN_NATIVE_LIVE_SRI_P0_MEMORY_COMPACT_BASELINE_V4"
+  config: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/frozen_config.yaml"
+  config_sha256: "9859a8e3d04d6eb966656c0b01858ed13ef98e6ab9e38ea7c403b893de50cfab"
+  manifest: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/baseline_freeze_manifest.json"
+  manifest_sha256: "d7063b403a6c2592c35009dfd6bbf3188e1100499766091a0a74e0d06f81a976"
+  verifier: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/verify_freeze.py"
+  production_default: "no_cut"
+
+isolated_native_build:
+  directory: "build/native-spprc-bidirectional-feasibility-v1"
+  install_directory: "build/native-spprc-bidirectional-feasibility-v1/install"
+  cmake_build_type: "RelWithDebInfo"
+  ng_dssr_v3_enabled: true
+  bidirectional_feasibility_enabled: true
+  required_build_info:
+    label_state_bytes: "176"
+    service_timing_policy_id: "no_task_wait_base_departure_shift_v1"
+    bidirectional_feasibility_compiled: "true"
+    bidirectional_feasibility_policy: "p0v4_frozen_dual_depot_meet_max_plus_v1"
+    bidirectional_task_meet_policy: "p0v4_frozen_dual_task_meet_max_plus_v1"
+    bidirectional_journey_probe_policy: "p0v4_frozen_dual_task_meet_journey_label_v1"
+    bidirectional_midpoint_meet_policy: "p0v4_frozen_dual_depot_midpoint_meet_v1"
+    bidirectional_feasibility_certificate_authority: "none"
+
+exact_contract:
+  join_surface: "depot_sortie_boundary"
+  time_semantics: "max_plus_no_task_wait_base_departure_shift"
+  full_join_replay_required: true
+  true_dual_required: true
+  branch_context_required: true
+  projected_cut_context_required: true
+  can_certify_no_negative: false
+  exhaustive_completion_before_certificate: true
+  p0v4_runtime_path_mutated: false
+
+small_differential:
+  scale: 5
+  generated_instance_count: 24
+  required_join_cases: 500
+  midpoint_generated_instance_count: 100
+  required_midpoint_cases: 500
+  midpoint_split_fractions: [0.02, 0.25, 0.5, 0.75, 0.98]
+  first_seed: 730001
+  objective_abs_tolerance: 0.000002
+  reduced_cost_abs_tolerance: 0.000002
+  certificate_leak_max: 0
+  structural_mismatch_max: 0
+  branch_fail_closed_required: true
+  overlap_fail_closed_required: true
+
+heavy_snapshot_stage:
+  registry: "runs/p0v4_diverse_negative_escape_oracle_v2/snapshot_registry.json"
+  required_heavy_snapshot_count: 4
+  scale: 50
+  instance: "data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json"
+  sortie_wall_time_limit_sec: 10
+  journey_wall_time_limit_sec: 30
+  max_partial_states_per_direction: 1000000
+  max_sortie_join_checks: 200000000
+  max_journey_labels: 1000000
+  max_journey_extension_checks: 200000000
+  negative_route_target: 512
+  immediate_subset_dominance_enabled: true
+  midpoint_split_fraction: 0.1
+  max_midpoint_forward_labels: 250000
+  max_midpoint_backward_labels: 250000
+  max_midpoint_crossing_labels: 250000
+  max_midpoint_extension_checks: 200000000
+  max_midpoint_join_checks: 200000000
+  max_midpoint_returned_negative_routes: 512
+  midpoint_wall_time_limit_sec: 30
+  effective_native_memory_limit_gb: 10.867122
+  max_concurrency: 1
+  status: "TASK_MEET_FORWARD_AND_MIDPOINT_JOURNEY_PROBE_IMPLEMENTED"
+
+promotion_gate:
+  correctness_redline_max: 0
+  certificate_leak_max: 0
+  best_true_reduced_cost_mismatch_max: 0
+  legal_route_omission_max: 0
+  require_all_four_heavy_snapshots: true
+  require_frontier_or_wall_reduction: true
+  allow_p0v4_default_switch: false
+  allow_exact_candidate_integration: false
+
+source_files:
+  - "native/lunar_spprc/CMakeLists.txt"
+  - "native/lunar_spprc/include/lunar_spprc/bidirectional_feasibility.hpp"
+  - "native/lunar_spprc/src/bidirectional_feasibility.cpp"
+  - "native/lunar_spprc/src/pybind_module.cpp"
+  - "src/lunar_ice_bpc/exact/bpc/pricing/bidirectional_feasibility.py"
+  - "src/lunar_ice_bpc/exact/bpc/pricing/backends/native_bidirectional_hybrid.py"
+  - "scripts/run_p0v4_bidirectional_feasibility.py"
+  - "tests/test_p0v4_diverse_escape_batch_one_deviation.py"
+  - "tests/native/test_native_spprc_backend.py"

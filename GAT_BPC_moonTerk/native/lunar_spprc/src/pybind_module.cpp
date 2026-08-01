@@ -1,5 +1,9 @@
 #include "lunar_spprc/native_pricer.hpp"
 
+#if LUNAR_SPPRC_ENABLE_BIDIRECTIONAL_FEASIBILITY
+#include "lunar_spprc/bidirectional_feasibility.hpp"
+#endif
+
 #include <bit>
 #include <cmath>
 #include <limits>
@@ -13,8 +17,14 @@ namespace py = pybind11;
 
 namespace {
 
+py::dict route_payload(const lunar_spprc::Route& route);
+
 double optional_double(const py::dict& payload, const char* key, double fallback) {
-    const auto value = payload[py::str(key)];
+    const auto name = py::str(key);
+    if (!payload.contains(name)) {
+        return fallback;
+    }
+    const auto value = payload[name];
     return value.is_none() ? fallback : py::cast<double>(value);
 }
 
@@ -42,6 +52,19 @@ bool optional_bool(
     }
     const auto value = payload[name];
     return value.is_none() ? fallback : py::cast<bool>(value);
+}
+
+std::string optional_string(
+    const py::dict& payload,
+    const char* key,
+    std::string fallback
+) {
+    const auto name = py::str(key);
+    if (!payload.contains(name)) {
+        return fallback;
+    }
+    const auto value = payload[name];
+    return value.is_none() ? fallback : py::cast<std::string>(value);
 }
 
 lunar_spprc::Model parse_model(const py::dict& payload) {
@@ -179,10 +202,456 @@ lunar_spprc::Model parse_model(const py::dict& payload) {
     return model;
 }
 
+#if LUNAR_SPPRC_ENABLE_BIDIRECTIONAL_FEASIBILITY
+std::vector<lunar_spprc::SortiePath> parse_sortie_paths(
+    const py::dict& payload,
+    const char* key
+) {
+    const auto name = py::str(key);
+    if (!payload.contains(name)) {
+        throw py::key_error(
+            std::string("missing bidirectional route half: ") + key);
+    }
+    std::vector<lunar_spprc::SortiePath> result;
+    for (const auto item : py::cast<py::list>(payload[name])) {
+        const auto row = py::cast<py::dict>(item);
+        result.push_back({
+            .tasks =
+                py::cast<std::vector<std::string>>(row["tasks"]),
+            .path_types =
+                py::cast<std::vector<std::string>>(row["path_types"]),
+        });
+    }
+    return result;
+}
+
+py::dict bidirectional_feasibility_payload(const py::dict& payload) {
+    const auto output = lunar_spprc::audit_bidirectional_depot_join(
+        parse_model(payload),
+        parse_sortie_paths(payload, "forward_sorties"),
+        parse_sortie_paths(payload, "backward_sorties"));
+    py::dict result;
+    result["schema_version"] =
+        "lunar_spprc.bidirectional_feasibility_probe.v1";
+    result["policy_id"] =
+        "p0v4_frozen_dual_depot_meet_max_plus_v1";
+    result["status"] = output.status;
+    result["feasible"] = output.feasible;
+    result["task_sets_disjoint"] = output.task_sets_disjoint;
+    result["suffix_boundary_feasible"] =
+        output.suffix_boundary_feasible;
+    result["branch_feasible"] = output.branch_feasible;
+    result["static_objective_finite"] =
+        output.static_objective_finite;
+    result["can_certify_no_negative"] = false;
+    result["certificate_scope"] =
+        "DIAGNOSTIC_BIDIRECTIONAL_FEASIBILITY_ONLY";
+    result["prefix_end_time"] = output.prefix_end_time;
+    result["suffix_latest_input_time"] =
+        output.suffix_latest_input_time;
+    result["journey_end_time"] = output.journey_end_time;
+    result["raw_operating_cost"] = output.raw_operating_cost;
+    result["raw_risk"] = output.raw_risk;
+    result["raw_weighted_completion"] =
+        output.raw_weighted_completion;
+    result["task_dual_reward"] = output.task_dual_reward;
+    result["cut_dual_reward"] = output.cut_dual_reward;
+    result["true_reduced_cost"] = output.true_reduced_cost;
+    result["task_count"] = output.task_count;
+    result["sortie_count"] = output.sortie_count;
+    result["build_info"] = lunar_spprc::build_info();
+    return result;
+}
+
+py::dict bidirectional_backward_frontier_payload(
+    const py::dict& payload
+) {
+    lunar_spprc::BidirectionalBackwardProbeParams params;
+    params.max_partial_states = optional_size_t(
+        payload,
+        "bidirectional_max_partial_states",
+        params.max_partial_states);
+    params.max_completed_sorties = optional_size_t(
+        payload,
+        "bidirectional_max_completed_sorties",
+        params.max_completed_sorties);
+    params.timeout_seconds = optional_double(
+        payload,
+        "bidirectional_wall_time_limit_sec",
+        params.timeout_seconds);
+    const auto output =
+        lunar_spprc::probe_bidirectional_backward_frontier(
+            parse_model(payload),
+            params);
+    py::dict result;
+    result["schema_version"] =
+        "lunar_spprc.bidirectional_backward_frontier_probe.v1";
+    result["policy_id"] =
+        "p0v4_frozen_dual_depot_meet_max_plus_v1";
+    result["scope"] =
+        "REVERSE_SORTIE_SEED_FRONTIER_DIAGNOSTIC_ONLY";
+    result["status"] = output.status;
+    result["search_exhaustive"] = output.search_exhaustive;
+    result["frontier_empty"] = output.frontier_empty;
+    result["can_certify_no_negative"] = false;
+    result["processed_partial_states"] =
+        output.processed_partial_states;
+    result["generated_partial_states"] =
+        output.generated_partial_states;
+    result["resource_pruned_partial_states"] =
+        output.resource_pruned_partial_states;
+    result["duplicate_task_pruned_extensions"] =
+        output.duplicate_task_pruned_extensions;
+    result["completed_sortie_candidates"] =
+        output.completed_sortie_candidates;
+    result["feasible_backward_sortie_seeds"] =
+        output.feasible_backward_sortie_seeds;
+    result["infeasible_completed_sorties"] =
+        output.infeasible_completed_sorties;
+    result["max_frontier_size"] = output.max_frontier_size;
+    result["wall_time_seconds"] = output.wall_time_seconds;
+    result["partial_states_by_task_depth"] =
+        output.partial_states_by_task_depth;
+    result["feasible_sorties_by_task_depth"] =
+        output.feasible_sorties_by_task_depth;
+    result["build_info"] = lunar_spprc::build_info();
+    return result;
+}
+
+py::dict bidirectional_task_meet_frontier_payload(
+    const py::dict& payload
+) {
+    lunar_spprc::BidirectionalTaskMeetProbeParams params;
+    params.max_partial_states_per_direction = optional_size_t(
+        payload,
+        "bidirectional_max_partial_states_per_direction",
+        params.max_partial_states_per_direction);
+    params.max_join_checks = optional_size_t(
+        payload,
+        "bidirectional_max_join_checks",
+        params.max_join_checks);
+    params.timeout_seconds = optional_double(
+        payload,
+        "bidirectional_wall_time_limit_sec",
+        params.timeout_seconds);
+    const auto output =
+        lunar_spprc::probe_bidirectional_task_meet_frontier(
+            parse_model(payload),
+            params);
+    py::dict result;
+    result["schema_version"] =
+        "lunar_spprc.bidirectional_task_meet_frontier_probe.v1";
+    result["policy_id"] =
+        "p0v4_frozen_dual_task_meet_max_plus_v1";
+    result["scope"] =
+        "TASK_LEVEL_SORTIE_MEET_DIAGNOSTIC_ONLY";
+    result["status"] = output.status;
+    result["forward_generation_exhaustive"] =
+        output.forward_generation_exhaustive;
+    result["backward_generation_exhaustive"] =
+        output.backward_generation_exhaustive;
+    result["join_exhaustive"] = output.join_exhaustive;
+    result["can_certify_no_negative"] = false;
+    result["forward_generated_states"] =
+        output.forward_generated_states;
+    result["backward_generated_states"] =
+        output.backward_generated_states;
+    result["forward_resource_pruned_states"] =
+        output.forward_resource_pruned_states;
+    result["backward_resource_pruned_states"] =
+        output.backward_resource_pruned_states;
+    result["forward_duplicate_task_pruned_extensions"] =
+        output.forward_duplicate_task_pruned_extensions;
+    result["backward_duplicate_task_pruned_extensions"] =
+        output.backward_duplicate_task_pruned_extensions;
+    result["join_pair_checks"] = output.join_pair_checks;
+    result["disjoint_join_pairs"] =
+        output.disjoint_join_pairs;
+    result["resource_compatible_join_pairs"] =
+        output.resource_compatible_join_pairs;
+    result["feasible_joined_sorties"] =
+        output.feasible_joined_sorties;
+    result["infeasible_joined_sorties"] =
+        output.infeasible_joined_sorties;
+    result["distinct_task_set_count"] =
+        output.distinct_task_set_count;
+    result["task_set_duplicate_sortie_count"] =
+        output.task_set_duplicate_sortie_count;
+    result["nondominated_sortie_count"] =
+        output.nondominated_sortie_count;
+    result["dominated_sortie_count"] =
+        output.dominated_sortie_count;
+    result["max_variants_per_task_set"] =
+        output.max_variants_per_task_set;
+    result["sortie_dominance_candidate_checks"] =
+        output.sortie_dominance_candidate_checks;
+    result["wall_time_seconds"] = output.wall_time_seconds;
+    result["forward_states_by_task_depth"] =
+        output.forward_states_by_task_depth;
+    result["backward_states_by_task_depth"] =
+        output.backward_states_by_task_depth;
+    result["feasible_joined_sorties_by_task_count"] =
+        output.feasible_joined_sorties_by_task_count;
+    result["nondominated_sorties_by_task_count"] =
+        output.nondominated_sorties_by_task_count;
+    result["build_info"] = lunar_spprc::build_info();
+    return result;
+}
+
+py::dict bidirectional_journey_frontier_payload(
+    const py::dict& payload
+) {
+    lunar_spprc::BidirectionalTaskMeetProbeParams sortie_params;
+    sortie_params.max_partial_states_per_direction = optional_size_t(
+        payload,
+        "bidirectional_max_partial_states_per_direction",
+        sortie_params.max_partial_states_per_direction);
+    sortie_params.max_join_checks = optional_size_t(
+        payload,
+        "bidirectional_max_join_checks",
+        sortie_params.max_join_checks);
+    sortie_params.timeout_seconds = optional_double(
+        payload,
+        "bidirectional_sortie_wall_time_limit_sec",
+        sortie_params.timeout_seconds);
+    lunar_spprc::BidirectionalJourneyProbeParams journey_params;
+    journey_params.max_labels = optional_size_t(
+        payload,
+        "bidirectional_max_journey_labels",
+        journey_params.max_labels);
+    journey_params.max_extension_checks = optional_size_t(
+        payload,
+        "bidirectional_max_journey_extension_checks",
+        journey_params.max_extension_checks);
+    journey_params.negative_route_target = optional_size_t(
+        payload,
+        "bidirectional_negative_route_target",
+        journey_params.negative_route_target);
+    journey_params.negative_epsilon = optional_double(
+        payload,
+        "negative_eps",
+        journey_params.negative_epsilon);
+    journey_params.timeout_seconds = optional_double(
+        payload,
+        "bidirectional_journey_wall_time_limit_sec",
+        journey_params.timeout_seconds);
+    journey_params.immediate_subset_dominance_enabled =
+        optional_bool(
+            payload,
+            "bidirectional_immediate_subset_dominance_enabled",
+            journey_params.immediate_subset_dominance_enabled);
+    const auto output =
+        lunar_spprc::probe_bidirectional_journey_frontier(
+            parse_model(payload),
+            sortie_params,
+            journey_params);
+    py::dict result;
+    result["schema_version"] =
+        "lunar_spprc.bidirectional_journey_frontier_probe.v1";
+    result["policy_id"] =
+        "p0v4_frozen_dual_task_meet_journey_label_v1";
+    result["scope"] =
+        "FROZEN_DUAL_JOURNEY_FRONTIER_DIAGNOSTIC_ONLY";
+    result["status"] = output.status;
+    result["search_exhaustive"] = output.search_exhaustive;
+    result["frontier_empty"] = output.frontier_empty;
+    result["can_certify_no_negative"] = false;
+    result["sortie_pool_size"] = output.sortie_pool_size;
+    result["generated_labels"] = output.generated_labels;
+    result["processed_labels"] = output.processed_labels;
+    result["dominated_labels"] = output.dominated_labels;
+    result["subset_dominance_candidate_checks"] =
+        output.subset_dominance_candidate_checks;
+    result["subset_dominated_labels"] =
+        output.subset_dominated_labels;
+    result["removed_existing_labels"] =
+        output.removed_existing_labels;
+    result["extension_checks"] = output.extension_checks;
+    result["task_overlap_rejected_extensions"] =
+        output.task_overlap_rejected_extensions;
+    result["branch_rejected_extensions"] =
+        output.branch_rejected_extensions;
+    result["time_rejected_extensions"] =
+        output.time_rejected_extensions;
+    result["accepted_extensions"] =
+        output.accepted_extensions;
+    result["negative_terminal_label_count"] =
+        output.negative_terminal_label_count;
+    result["max_frontier_size"] = output.max_frontier_size;
+    result["best_true_reduced_cost"] =
+        std::isfinite(output.best_true_reduced_cost)
+            ? py::cast(output.best_true_reduced_cost)
+            : py::none();
+    result["first_negative_wall_time_seconds"] =
+        std::isfinite(output.first_negative_wall_time_seconds)
+            ? py::cast(output.first_negative_wall_time_seconds)
+            : py::none();
+    result["negative_target_wall_time_seconds"] =
+        std::isfinite(output.negative_target_wall_time_seconds)
+            ? py::cast(output.negative_target_wall_time_seconds)
+            : py::none();
+    result["wall_time_seconds"] = output.wall_time_seconds;
+    result["accepted_labels_by_task_count"] =
+        output.accepted_labels_by_task_count;
+    result["build_info"] = lunar_spprc::build_info();
+    return result;
+}
+
+py::dict bidirectional_midpoint_meet_payload(
+    const py::dict& payload
+) {
+    lunar_spprc::BidirectionalTaskMeetProbeParams sortie_params;
+    sortie_params.max_partial_states_per_direction = optional_size_t(
+        payload,
+        "bidirectional_max_partial_states_per_direction",
+        sortie_params.max_partial_states_per_direction);
+    sortie_params.max_join_checks = optional_size_t(
+        payload,
+        "bidirectional_max_join_checks",
+        sortie_params.max_join_checks);
+    sortie_params.timeout_seconds = optional_double(
+        payload,
+        "bidirectional_sortie_wall_time_limit_sec",
+        sortie_params.timeout_seconds);
+    lunar_spprc::BidirectionalMidpointProbeParams midpoint_params;
+    midpoint_params.max_forward_labels = optional_size_t(
+        payload,
+        "bidirectional_midpoint_max_forward_labels",
+        midpoint_params.max_forward_labels);
+    midpoint_params.max_backward_labels = optional_size_t(
+        payload,
+        "bidirectional_midpoint_max_backward_labels",
+        midpoint_params.max_backward_labels);
+    midpoint_params.max_crossing_labels = optional_size_t(
+        payload,
+        "bidirectional_midpoint_max_crossing_labels",
+        midpoint_params.max_crossing_labels);
+    midpoint_params.max_extension_checks = optional_size_t(
+        payload,
+        "bidirectional_midpoint_max_extension_checks",
+        midpoint_params.max_extension_checks);
+    midpoint_params.max_join_checks = optional_size_t(
+        payload,
+        "bidirectional_midpoint_max_join_checks",
+        midpoint_params.max_join_checks);
+    midpoint_params.max_returned_negative_routes = optional_size_t(
+        payload,
+        "bidirectional_midpoint_max_returned_negative_routes",
+        midpoint_params.max_returned_negative_routes);
+    midpoint_params.split_fraction = optional_double(
+        payload,
+        "bidirectional_midpoint_split_fraction",
+        midpoint_params.split_fraction);
+    midpoint_params.negative_epsilon = optional_double(
+        payload,
+        "negative_eps",
+        midpoint_params.negative_epsilon);
+    midpoint_params.timeout_seconds = optional_double(
+        payload,
+        "bidirectional_midpoint_wall_time_limit_sec",
+        midpoint_params.timeout_seconds);
+    const auto output =
+        lunar_spprc::probe_bidirectional_midpoint_journey_meet(
+            parse_model(payload),
+            sortie_params,
+            midpoint_params);
+    py::dict result;
+    result["schema_version"] =
+        "lunar_spprc.bidirectional_midpoint_journey_meet.v1";
+    result["policy_id"] =
+        "p0v4_frozen_dual_depot_midpoint_meet_v1";
+    result["scope"] =
+        "JOURNEY_LEVEL_FORWARD_BACKWARD_MEET_DIAGNOSTIC_ONLY";
+    result["status"] = output.status;
+    result["forward_exhaustive"] = output.forward_exhaustive;
+    result["backward_exhaustive"] =
+        output.backward_exhaustive;
+    result["crossing_exhaustive"] =
+        output.crossing_exhaustive;
+    result["join_exhaustive"] = output.join_exhaustive;
+    result["search_exhaustive"] = output.search_exhaustive;
+    result["can_certify_no_negative"] = false;
+    result["sortie_pool_size"] = output.sortie_pool_size;
+    result["forward_generated_labels"] =
+        output.forward_generated_labels;
+    result["forward_processed_labels"] =
+        output.forward_processed_labels;
+    result["backward_generated_labels"] =
+        output.backward_generated_labels;
+    result["backward_processed_labels"] =
+        output.backward_processed_labels;
+    result["crossing_generated_labels"] =
+        output.crossing_generated_labels;
+    result["crossing_dominated_labels"] =
+        output.crossing_dominated_labels;
+    result["forward_dominated_labels"] =
+        output.forward_dominated_labels;
+    result["backward_dominated_labels"] =
+        output.backward_dominated_labels;
+    result["active_forward_labels"] =
+        output.active_forward_labels;
+    result["active_backward_labels"] =
+        output.active_backward_labels;
+    result["active_crossing_labels"] =
+        output.active_crossing_labels;
+    result["unindexed_active_join_pairs"] =
+        output.unindexed_active_join_pairs;
+    result["time_index_candidate_join_pairs"] =
+        output.time_index_candidate_join_pairs;
+    result["time_index_pruned_join_pairs"] =
+        output.time_index_pruned_join_pairs;
+    result["extension_checks"] = output.extension_checks;
+    result["join_checks"] = output.join_checks;
+    result["disjoint_join_checks"] =
+        output.disjoint_join_checks;
+    result["time_compatible_joins"] =
+        output.time_compatible_joins;
+    result["terminal_route_count"] =
+        output.terminal_route_count;
+    result["negative_terminal_route_count"] =
+        output.negative_terminal_route_count;
+    py::list routes;
+    for (const auto& route : output.negative_routes) {
+        routes.append(route_payload(route));
+    }
+    result["routes"] = std::move(routes);
+    result["returned_negative_route_count"] =
+        output.negative_routes.size();
+    result["max_forward_frontier_size"] =
+        output.max_forward_frontier_size;
+    result["max_backward_frontier_size"] =
+        output.max_backward_frontier_size;
+    result["split_time"] = output.split_time;
+    result["best_true_reduced_cost"] =
+        std::isfinite(output.best_true_reduced_cost)
+            ? py::cast(output.best_true_reduced_cost)
+            : py::none();
+    result["first_negative_wall_time_seconds"] =
+        std::isfinite(output.first_negative_wall_time_seconds)
+            ? py::cast(output.first_negative_wall_time_seconds)
+            : py::none();
+    result["wall_time_seconds"] = output.wall_time_seconds;
+    result["build_info"] = lunar_spprc::build_info();
+    return result;
+}
+#endif
+
 lunar_spprc::SolveParams parse_params(const py::dict& payload) {
     lunar_spprc::SolveParams params;
     params.exact_proof = py::cast<std::string>(payload["mode"]) == "exact_proof";
     params.harvest_target = py::cast<std::size_t>(payload["harvest_target"]);
+    params.exact_negative_escape_enabled = optional_bool(
+        payload, "exact_negative_escape_enabled", false);
+    params.exact_admission_batch_size = optional_size_t(
+        payload, "exact_admission_batch_size", params.harvest_target);
+    params.exact_raw_negative_pool_size = optional_size_t(
+        payload,
+        "exact_raw_negative_pool_size",
+        params.exact_admission_batch_size * 4U);
+    params.exact_negative_escape_policy_id = optional_string(
+        payload,
+        "exact_negative_escape_policy_id",
+        "diverse_raw_4x_then_p0v4_selector_v1");
     params.harvest_max_processed_labels = optional_size_t(
         payload, "harvest_max_processed_labels", 0U);
     params.timeout_seconds = optional_double(payload, "wall_time_limit_sec",
@@ -200,6 +669,20 @@ lunar_spprc::SolveParams parse_params(const py::dict& payload) {
         optional_double(payload, "proof_queue_guidance_bucket_width", 0.01);
     params.dssr_enabled =
         optional_bool(payload, "dssr_enabled", false);
+    params.dssr_policy_version = py::cast<std::string>(
+        payload["dssr_policy_version"]);
+    params.dssr_negative_batch_target = optional_size_t(
+        payload, "dssr_negative_batch_target", 16U);
+    params.dssr_pressure_refinement_enabled = optional_bool(
+        payload, "dssr_pressure_refinement_enabled", false);
+    params.dssr_pressure_max_bucket_size = optional_size_t(
+        payload, "dssr_pressure_max_bucket_size", 8192U);
+    params.dssr_pressure_max_candidate_checks = optional_size_t(
+        payload,
+        "dssr_pressure_max_candidate_checks",
+        200000000U);
+    params.ng_dssr_initial_neighborhood_size = optional_size_t(
+        payload, "ng_dssr_initial_neighborhood_size", 10U);
     const auto proof_queue_policy =
         py::cast<std::string>(payload["proof_queue_policy_id"]);
     if (proof_queue_policy == "Q0") {
@@ -252,6 +735,20 @@ py::dict solve_payload(const py::dict& payload) {
     telemetry["dominance_candidate_checks"] = output.telemetry.dominance_candidate_checks;
     telemetry["max_visited_bucket_size"] = output.telemetry.max_visited_bucket_size;
     telemetry["solution_count"] = output.telemetry.solution_count;
+    telemetry["negative_escape_enabled"] =
+        output.telemetry.negative_escape_enabled;
+    telemetry["negative_escape_triggered"] =
+        output.telemetry.negative_escape_triggered;
+    telemetry["exact_admission_batch_size"] =
+        output.telemetry.exact_admission_batch_size;
+    telemetry["exact_raw_negative_pool_size"] =
+        output.telemetry.exact_raw_negative_pool_size;
+    telemetry["raw_unique_negative_count"] =
+        output.telemetry.raw_unique_negative_count;
+    telemetry["negative_escape_policy_id"] =
+        output.telemetry.negative_escape_policy_id;
+    telemetry["negative_escape_termination_reason"] =
+        output.telemetry.negative_escape_termination_reason;
     telemetry["memory_pressure_triggered"] = output.telemetry.memory_pressure_triggered;
     telemetry["graph_cache_hit"] = output.telemetry.graph_cache_hit;
     telemetry["graph_cache_size"] = output.telemetry.graph_cache_size;
@@ -350,6 +847,34 @@ py::dict solve_payload(const py::dict& payload) {
         output.telemetry.dssr_elementary_witness_returned;
     telemetry["dssr_relaxation_no_negative_certificate"] =
         output.telemetry.dssr_relaxation_no_negative_certificate;
+    telemetry["dssr_elementary_batch_count"] =
+        output.telemetry.dssr_elementary_batch_count;
+    telemetry["dssr_raw_solution_count"] =
+        output.telemetry.dssr_raw_solution_count;
+    telemetry["dssr_pressure_refinement_count"] =
+        output.telemetry.dssr_pressure_refinement_count;
+    telemetry["dssr_pressure_split_task_ids"] =
+        output.telemetry.dssr_pressure_split_task_ids;
+    telemetry["dssr_pressure_abandoned_iteration_count"] =
+        output.telemetry.dssr_pressure_abandoned_iteration_count;
+    telemetry["dssr_max_bucket_size"] =
+        output.telemetry.dssr_max_bucket_size;
+    telemetry["dssr_dominance_candidate_checks"] =
+        output.telemetry.dssr_dominance_candidate_checks;
+    telemetry["ng_dssr_enabled"] =
+        output.telemetry.ng_dssr_enabled;
+    telemetry["ng_dssr_initial_neighborhood_size"] =
+        output.telemetry.ng_dssr_initial_neighborhood_size;
+    telemetry["ng_dssr_initial_relation_count"] =
+        output.telemetry.ng_dssr_initial_relation_count;
+    telemetry["ng_dssr_final_relation_count"] =
+        output.telemetry.ng_dssr_final_relation_count;
+    telemetry["ng_dssr_relation_add_count"] =
+        output.telemetry.ng_dssr_relation_add_count;
+    telemetry["ng_dssr_forbidden_cycle_count"] =
+        output.telemetry.ng_dssr_forbidden_cycle_count;
+    telemetry["ng_dssr_full_elementary_fallback_count"] =
+        output.telemetry.ng_dssr_full_elementary_fallback_count;
     py::list dssr_iteration_trace;
     for (const auto& row : output.telemetry.dssr_iteration_trace) {
         py::dict trace_row;
@@ -370,6 +895,21 @@ py::dict solve_payload(const py::dict& payload) {
         trace_row["negative_witness_found"] =
             row.negative_witness_found;
         trace_row["witness_elementary"] = row.witness_elementary;
+        trace_row["raw_solution_count"] = row.raw_solution_count;
+        trace_row["elementary_solution_count"] =
+            row.elementary_solution_count;
+        trace_row["non_elementary_solution_count"] =
+            row.non_elementary_solution_count;
+        trace_row["pressure_refinement_triggered"] =
+            row.pressure_refinement_triggered;
+        trace_row["pressure_split_task_id"] =
+            row.pressure_split_task_id;
+        trace_row["ng_relation_count_before"] =
+            row.ng_relation_count_before;
+        trace_row["ng_relation_add_count"] =
+            row.ng_relation_add_count;
+        trace_row["ng_forbidden_cycle_count"] =
+            row.ng_forbidden_cycle_count;
         dssr_iteration_trace.append(std::move(trace_row));
     }
     telemetry["dssr_iteration_trace"] =
@@ -394,8 +934,17 @@ py::dict solve_payload(const py::dict& payload) {
              "config_hash",
              "engine_hash",
              "service_timing_policy_id",
+             "exact_negative_escape_enabled",
+             "exact_admission_batch_size",
+             "exact_raw_negative_pool_size",
+             "exact_negative_escape_policy_id",
              "dssr_enabled",
              "dssr_policy_version",
+             "dssr_negative_batch_target",
+             "dssr_pressure_refinement_enabled",
+             "dssr_pressure_max_bucket_size",
+             "dssr_pressure_max_candidate_checks",
+             "ng_dssr_initial_neighborhood_size",
              "canonical_solve_binding_v2",
              "canonical_solve_binding_v2_schema",
              "canonical_solve_binding_v2_hash",
@@ -434,4 +983,26 @@ PYBIND11_MODULE(lunar_spprc_native, module) {
     module.doc() = "Exact-safe lunar multi-sortie SPPRC extension";
     module.def("solve", &solve_payload, py::arg("request"));
     module.def("build_info", &lunar_spprc::build_info);
+#if LUNAR_SPPRC_ENABLE_BIDIRECTIONAL_FEASIBILITY
+    module.def(
+        "bidirectional_feasibility_probe",
+        &bidirectional_feasibility_payload,
+        py::arg("request"));
+    module.def(
+        "bidirectional_backward_frontier_probe",
+        &bidirectional_backward_frontier_payload,
+        py::arg("request"));
+    module.def(
+        "bidirectional_task_meet_frontier_probe",
+        &bidirectional_task_meet_frontier_payload,
+        py::arg("request"));
+    module.def(
+        "bidirectional_journey_frontier_probe",
+        &bidirectional_journey_frontier_payload,
+        py::arg("request"));
+    module.def(
+        "bidirectional_midpoint_journey_meet",
+        &bidirectional_midpoint_meet_payload,
+        py::arg("request"));
+#endif
 }

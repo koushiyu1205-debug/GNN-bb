@@ -1,0 +1,54 @@
+{
+  "arms": {
+    "E128": {
+      "audit_failures": [],
+      "completed_count": 48,
+      "correctness_redline_count": 0,
+      "mean_wall_time_sec": 25.25675854482809,
+      "median_wall_time_sec": 8.876613657514099,
+      "negative_escape_trigger_count": 48,
+      "row_count": 48
+    },
+    "E256": {
+      "audit_failures": [],
+      "completed_count": 48,
+      "correctness_redline_count": 0,
+      "mean_wall_time_sec": 31.56721842798288,
+      "median_wall_time_sec": 16.311523456010036,
+      "negative_escape_trigger_count": 48,
+      "row_count": 48
+    },
+    "E64": {
+      "audit_failures": [],
+      "completed_count": 48,
+      "correctness_redline_count": 0,
+      "mean_wall_time_sec": 23.44115346079222,
+      "median_wall_time_sec": 6.6293995259620715,
+      "negative_escape_trigger_count": 48,
+      "row_count": 48
+    },
+    "P0V4": {
+      "audit_failures": [],
+      "completed_count": 48,
+      "correctness_redline_count": 0,
+      "mean_wall_time_sec": 487.2904852337779,
+      "median_wall_time_sec": 480.12026218202664,
+      "negative_escape_trigger_count": 0,
+      "row_count": 48
+    }
+  },
+  "blocked_schedule_id": "snapshot_replicate_rotating_arm_blocks_v1",
+  "downstream_fixed_k_selection_authorized": true,
+  "duplicate_row_count": 0,
+  "expected_row_count": 192,
+  "global_audit_failures": [],
+  "missing_row_count": 0,
+  "native_engine_build_hashes": [
+    "9e02dd69299e0d47"
+  ],
+  "observed_row_count": 192,
+  "schema_version": "lunar_ice_bpc.p0v4_fixed_k_snapshot_summary.v2",
+  "status": "PASS",
+  "total_audit_failure_count": 0,
+  "unexpected_row_count": 0
+}

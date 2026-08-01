@@ -1,0 +1,128 @@
+model_id: "P0V4_BIDIRECTIONAL_MIDPOINT_ALL_SCALE_CANDIDATE_V2"
+baseline_freeze_id: "FROZEN_NATIVE_LIVE_SRI_P0_MEMORY_COMPACT_BASELINE_V4"
+baseline_config: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/frozen_config.yaml"
+baseline_config_sha256: "9859a8e3d04d6eb966656c0b01858ed13ef98e6ab9e38ea7c403b893de50cfab"
+live_sri_policy: "P0"
+cold_start: true
+minimum_runtime_memory_gb: 2
+native_completion_bound_enabled: false
+native_subset_dominance_enabled: true
+native_cut_state_enabled: true
+native_final_judge_pass_policy: "harvest_then_proof"
+native_final_judge_pass_policy_by_scale:
+  "30": "branch_adaptive_sparse_harvest_v1"
+native_adaptive_harvest_cap_sec_by_scale:
+  "30": 2.0
+exact_negative_escape_enabled: false
+batch_master_admission_enabled: false
+production_default: false
+
+host_runtime_memory:
+  policy_id: "parent_aware_memavailable_hard_guard_v1"
+  available_reserve_gb: 2
+  dynamic_native_limit: true
+  runtime_memavailable_guard: true
+  fail_closed: true
+
+bidirectional_candidate:
+  enabled_scales: [5, 10, 20, 30, 50]
+  backend_id: "native_rcspp_bidirectional_midpoint_hybrid_v1"
+  policy_id: "p0v4_frozen_dual_depot_midpoint_meet_v1"
+  certificate_authority: "none"
+  negative_column_only: true
+  enabled_backend_modes: ["negative_harvest", "exact_proof"]
+  raw_negative_pool_policy: "4x_scale_admission_target"
+  p0v4_fallback_backend_by_scale:
+    "5": "native_rcspp_inprocess"
+    "10": "native_rcspp_inprocess"
+    "20": "native_rcspp_inprocess"
+    "30": "native_rcspp_inprocess"
+    "50": "native_rcspp_host"
+  p0v4_runtime_path_mutated: false
+  production_default_changed: false
+
+profiles:
+  "5":
+    worker_max_tasks: 5
+    exact_max_tasks: 5
+    ng_sizes: [3, 5]
+    harvest_target: 8
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 10
+    memory_limit_gb: 2
+    backend_id: "native_rcspp_bidirectional_midpoint_hybrid_v1"
+    graph_cache_entries: 4
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 15
+    tree_max_branch_depth: 4
+  "10":
+    worker_max_tasks: 10
+    exact_max_tasks: 10
+    ng_sizes: [4, 7, 10]
+    harvest_target: 16
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 30
+    memory_limit_gb: 4
+    backend_id: "native_rcspp_bidirectional_midpoint_hybrid_v1"
+    graph_cache_entries: 2
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 63
+    tree_max_branch_depth: 6
+  "20":
+    worker_max_tasks: 20
+    exact_max_tasks: 20
+    ng_sizes: [6, 10, 14, 20]
+    harvest_target: 32
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 90
+    memory_limit_gb: 8
+    backend_id: "native_rcspp_bidirectional_midpoint_hybrid_v1"
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 127
+    tree_max_branch_depth: 8
+  "30":
+    worker_max_tasks: 30
+    exact_max_tasks: 30
+    ng_sizes: [6, 10, 14, 30]
+    harvest_target: 64
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 180
+    memory_limit_gb: 16
+    backend_id: "native_rcspp_bidirectional_midpoint_hybrid_v1"
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 255
+    tree_max_branch_depth: 12
+  "50":
+    worker_max_tasks: 50
+    exact_max_tasks: 50
+    ng_sizes: [8, 16, 32, 50]
+    harvest_target: 128
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 300
+    memory_limit_gb: 16
+    backend_id: "native_rcspp_bidirectional_midpoint_hybrid_v1"
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 511
+    tree_max_branch_depth: 16
+  "100":
+    worker_max_tasks: 100
+    exact_max_tasks: 100
+    ng_sizes: [10, 20, 40, 70, 100]
+    harvest_target: 128
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 300
+    memory_limit_gb: 8
+    backend_id: "native_rcspp_host"
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 1023
+    tree_max_branch_depth: 24

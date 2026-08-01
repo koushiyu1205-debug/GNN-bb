@@ -27,6 +27,9 @@ from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
     RELAXED_NG_ROUTE_MODE,
     LabelingPricingConfig,
 )
+from lunar_ice_bpc.exact.bpc.pricing.backends import (
+    PRICING_LIFECYCLE_SCOPE_ROOT_CG,
+)
 from lunar_ice_bpc.exact.core.data import load_lunar_ice_data
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 from lunar_ice_bpc.exact.solver.journey_driver import _reference_solution_upper_bound
@@ -252,6 +255,9 @@ def run_labeling_worker_diagnostic(
             result = solve_node_pricing_with_b2b_r3(
                 data,
                 node_id=f"labeling-worker-diagnostic-{worker}",
+                pricing_lifecycle_scope=(
+                    PRICING_LIFECYCLE_SCOPE_ROOT_CG
+                ),
                 initial_columns=seed_columns,
                 b0_direct=None,
                 max_direct_tasks=len(data.task_ids),

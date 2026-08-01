@@ -1,0 +1,78 @@
+{
+  "bidirectional_included": true,
+  "bidirectional_inclusion_policy": "only_if_fallback_is_actually_triggered",
+  "configuration_count": 6,
+  "configurations": [
+    {
+      "ablation_id": "P0V4",
+      "components": [],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v1_20260731/configs/P0V4.yaml",
+      "config_sha256": "ec377b09ec3cb9ac9b2203fa769195f07479d4149d2bd8d8981b2d653dfbc356",
+      "order": 1,
+      "requires_authorized_gat": false
+    },
+    {
+      "ablation_id": "P0V4_BATCH_ADMISSION",
+      "components": [
+        "batch_admission"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v1_20260731/configs/BatchAdmissionOnly.yaml",
+      "config_sha256": "d0769e9e73de7781f3e5b708be277e51e7cbd010077ff7a34856cd90535850f4",
+      "order": 2,
+      "requires_authorized_gat": false
+    },
+    {
+      "ablation_id": "P0V4_DIVERSE_NEGATIVE_ESCAPE",
+      "components": [
+        "diverse_negative_escape"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v1_20260731/configs/DiverseEscapeOnly.yaml",
+      "config_sha256": "f45f35bc8c069902f8ceea2c9f61cb7f4d95134ae34ed5b3069058ad8b90845f",
+      "order": 3,
+      "requires_authorized_gat": false
+    },
+    {
+      "ablation_id": "P0V4_ESCAPE_BATCH",
+      "components": [
+        "diverse_negative_escape",
+        "batch_admission"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v1_20260731/configs/EscapeBatchUnidirectional.yaml",
+      "config_sha256": "f80963fa0786013e933dd3f035904dd9babc95c9f22bd2afb85f8ea0d9f76e97",
+      "order": 4,
+      "requires_authorized_gat": false
+    },
+    {
+      "ablation_id": "P0V4_ESCAPE_BATCH_V5_BIDIRECTIONAL",
+      "components": [
+        "diverse_negative_escape",
+        "batch_admission",
+        "bidirectional_pricing",
+        "live_sri_group_screen"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v1_20260731/configs/Exact.yaml",
+      "config_sha256": "a8ca82802cdce65940e699608237dc4cbfd0ec9d85f99017d5af79e1ee69b70a",
+      "order": 5,
+      "requires_authorized_gat": false
+    },
+    {
+      "ablation_id": "P0V4_ESCAPE_BATCH_ONE_DEVIATION_GAT",
+      "components": [
+        "diverse_negative_escape",
+        "batch_admission",
+        "bidirectional_pricing",
+        "live_sri_group_screen",
+        "one_deviation_gat"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v1_20260731/configs/GAT.yaml",
+      "config_sha256": "f9f2f397f0335704ce195f188282c535e72154ec86fc54bca831b7e1bebb0d8d",
+      "order": 6,
+      "requires_authorized_gat": true
+    }
+  ],
+  "fixed_k_selection": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json",
+  "fixed_k_selection_sha256": "cf476097eed17b02d8c60a1ac6566829ad00a4c327962cd16ba77b4d1e4b0552",
+  "production_default_changed": false,
+  "schema_version": "lunar_ice_bpc.p0v4_paper_ablation_manifest.v1",
+  "status": "CORE_PLUS_TRIGGERED_BIDIRECTIONAL_MATERIALIZED"
+}

@@ -1,0 +1,304 @@
+{
+  "action_ids": [
+    "S1",
+    "S4"
+  ],
+  "beneficial_action_count": 3,
+  "blockers": [
+    "labels_measure_local_discovery_headroom_not_end_to_end_solve_time",
+    "all_contexts_are_mathematical_replays_not_runtime_paired_rollouts",
+    "calibration_split_has_zero_beneficial_actions"
+  ],
+  "calibration_beneficial_action_count": 0,
+  "calibration_instance_sha256": [
+    "56bab31443872ac0cf0bf9d731465d41bf5d7b1ba891463e4155191c9b30a0c0",
+    "8f63fa664f77f574f11737d0293c494eb915c56e6a8bad8b35b6af9aa1a7cfb2",
+    "9ceb149b97edee135f761205e17c9952cf832bb65d10bff1334e9e47605fc3f4"
+  ],
+  "certificate_authority": "none",
+  "context_binding_hash": "d127acc1a7ee95ef4fd1fe047513c944819e50b344f3a7e55cbecab217e02ff5",
+  "context_registry": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_fixed_pilot_20260801/context_registry.json",
+  "context_registry_sha256": "5cc6cb260a6376104c8e4cb4fbcc9b433eb789bcac222d2a9aa82344b9fed4f3",
+  "dataset": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_fixed_pilot_20260801/gat_dataset/sparse_tail_gat_fixed_pilot.jsonl",
+  "dataset_sha256": "0221922faefadce9abe324795a0c136f7292e61a9d0f4c80d2093129b5b6b0e9",
+  "deployment_authorized": false,
+  "evaluation_authorized": false,
+  "executable_partial_action_count": 3,
+  "feature_schema": {
+    "action_features": [
+      "admission_k_over_4",
+      "raw_pool_q_over_4",
+      "log1p_k_over_log5",
+      "k_over_effective_harvest_target"
+    ],
+    "action_ids": [
+      "S1",
+      "S4"
+    ],
+    "edge_features": [
+      "travel_time_over_horizon",
+      "energy_over_limit",
+      "risk",
+      "distance",
+      "shadow_over_limit",
+      "is_low_time",
+      "is_low_energy",
+      "is_low_risk"
+    ],
+    "global_features": [
+      "log1p_scale",
+      "round_over_100",
+      "log1p_active_column_count",
+      "effective_harvest_target_over_128",
+      "sparse_action_cap_over_60",
+      "previous_added_over_target",
+      "previous_selected_over_target",
+      "previous_raw_unique_over_target",
+      "previous_best_true_rc",
+      "log1p_previous_processed_labels",
+      "previous_final_judge_wall_over_300",
+      "penultimate_added_over_target",
+      "penultimate_selected_over_target",
+      "penultimate_raw_unique_over_target",
+      "penultimate_best_true_rc",
+      "log1p_penultimate_processed_labels",
+      "penultimate_final_judge_wall_over_300",
+      "dual_l1_delta_from_previous",
+      "dual_linf_delta_from_previous",
+      "node_lp_bound",
+      "node_lp_bound_delta",
+      "post_harvest_wall_over_60",
+      "log1p_post_harvest_processed_labels",
+      "log1p_post_harvest_extended_labels",
+      "post_harvest_best_true_rc",
+      "post_harvest_search_exhaustive",
+      "post_harvest_frontier_empty",
+      "post_harvest_can_certify_no_negative",
+      "post_harvest_state_incomplete"
+    ],
+    "node_features": [
+      "is_depot",
+      "is_task",
+      "x_over_extent",
+      "y_over_extent",
+      "science_weight",
+      "demand",
+      "service_time_over_horizon",
+      "service_energy_over_limit",
+      "service_cost",
+      "ready_over_horizon",
+      "due_over_horizon",
+      "window_width_over_horizon",
+      "local_shadow_score",
+      "local_thermal_risk",
+      "mode_detect",
+      "mode_sample",
+      "mode_drill",
+      "true_dual",
+      "absolute_true_dual",
+      "active_column_support_frequency",
+      "active_task_set_frequency"
+    ],
+    "schema_version": "lunar_ice_bpc.sparse_tail_action_features.v1"
+  },
+  "feature_schema_hash": "947e653d53180f2b055699f5501eef56dc44786b19852ebb2c59ddc6501fa13f",
+  "formal_training_authorized": false,
+  "instance_disjoint_split": true,
+  "label_semantics": "local_discovery_headroom_not_end_to_end",
+  "mathematical_context_only_row_count": 11,
+  "observed_action_count": 22,
+  "row_count": 11,
+  "rows": [
+    {
+      "beneficial": [
+        true,
+        false
+      ],
+      "context_id": "086f605e52986b8628ba81a274b54dc8bc5f1bf0b94a7686e42702f86062fd68",
+      "executable_partial_return": [
+        true,
+        false
+      ],
+      "feature_hash": "1e51dbabf373757cb5d878760051f5243d2499327e8f1190ce31bce055580610",
+      "instance_content_hash": "3ee755596f2106db",
+      "instance_sha256": "7187024058138b255465723d44cc31241b6ae7bd1b95e8fc79253b2f5cfbf120",
+      "scale": 30,
+      "split": "train"
+    },
+    {
+      "beneficial": [
+        true,
+        true
+      ],
+      "context_id": "160f1009bf91254478c8bf0d5f3cf5e7b138a60362712e6cf28a8e70b97f5d79",
+      "executable_partial_return": [
+        true,
+        true
+      ],
+      "feature_hash": "0d0943669f0b5950b969cc5a8af8843e72d1f22182dd6f1bdbc4f728d8ae78b1",
+      "instance_content_hash": "65cd855434af62cb",
+      "instance_sha256": "c0e4c01cbee9345bdacfbabcb41701a880e8e06722a20059b572d77d075e371f",
+      "scale": 50,
+      "split": "train"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "5ec466b9a4ceb2705fde0fbdae29c330e9167212c7582808fd4f501e356286a2",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "8a5937870ec454113d8885cbc9d7406903dcf10426b1a30b8cde7366101354b9",
+      "instance_content_hash": "38c6df1260241992",
+      "instance_sha256": "aa81cf9f1a54a59edfaa5c5a886fd8c5ea8e0ccefde8d35b033c11d84456065f",
+      "scale": 30,
+      "split": "train"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "d988bc1ebc5b25046bc7b474090699828282359a4caeb07970fa0fa6c1ade16a",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "933cb72b72b9712f04715e99d9eaa2793e55f0bb4475c941e406ebd2f206a887",
+      "instance_content_hash": "195073473c840ec4",
+      "instance_sha256": "87043d2672df4a8a62637f6a9f6c5a3ad4cb970ca347bdf152e0361eb8257e00",
+      "scale": 50,
+      "split": "train"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "2e5293935c1a85a6ca1efad6c43a64ba7b06286c1a61e4e9bfd79a0b7e54437d",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "0be5f083f99de3c8416d368a1206204b388dbc7db7d3dfaa27c997940efdeb62",
+      "instance_content_hash": "f6a2c64b9d6be382",
+      "instance_sha256": "56bab31443872ac0cf0bf9d731465d41bf5d7b1ba891463e4155191c9b30a0c0",
+      "scale": 30,
+      "split": "calibration"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "b870cd9cb8ca7fc97006bb0aa766003854927bb7b421318375288da8ecd6a24f",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "cc1519d17fdb0b44a4947a4562a459a41c2cbd8ee438d8a603921ef49d89e85c",
+      "instance_content_hash": "3ee755596f2106db",
+      "instance_sha256": "7187024058138b255465723d44cc31241b6ae7bd1b95e8fc79253b2f5cfbf120",
+      "scale": 30,
+      "split": "train"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "eb5ad1c210bc16b3fecc4404826f77fd3e3503aac4fcef607ca79c4ace441dc8",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "cd507789cb652f50b81870aab55323886384094a9b0476777e398a73a3dfd55b",
+      "instance_content_hash": "856f2bc07d8b7c9a",
+      "instance_sha256": "8f63fa664f77f574f11737d0293c494eb915c56e6a8bad8b35b6af9aa1a7cfb2",
+      "scale": 30,
+      "split": "calibration"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "5b0ec6494143705eff44aac75f4914f713a045baf1c38e08a47c79bde2806f42",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "c014018048065a86cb0c439c3d14598d543c2d96b2796e10a2cea8e73fd6167d",
+      "instance_content_hash": "7d53353f89929eb0",
+      "instance_sha256": "9ceb149b97edee135f761205e17c9952cf832bb65d10bff1334e9e47605fc3f4",
+      "scale": 30,
+      "split": "calibration"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "f26efc3c0a259654b5e93e52c0ec36431ddac7bc69d5b0e7dbb4b8ea64a7a25a",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "8ce22d7a979d4b311710e5a922a60c0658d9b64498f9f65e204f6b700c8a920e",
+      "instance_content_hash": "65cd855434af62cb",
+      "instance_sha256": "c0e4c01cbee9345bdacfbabcb41701a880e8e06722a20059b572d77d075e371f",
+      "scale": 50,
+      "split": "train"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "9c8ded91c1c7a52ed70fd90e09f4108f7814e41b57cbcce33b50ec506a6c2d68",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "02b8dfb972f5cca16e29c196ec37488f5e6c44be25e59b08cdacf5d8e0cc608e",
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_sha256": "2be35134f027a6e13d56bd80df37b7e9ae78c32805b76524bb250d68d9c66852",
+      "scale": 30,
+      "split": "train"
+    },
+    {
+      "beneficial": [
+        false,
+        false
+      ],
+      "context_id": "d554213dfc4f4a40ac0afda5a776b441ebc7727dc0a39bbc1391554574f724e3",
+      "executable_partial_return": [
+        false,
+        false
+      ],
+      "feature_hash": "d86aa4739f5ddfb686b43965f18aca3f5c055295394c1a7a7dda6996106c4756",
+      "instance_content_hash": "caf6f547698624d2",
+      "instance_sha256": "d5ff10dd716d898c82a7d944c201ede303aa0afe2e7d454a06b201be53193499",
+      "scale": 50,
+      "split": "train"
+    }
+  ],
+  "runtime_eligible_row_count": 0,
+  "schema_version": "lunar_ice_bpc.sparse_tail_gat_fixed_pilot_dataset.v1",
+  "split_policy": "sha256_registry_binding_and_instance_sha_mod3_v1",
+  "split_uses_outcomes": false,
+  "status": "FIXED_PILOT_DATASET_SHADOW_ONLY",
+  "suite_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_fixed_pilot_20260801/suite_manifest.json",
+  "suite_manifest_sha256": "bc4d53f2dfd8b1cf83acdc8737000ea2cfadfb454a3ff918e09ee6e491a27b63",
+  "train_instance_sha256": [
+    "2be35134f027a6e13d56bd80df37b7e9ae78c32805b76524bb250d68d9c66852",
+    "7187024058138b255465723d44cc31241b6ae7bd1b95e8fc79253b2f5cfbf120",
+    "87043d2672df4a8a62637f6a9f6c5a3ad4cb970ca347bdf152e0361eb8257e00",
+    "aa81cf9f1a54a59edfaa5c5a886fd8c5ea8e0ccefde8d35b033c11d84456065f",
+    "c0e4c01cbee9345bdacfbabcb41701a880e8e06722a20059b572d77d075e371f",
+    "d5ff10dd716d898c82a7d944c201ede303aa0afe2e7d454a06b201be53193499"
+  ]
+}

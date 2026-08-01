@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from time import perf_counter
 from typing import Iterable
 
@@ -86,6 +87,7 @@ def solve_node_pricing_with_live_sri(
     current_columns = tuple(initial_columns or tuple())
     all_priced: dict[tuple, JourneyColumn] = {}
     separation_history: list[dict] = []
+    sparse_tail_deviation_used = False
 
     for separation_round in range(1, max(1, int(policy.max_separation_rounds)) + 2):
         remaining = _remaining(wall_time_limit_sec, started_at)
@@ -99,6 +101,9 @@ def solve_node_pricing_with_live_sri(
                 all_priced_columns=tuple(all_priced.values()),
                 reason="LIVE_SRI_NODE_DEADLINE_BEFORE_PRICING",
             )
+        round_node_kwargs = dict(node_kwargs)
+        if sparse_tail_deviation_used:
+            round_node_kwargs["one_deviation_sparse_tail_policy"] = None
         engine = solve_node_pricing_with_b2b_r3(
             data,
             branch_context=branch_context,
@@ -110,8 +115,16 @@ def solve_node_pricing_with_live_sri(
             initial_columns=current_columns or None,
             wall_time_limit_sec=remaining,
             return_active_columns_payload=True,
-            **node_kwargs,
+            **round_node_kwargs,
         )
+        if any(
+            bool(
+                row.get("one_deviation_sparse_tail_attempted")
+            )
+            for row in engine.get("history") or []
+            if isinstance(row, dict)
+        ):
+            sparse_tail_deviation_used = True
         for column in engine.get("_all_priced_columns") or tuple():
             signature = column_signature_from_journey(column)
             previous = all_priced.get(signature)
@@ -151,38 +164,57 @@ def solve_node_pricing_with_live_sri(
             0,
             min(scope_remaining, int(policy.active_cap) - len(context.cuts)),
         )
-        separated = separate_live_sri(
+        candidate_group_count = (
+            int(policy.candidate_group_count)
+            if policy.candidate_group_screening_enabled
+            else 1
+        )
+        separated_pool = separate_live_sri(
             data.task_ids,
             master.rmp.primal_columns,
             subset_sizes=subset_sizes,
-            selection_capacity=selection_capacity,
+            selection_capacity=(
+                selection_capacity * candidate_group_count
+            ),
             existing_cut_context=context,
             violation_eps=policy.violation_eps,
         )
         before_bound = master.rmp.objective_bound
-        next_context, next_lineage, activation = activate_separated_cuts(
-            context,
-            lineage,
-            separated,
-            policy=policy,
-            node_id=node_id,
-            depth=depth,
-            ancestor_path=ancestor_path,
+        candidate_groups = _candidate_group_separations(
+            separated_pool,
+            group_size=selection_capacity,
+            max_group_count=candidate_group_count,
         )
-        row = {
-            "separation_round": separation_round,
-            "node_id": str(node_id),
-            "depth": int(depth),
-            "rmp_bound_before": before_bound,
-            **separated.to_payload(),
-            "activation": activation,
-        }
-        if not activation["added_cut_count"]:
+        if not candidate_groups:
+            separated = replace(
+                separated_pool,
+                selected=tuple(),
+                selection_capacity=selection_capacity,
+            )
+            next_context, next_lineage, activation = (
+                activate_separated_cuts(
+                    context,
+                    lineage,
+                    separated,
+                    policy=policy,
+                    node_id=node_id,
+                    depth=depth,
+                    ancestor_path=ancestor_path,
+                )
+            )
+            row = {
+                "separation_round": separation_round,
+                "node_id": str(node_id),
+                "depth": int(depth),
+                "rmp_bound_before": before_bound,
+                **separated.to_payload(),
+                "activation": activation,
+            }
             activation["committed"] = False
             separation_history.append(row)
             terminal_reason = (
                 "POLICY_CAP_REACHED_WITH_UNSELECTED_VIOLATIONS"
-                if separated.violated_candidate_count > 0
+                if separated_pool.violated_candidate_count > 0
                 else "COMPLETE_ENUMERATION_NO_NEW_VIOLATED_SRI"
             )
             row["terminal_separation"] = True
@@ -198,46 +230,162 @@ def solve_node_pricing_with_live_sri(
             )
 
         active_columns = tuple(engine.get("_active_columns") or tuple())
-        pre_activation_master = solve_root_journey_master(
-            data,
-            active_columns,
-            negative_eps=float(node_kwargs.get("negative_eps", 1.0e-6)),
-            rmp_iteration_id=f"live-sri-precommit-{node_id}-{separation_round}",
-            branch_context=branch_context,
-            cut_context=next_context,
-            cut_lineage=next_lineage,
-            live_cut_policy_hash=policy.policy_hash,
-            separator_policy_version=LIVE_SRI_SEPARATOR_VERSION,
-        )
-        after_bound = pre_activation_master.rmp.objective_bound
-        bound_gain = (
-            None
-            if before_bound is None or after_bound is None
-            else float(after_bound) - float(before_bound)
-        )
-        restricted_primal_integral = _primal_lambdas_integral(
-            pre_activation_master.rmp.primal_columns
-        )
-        commit = bool(
-            pre_activation_master.rmp.status == "RESTRICTED_RMP_OPTIMAL"
-            and (
-                restricted_primal_integral
-                or (
-                    bound_gain is not None
-                    and bound_gain + 1.0e-12 >= float(policy.min_restricted_rmp_gain)
+        group_attempts: list[dict] = []
+        selected_group = candidate_groups[0]
+        next_context = context
+        next_lineage = lineage
+        activation: dict = {}
+        commit = False
+        for group_index, separated in enumerate(candidate_groups, start=1):
+            (
+                attempted_context,
+                attempted_lineage,
+                attempted_activation,
+            ) = activate_separated_cuts(
+                context,
+                lineage,
+                separated,
+                policy=policy,
+                node_id=node_id,
+                depth=depth,
+                ancestor_path=ancestor_path,
+            )
+            pre_activation_master = solve_root_journey_master(
+                data,
+                active_columns,
+                negative_eps=float(
+                    node_kwargs.get("negative_eps", 1.0e-6)
+                ),
+                rmp_iteration_id=(
+                    (
+                        f"live-sri-precommit-{node_id}-"
+                        f"{separation_round}-group-{group_index}"
+                    )
+                    if policy.candidate_group_screening_enabled
+                    else (
+                        f"live-sri-precommit-{node_id}-"
+                        f"{separation_round}"
+                    )
+                ),
+                branch_context=branch_context,
+                cut_context=attempted_context,
+                cut_lineage=attempted_lineage,
+                live_cut_policy_hash=policy.policy_hash,
+                separator_policy_version=LIVE_SRI_SEPARATOR_VERSION,
+            )
+            after_bound = pre_activation_master.rmp.objective_bound
+            bound_gain = (
+                None
+                if before_bound is None or after_bound is None
+                else float(after_bound) - float(before_bound)
+            )
+            restricted_primal_integral = _primal_lambdas_integral(
+                pre_activation_master.rmp.primal_columns
+            )
+            attempt_commit = bool(
+                pre_activation_master.rmp.status
+                == "RESTRICTED_RMP_OPTIMAL"
+                and (
+                    restricted_primal_integral
+                    or (
+                        bound_gain is not None
+                        and bound_gain + 1.0e-12
+                        >= float(policy.min_restricted_rmp_gain)
+                    )
                 )
             )
+            attempt = {
+                "group_index_1based": group_index,
+                "candidate_rank_start_1based": (
+                    (group_index - 1) * selection_capacity + 1
+                ),
+                "candidate_rank_end_1based": (
+                    (group_index - 1) * selection_capacity
+                    + len(separated.selected)
+                ),
+                "cut_ids": [
+                    row.cut.cut_id for row in separated.selected
+                ],
+                "status": pre_activation_master.rmp.status,
+                "rmp_bound_after_proposed_cuts": after_bound,
+                "restricted_rmp_bound_gain": bound_gain,
+                "restricted_primal_integral": (
+                    restricted_primal_integral
+                ),
+                "min_restricted_rmp_gain": float(
+                    policy.min_restricted_rmp_gain
+                ),
+                "commit": attempt_commit,
+                "certificate_role": (
+                    "heuristic_cut_commit_gate_only"
+                ),
+                "mutates_official_bound": False,
+            }
+            group_attempts.append(attempt)
+            if attempt_commit:
+                selected_group = separated
+                next_context = attempted_context
+                next_lineage = attempted_lineage
+                activation = attempted_activation
+                commit = True
+                break
+            if group_index == 1:
+                selected_group = separated
+                next_context = attempted_context
+                next_lineage = attempted_lineage
+                activation = attempted_activation
+
+        selected_attempt = next(
+            (
+                attempt
+                for attempt in group_attempts
+                if int(attempt["group_index_1based"])
+                == (
+                    candidate_groups.index(selected_group) + 1
+                )
+            ),
+            group_attempts[0],
         )
-        row["pre_activation_screen"] = {
-            "status": pre_activation_master.rmp.status,
-            "rmp_bound_after_proposed_cuts": after_bound,
-            "restricted_rmp_bound_gain": bound_gain,
-            "restricted_primal_integral": restricted_primal_integral,
-            "min_restricted_rmp_gain": float(policy.min_restricted_rmp_gain),
-            "commit": commit,
-            "certificate_role": "heuristic_cut_commit_gate_only",
-            "mutates_official_bound": False,
+        row = {
+            "separation_round": separation_round,
+            "node_id": str(node_id),
+            "depth": int(depth),
+            "rmp_bound_before": before_bound,
+            **selected_group.to_payload(),
+            "activation": activation,
+            "pre_activation_screen": {
+                key: value
+                for key, value in selected_attempt.items()
+                if key
+                not in {
+                    "group_index_1based",
+                    "candidate_rank_start_1based",
+                    "candidate_rank_end_1based",
+                    "cut_ids",
+                }
+            },
         }
+        if policy.candidate_group_screening_enabled:
+            row["candidate_group_screening"] = {
+                "enabled": True,
+                "policy_version": policy.version,
+                "group_size": selection_capacity,
+                "group_count_limit": candidate_group_count,
+                "candidate_window_capacity": (
+                    selection_capacity * candidate_group_count
+                ),
+                "retained_candidate_count": len(
+                    separated_pool.selected
+                ),
+                "attempted_group_count": len(group_attempts),
+                "selected_group_index_1based": (
+                    candidate_groups.index(selected_group) + 1
+                ),
+                "acceptance_policy": (
+                    "first_integral_or_min_restricted_rmp_gain"
+                ),
+                "attempts": group_attempts,
+            }
         activation["committed"] = commit
         separation_history.append(row)
         if not commit:
@@ -274,6 +422,34 @@ def _remaining(limit: float | None, started_at: float) -> float | None:
     if limit is None:
         return None
     return max(0.0, float(limit) - (perf_counter() - started_at))
+
+
+def _candidate_group_separations(
+    separated,
+    *,
+    group_size: int,
+    max_group_count: int,
+) -> tuple:
+    """Partition the retained SRI ranking into fixed, disjoint groups."""
+
+    size = max(0, int(group_size))
+    count = max(1, int(max_group_count))
+    if size <= 0:
+        return tuple()
+    retained = tuple(separated.selected)
+    groups = []
+    for start in range(0, min(len(retained), size * count), size):
+        group = retained[start : start + size]
+        if not group:
+            break
+        groups.append(
+            replace(
+                separated,
+                selected=tuple(group),
+                selection_capacity=size,
+            )
+        )
+    return tuple(groups)
 
 
 def _primal_lambdas_integral(rows: Iterable[dict]) -> bool:

@@ -1,0 +1,58 @@
+schema_version: "lunar_ice_bpc.p0v4_diverse_escape_oracle.v1"
+experiment_id: "P0V4_DIVERSE_NEGATIVE_ESCAPE_FIXED_K_ORACLE_V1"
+frozen_control_config: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/frozen_config.yaml"
+frozen_control_config_sha256: "9859a8e3d04d6eb966656c0b01858ed13ef98e6ab9e38ea7c403b893de50cfab"
+frozen_control_manifest: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/baseline_freeze_manifest.json"
+frozen_control_manifest_sha256: "d7063b403a6c2592c35009dfd6bbf3188e1100499766091a0a74e0d06f81a976"
+
+negative_escape_policy_id: "diverse_raw_4x_then_p0v4_selector_v1"
+raw_pool_multiplier: 4
+batch_master_admission_enabled: true
+arms:
+  E64:
+    admission_batch_size: 64
+    raw_negative_pool_size: 256
+  E128:
+    admission_batch_size: 128
+    raw_negative_pool_size: 512
+  E256:
+    admission_batch_size: 256
+    raw_negative_pool_size: 1024
+
+snapshot_stage:
+  source_scale: 50
+  source_instance: "data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json"
+  required_heavy_snapshot_count: 4
+  required_ordinary_snapshot_count: 12
+  blocked_replicates: 3
+  replay_wall_time_limit_sec: 1200
+  # Heavy rows are exact-proof contexts; ordinary rows are natural
+  # negative-harvest contexts from the same immutable P0V4 trajectory. The
+  # runner refuses replay until all 16 paths and roles are registered.
+  snapshots: []
+
+development_stage:
+  scale: 50
+  wall_time_limit_sec: 3600
+  instance_paths:
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_001_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_002_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_003_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_004_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_005_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_006_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_007_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_008_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_009_logical_graph.json"
+    - "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_010_logical_graph.json"
+
+selection_lexicographic:
+  - exact_closure_count
+  - root_closure_count
+  - commonly_closed_paired_geometric_mean
+  - root_gap_and_pricing_pressure_auc
+  - cg_round_count
+  - peak_rss
+runtime_policy: "fixed_k_after_oracle_no_context_switching"
+large_scale_concurrency: 1
+effective_native_memory_limit_gb: 10.867

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,9 @@ from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (  # noqa: E402
     DIRECT_LABEL_WORKER,
     RELAXED_LABELING_WORKER,
     solve_node_pricing_with_b2b_r3,
+)
+from lunar_ice_bpc.exact.bpc.pricing.backends import (  # noqa: E402
+    PRICING_LIFECYCLE_SCOPE_ROOT_CG,
 )
 from lunar_ice_bpc.exact.bpc.solver.root_node_solver import (  # noqa: E402
     _reference_seed_direct_placeholder,
@@ -67,13 +71,88 @@ def main() -> int:
     parser.add_argument("--tail-dual-stabilization-enabled", action="store_true")
     parser.add_argument("--tail-dual-stabilization-alpha", type=float, default=0.7)
     parser.add_argument("--tail-dual-stabilization-window", type=int, default=5)
+    parser.add_argument(
+        "--one-deviation-sparse-tail-fixed-action",
+        choices=("NOOP", "S1", "S4"),
+        default="NOOP",
+        help=(
+            "Development-only exact-safe one-round sparse-tail action. "
+            "NOOP preserves the frozen solver."
+        ),
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-time-cap-sec",
+        type=float,
+        default=60.0,
+        help=(
+            "Fail-closed wall-time cap for the single development sparse-tail "
+            "action; an incomplete miss falls back to the official proof."
+        ),
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-gat-manifest",
+        default="",
+        help=(
+            "Optional context-level sparse-tail GAT manifest. It is mutually "
+            "exclusive with a fixed S1/S4 action."
+        ),
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-gat-evaluation-mode",
+        action="store_true",
+        help=(
+            "Allow an evaluation-authorized manifest to request S1/S4. "
+            "Without this flag the model runs shadow-only and returns NOOP."
+        ),
+    )
     args = parser.parse_args()
+
+    if (
+        args.one_deviation_sparse_tail_fixed_action != "NOOP"
+        and str(args.one_deviation_sparse_tail_gat_manifest).strip()
+    ):
+        parser.error("fixed sparse-tail action and GAT manifest are exclusive")
+    if (
+        args.one_deviation_sparse_tail_gat_evaluation_mode
+        and not str(args.one_deviation_sparse_tail_gat_manifest).strip()
+    ):
+        parser.error("sparse-tail GAT evaluation mode requires a manifest")
 
     instance_path = _resolve(args.instance)
     output_dir = _resolve(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     data = load_lunar_ice_data(json.loads(instance_path.read_text(encoding="utf-8")))
+    gat_manifest_path = (
+        _resolve(args.one_deviation_sparse_tail_gat_manifest).resolve()
+        if str(args.one_deviation_sparse_tail_gat_manifest).strip()
+        else None
+    )
+    if gat_manifest_path is not None and not gat_manifest_path.is_file():
+        raise SystemExit(
+            f"sparse-tail GAT manifest is missing: {gat_manifest_path}"
+        )
+    sparse_tail_policy = None
+    sparse_tail_gat_preload = {
+        "success": True,
+        "wall_ms": 0.0,
+        "error": "",
+    }
+    if gat_manifest_path is not None:
+        from lunar_ice_bpc.guidance.sparse_tail_action import (
+            SparseTailGatPolicy,
+        )
+
+        sparse_tail_policy = SparseTailGatPolicy(
+            gat_manifest_path,
+            evaluation_mode=bool(
+                args.one_deviation_sparse_tail_gat_evaluation_mode
+            ),
+        )
+        sparse_tail_gat_preload = sparse_tail_policy.preload(data)
+    elif args.one_deviation_sparse_tail_fixed_action != "NOOP":
+        fixed_action = str(args.one_deviation_sparse_tail_fixed_action)
+        sparse_tail_policy = lambda _context: fixed_action
     resume_payload = _load_resume_payload(args.resume_probe)
     initial_columns = _resume_initial_columns(data, resume_payload)
     started = perf_counter()
@@ -91,6 +170,9 @@ def main() -> int:
             b0_seed = _reference_seed_direct_placeholder(data)
         result = solve_node_pricing_with_b2b_r3(
             data,
+            pricing_lifecycle_scope=(
+                PRICING_LIFECYCLE_SCOPE_ROOT_CG
+            ),
             initial_columns=initial_columns,
             b0_direct=b0_seed,
             max_direct_tasks=int(args.max_direct_tasks),
@@ -106,6 +188,12 @@ def main() -> int:
             harvest_micro_batch_size=args.harvest_micro_batch_size,
             harvest_deferred_candidate_limit=int(
                 args.harvest_deferred_candidate_limit
+            ),
+            one_deviation_sparse_tail_policy=(
+                sparse_tail_policy
+            ),
+            one_deviation_sparse_tail_time_cap_sec=float(
+                args.one_deviation_sparse_tail_time_cap_sec
             ),
         )
     else:
@@ -139,6 +227,24 @@ def main() -> int:
             "harvest_micro_batch_size": args.harvest_micro_batch_size,
             "harvest_deferred_candidate_limit": int(
                 args.harvest_deferred_candidate_limit
+            ),
+            "one_deviation_sparse_tail_fixed_action": str(
+                args.one_deviation_sparse_tail_fixed_action
+            ),
+            "one_deviation_sparse_tail_time_cap_sec": float(
+                args.one_deviation_sparse_tail_time_cap_sec
+            ),
+            "one_deviation_sparse_tail_gat_manifest": (
+                "" if gat_manifest_path is None else str(gat_manifest_path)
+            ),
+            "one_deviation_sparse_tail_gat_manifest_sha256": (
+                "" if gat_manifest_path is None else _sha256(gat_manifest_path)
+            ),
+            "one_deviation_sparse_tail_gat_evaluation_mode": bool(
+                args.one_deviation_sparse_tail_gat_evaluation_mode
+            ),
+            "one_deviation_sparse_tail_gat_preload": dict(
+                sparse_tail_gat_preload
             ),
             "env_compact_negative_batch_target": os.environ.get("LUNAR_ICE_COMPACT_NEGATIVE_BATCH_TARGET", ""),
             "env_compact_negative_search_cap_sec": os.environ.get("LUNAR_ICE_COMPACT_NEGATIVE_SEARCH_CAP_SEC", ""),
@@ -333,6 +439,14 @@ def _render_report(payload: dict) -> str:
 def _resolve(path: str | Path) -> Path:
     raw = Path(path)
     return raw if raw.is_absolute() else ROOT / raw
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _load_resume_payload(path: str | Path) -> dict:

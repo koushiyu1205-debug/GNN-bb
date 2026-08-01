@@ -1,0 +1,1557 @@
+{
+  "best_found_rc": -0.00428,
+  "can_certify_source_solve": false,
+  "can_enter_certificate_audit": true,
+  "certificate_blockers": [],
+  "column_count": 108,
+  "deployable": false,
+  "development_only": true,
+  "engine_status": "COMPLETE",
+  "exact_safe_ordering_audit": {
+    "guidance_can_certify": false,
+    "guidance_can_change_reduced_cost": false,
+    "guidance_can_filter": false,
+    "guidance_can_prune": false,
+    "ordering_only": true,
+    "passed": true
+  },
+  "fresh_process_arm": true,
+  "frontier_empty": true,
+  "global_min_rc": -0.00428,
+  "global_min_rc_is_exact": true,
+  "guidance_bucket_width": 0.01,
+  "instance_content_hash": "4277d0edc78aaeff",
+  "instance_id": "lunar_ice_sp50_020_004_seed2026272704",
+  "labels_dropped": false,
+  "mutates_p0": false,
+  "policy": "QD1",
+  "potential_id": null,
+  "potential_path": null,
+  "proof_telemetry": {
+    "dominance_candidate_checks": 9958613,
+    "dominance_wall_time_seconds": 0.074728009,
+    "dominated_labels": 79735,
+    "extended_labels": 2784140,
+    "extension_wall_time_seconds": 0.165794533,
+    "guidance_arc_drop_count": 0,
+    "guidance_branch_pair_drop_count": 0,
+    "guidance_effective_mode": "off",
+    "guidance_filter_count": 0,
+    "guidance_label_drop_count": 0,
+    "guidance_task_arc_enabled": null,
+    "legal_action_universe_hash_before_sort": "f62929af168817821b45e437e389ea8e2cb30c1dbc4d1d8e100201690ceab59a",
+    "legal_arc_universe_hash_before_sort": "3055d9f4ae1f712622931d3f59000aa755f5a0014a4dbe3cfa0ddf8abc4a4af6",
+    "max_visited_bucket_size": 729,
+    "memory_pressure_triggered": false,
+    "processed_labels": 46781,
+    "proof_queue_arc_potential_trace": [],
+    "proof_queue_policy_id": "QD1",
+    "proof_queue_potential_trace": [],
+    "proof_queue_potential_trace_enabled": false,
+    "request_bindings_match": true,
+    "solution_count": 108,
+    "subset_dominance_rejected_labels": 66056,
+    "wall_time_seconds": 0.171615061
+  },
+  "proved_no_rc_below": null,
+  "repeat_index": 1,
+  "replay_binding": {
+    "binding_hash": "12de6ec1f0e0fec12dd724209a8c1b26cefbd690ee418553d1b9d8f882acfc1f",
+    "branch_context_hash": "ea4a363b99a4f0b8f4de960f15f3757c5c1f8456b617b220a7852745fc55c38e",
+    "checkpoint_id": "",
+    "config_hash": "6f2e48b310046de4c1a921195e6c188c648c3746c673f470115c0a7fd0c9783a",
+    "cut_lineage_hash": "bf0677654e0f9963d0a298ca47cf5975da083fb4c52fd403ef19274cc9e05d92",
+    "cut_state_schema_version": "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2",
+    "engine_hash": "",
+    "feature_schema_version": "",
+    "full_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "instance_hash": "4277d0edc78aaeff",
+    "live_cut_policy_hash": "",
+    "mathematical_dual_hash": "c092c6c5960598cb1fe0be6a31bcf013bdc824c514e48d3877d8838cf05f2f01",
+    "normalization_version": "",
+    "objective_mode": "official",
+    "ood_policy_version": "",
+    "phase": "phase_two",
+    "pricing_mode": "exact_proof",
+    "projected_pricing_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "raw_ieee_dual_hash": "ff5185662d71fbb5845476063ef7eb571241451246e82a6c1780aa89251e235e",
+    "request_dual_hash": "",
+    "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-19",
+    "schema_version": "lunar_ice_bpc.canonical_solve_binding.v2",
+    "separator_policy_version": ""
+  },
+  "route_rows": [
+    {
+      "accepted": true,
+      "native_rc": -0.00427998378287196,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00428,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.004279848626604116,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00428,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00421735822388723,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.004217,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0035841635858112455,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.003584,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0034489759413943557,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.003449,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0034376904353234762,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.003438,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0033864855386773586,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.003386,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0030422522266683573,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.003042,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_013",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0030421170704005686,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.003042,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0029796266676835716,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00298,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0027418702382628725,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002742,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.002346432029607809,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002346,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_013",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0022112443851908083,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002211,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.002203692573572652,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002204,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.002203557417304919,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002204,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00219995887912004,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.0022,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_013",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0021856414409356763,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002186,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.002185506284668054,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002186,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0021487539824738113,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002149,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.002141067014588033,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002141,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.002123015881951057,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.002123,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0019061381684817693,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001906,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0019060089161093531,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001906,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0019060030122140916,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001906,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0019051147000911763,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001905,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001878269381349812,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001878,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0018435126094970946,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001844,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001632734695825905,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001633,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_012"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001631840479807617,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001632,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0015078723765120485,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001508,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0015041386820593252,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001504,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_013",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0014898212438750726,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00149,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001373050219190525,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001373,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0013726847320950477,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001373,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0013613992260243348,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001361,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001354999086553549,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001355,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_009"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0013546335994580718,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001355,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0013433480933873034,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001343,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001312190768271976,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001312,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001312061515899893,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001312,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0013120556120042983,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001312,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001311167299881494,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001311,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0013101943293781617,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00131,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012921431967410748,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001292,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012843219811400743,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001284,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012804919853373455,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00128,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012803627329652624,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00128,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012803568290696678,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00128,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012794685169468635,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001279,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_015",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012526231982054438,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001253,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_015",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012495652092873013,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00125,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012178664263526708,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001218,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0012103179714211655,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00121,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.001075495814099642,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001076,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_009",
+        "ice_site_011"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0010751303270042202,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001075,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0010638448209333408,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001064,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0010446899302167635,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001045,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_005"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0010126399242872232,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.001013,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008628404710478267,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000863,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_009",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008306917296277807,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000831,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008305624772556421,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000831,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008305565733601585,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000831,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008305161855255263,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000831,
+      "task_set": [
+        "ice_site_003",
+        "ice_site_010",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008304251137191522,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00083,
+      "task_set": [
+        "ice_site_003",
+        "ice_site_011",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008303810292577931,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00083,
+      "task_set": [
+        "ice_site_003",
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008302899574514746,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00083,
+      "task_set": [
+        "ice_site_003",
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008296682612372987,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00083,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008262770034450475,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000826,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008253827874267596,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000825,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0008028229424959345,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000803,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007985374686853954,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000799,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007680661706431615,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000768,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.000767890626540796,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000768,
+      "task_set": [
+        "ice_site_003",
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0007677995547344775,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000768,
+      "task_set": [
+        "ice_site_003",
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0006817581323749601,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000682,
+      "task_set": [
+        "ice_site_010",
+        "ice_site_011",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0006816229761072825,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000682,
+      "task_set": [
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0006655790289636756,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000666,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0006475278963268107,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000648,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_005",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0006191325733901744,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000619,
+      "task_set": [
+        "ice_site_007",
+        "ice_site_010",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_018",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0006163705712113722,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000616,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0005846717882767418,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000585,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0004815484138899597,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000482,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_014",
+        "ice_site_015"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00048118292679453795,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000481,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00046989742072360303,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00047,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0004498496309552737,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.00045,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_009",
+        "ice_site_015"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.000449484143859852,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000449,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00043819863778897256,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000438,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00041869252407754094,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000419,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_012",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00039534887864865493,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000395,
+      "task_set": [
+        "ice_site_011",
+        "ice_site_013",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0003952196262762943,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000395,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00039521372238092174,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000395,
+      "task_set": [
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00039512898510594714,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000395,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_013",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0003950031396223576,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000395,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00039499973273369755,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000395,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00039499382883821394,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000395,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00039432541025811747,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000394,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_011",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.000394108923604042,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000394,
+      "task_set": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00039410551671535416,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000394,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00038699374114291047,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000387,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_012",
+        "ice_site_015",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0003680246238727926,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000368,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_011",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00036748009151669776,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000367,
+      "task_set": [
+        "ice_site_004",
+        "ice_site_011",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00036726019797393445,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000367,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0003327233196639247,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000333,
+      "task_set": [
+        "ice_site_007",
+        "ice_site_011",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.0003325034261212169,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000333,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00022203460183832253,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000222,
+      "task_set": [
+        "ice_site_002",
+        "ice_site_004",
+        "ice_site_005",
+        "ice_site_017"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00013487153256717694,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000135,
+      "task_set": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_013",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00013469598846492254,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000135,
+      "task_set": [
+        "ice_site_003",
+        "ice_site_010",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    },
+    {
+      "accepted": true,
+      "native_rc": -0.00013460491665854852,
+      "native_route_sorties": [],
+      "python_manual_rc": -0.000135,
+      "task_set": [
+        "ice_site_003",
+        "ice_site_011",
+        "ice_site_013",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_016",
+        "ice_site_020"
+      ]
+    }
+  ],
+  "scale": 20,
+  "schema_version": "lunar_ice_bpc.p0v3_proof_queue_potential_replay.v1",
+  "search_exhaustive": true,
+  "source_round": 19,
+  "source_snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/scale20_instance004_work10000_twostrike_snapshots/round_snapshots/round_0019_a26830c90f5f45bc.json",
+  "source_state_hash": "a26830c90f5f45bc3bdd59459830272affbf5fd12bc695a95d44dc768df0404f",
+  "total_fresh_process_wall_sec": 0.203410488
+}

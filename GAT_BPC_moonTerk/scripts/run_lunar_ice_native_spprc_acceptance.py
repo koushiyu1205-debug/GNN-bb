@@ -26,6 +26,11 @@ def main() -> int:
             "native_rcspp_host",
             "native_rcspp_dssr_inprocess",
             "native_rcspp_dssr_host",
+            "native_rcspp_dssr_v2_inprocess",
+            "native_rcspp_dssr_v2_host",
+            "native_rcspp_ng_dssr_v3_inprocess",
+            "native_rcspp_ng_dssr_v3_host",
+            "native_rcspp_bidirectional_midpoint_hybrid_v1",
         ),
     )
     parser.add_argument("--instance", action="append", default=[])
@@ -40,6 +45,20 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true", default=False)
     parser.add_argument("--no-resume", action="store_false", dest="resume")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--route-opportunity-collection-only-root-pool",
+        action="store_true",
+        default=False,
+        help=(
+            "Collect the natural root-pool trajectory and stop before tree "
+            "closure. The resulting rows are diagnostic and uncertified."
+        ),
+    )
+    parser.add_argument(
+        "--route-opportunity-collection-root-pool-time-cap-sec",
+        type=float,
+        default=0.0,
+    )
     args = parser.parse_args()
     config_path = Path(args.config)
     if not config_path.is_absolute():
@@ -65,6 +84,12 @@ def main() -> int:
         output_dir=args.output_dir,
         resume=args.resume,
         dry_run=args.dry_run,
+        route_opportunity_collection_only_root_pool=bool(
+            args.route_opportunity_collection_only_root_pool
+        ),
+        route_opportunity_collection_root_pool_time_cap_sec=float(
+            args.route_opportunity_collection_root_pool_time_cap_sec
+        ),
     )
     print(
         f"native SPPRC acceptance rows={len(summary['rows'])} "

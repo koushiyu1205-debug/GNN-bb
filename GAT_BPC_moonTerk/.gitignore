@@ -1,8 +1,15 @@
 /build/native-spprc/
 /build/native-spprc-asan/
 /build/native-spprc-large-exact/
+/build/native-spprc-dssr-v2/
+/build/native-spprc-ng-dssr-v3/
+/build/native-spprc-p0-no-ng-v3/
+/build/native-spprc-bidirectional-feasibility-v1/
+/build/native-spprc-memory-opt-v2/
+/build/native-spprc-memory-opt/
 /.venv-native-spprc/
 /src/*.egg-info/
 /data/gat_p0v2/development_instances/scale_*/instance_*_logical_graph.json
 /data/gat_p0v2/large_development_instances/scale_*/instance_*_logical_graph.json
+/data/dssr_v2_validation/scale_*/instance_*_logical_graph.json
 /runs/p0v2_gat_*/

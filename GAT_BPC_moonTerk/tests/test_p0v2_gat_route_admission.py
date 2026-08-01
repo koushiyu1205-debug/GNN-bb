@@ -73,6 +73,9 @@ def _pure_snapshot() -> dict:
         full_cut_context={},
         source_phase="test",
         executed_objective_spec_id="normalized-objective.v1",
+        remaining_budget_observation_stage=(
+            "post_candidate_generation_pre_admission"
+        ),
     )
 
 
@@ -184,7 +187,7 @@ def test_active_harvest_boundary_writes_replayable_snapshot(
     )
     candidates = tuple(
         column for column in universe if column is not active
-    )[:3]
+    )[:12]
     pool = ColumnPool()
     view = MasterColumnView()
     active_bpc = BpcColumn(
@@ -211,13 +214,15 @@ def test_active_harvest_boundary_writes_replayable_snapshot(
             ),
             pool=pool,
             view=view,
-            max_selected=3,
+            max_selected=len(candidates),
             guidance_data=data,
             guidance_duals=duals,
             guidance_rmp_iteration_id="root-structural-zero",
         )
     )
-    assert len(structural_selected) == 3
+    assert len(structural_selected) == int(
+        structural_telemetry["addable_negative_count"]
+    )
     structural_recording = structural_telemetry[
         "guidance_training_recording"
     ]
@@ -239,6 +244,7 @@ def test_active_harvest_boundary_writes_replayable_snapshot(
         max_selected=1,
         guidance_data=data,
         guidance_duals=duals,
+        guidance_wall_time_limit_sec=123.0,
         guidance_rmp_iteration_id="root-test",
     )
     assert len(selected) == 1
@@ -253,7 +259,16 @@ def test_active_harvest_boundary_writes_replayable_snapshot(
     assert len(snapshot_paths) == 1
     snapshot = json.loads(snapshot_paths[0].read_text(encoding="utf-8"))
     assert snapshot["instance_content_hash"] == data.instance_content_hash
-    assert len(snapshot["candidate_rows"]) == 3
+    assert snapshot["schema_version"] == (
+        "lunar_ice_bpc.route_admission_snapshot.v2"
+    )
+    assert snapshot["remaining_solve_budget_sec"] == 123.0
+    assert snapshot["remaining_budget_observation_stage"] == (
+        "post_candidate_generation_pre_admission"
+    )
+    assert len(snapshot["candidate_rows"]) == int(
+        telemetry["addable_negative_count"]
+    )
     assert len(snapshot["active_column_payloads"]) == 1
     assert snapshot["p0_selected_candidate_ids"] == snapshot[
         "p0_ordered_candidate_ids"

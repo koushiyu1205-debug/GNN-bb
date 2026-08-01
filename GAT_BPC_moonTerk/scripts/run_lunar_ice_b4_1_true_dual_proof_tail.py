@@ -121,7 +121,13 @@ def main() -> int:
     parser.add_argument("--tree-closure-labeling-final-judge-exact-harvest-target", type=int)
     parser.add_argument(
         "--tree-closure-live-sri-policy",
-        choices=("no_cut", "P0", "P1", "P2"),
+        choices=(
+            "no_cut",
+            "P0",
+            "P0_GROUP_SCREEN_V1",
+            "P1",
+            "P2",
+        ),
         default="no_cut",
     )
     parser.add_argument("--tree-closure-result-subdir", default="tree_closure_results")

@@ -98,11 +98,18 @@ struct Model {
     bool dssr_relaxation_enabled = false;
     std::vector<std::uint64_t> dssr_critical_task_mask;
     std::vector<std::uint64_t> dssr_branch_task_mask;
+    bool ng_dssr_memory_enabled = false;
+    std::vector<std::vector<std::uint64_t>> ng_dssr_task_memory_masks;
 };
 
 struct SolveParams {
     bool exact_proof = true;
     std::size_t harvest_target = 16;
+    bool exact_negative_escape_enabled = false;
+    std::size_t exact_admission_batch_size = 16;
+    std::size_t exact_raw_negative_pool_size = 64;
+    std::string exact_negative_escape_policy_id =
+        "diverse_raw_4x_then_p0v4_selector_v1";
     std::size_t harvest_max_processed_labels = 0;
     double timeout_seconds = std::numeric_limits<double>::infinity();
     double max_memory_gb = 0.0;
@@ -115,6 +122,13 @@ struct SolveParams {
     bool proof_queue_potential_trace_enabled = false;
     double proof_queue_guidance_bucket_width = 0.01;
     bool dssr_enabled = false;
+    std::string dssr_policy_version =
+        "multi_sortie_counterexample_refinement_v1";
+    std::size_t dssr_negative_batch_target = 16;
+    bool dssr_pressure_refinement_enabled = false;
+    std::size_t dssr_pressure_max_bucket_size = 8192;
+    std::size_t dssr_pressure_max_candidate_checks = 200000000;
+    std::size_t ng_dssr_initial_neighborhood_size = 10;
     ProofQueuePolicy proof_queue_policy = ProofQueuePolicy::Q0PartialCost;
 };
 
@@ -161,6 +175,14 @@ struct DssrIterationTraceRow {
     bool labels_dropped = false;
     bool negative_witness_found = false;
     bool witness_elementary = false;
+    std::size_t raw_solution_count = 0;
+    std::size_t elementary_solution_count = 0;
+    std::size_t non_elementary_solution_count = 0;
+    bool pressure_refinement_triggered = false;
+    std::string pressure_split_task_id;
+    std::size_t ng_relation_count_before = 0;
+    std::size_t ng_relation_add_count = 0;
+    std::size_t ng_forbidden_cycle_count = 0;
 };
 
 struct Telemetry {
@@ -170,6 +192,13 @@ struct Telemetry {
     std::size_t dominance_candidate_checks = 0;
     std::size_t max_visited_bucket_size = 0;
     std::size_t solution_count = 0;
+    bool negative_escape_enabled = false;
+    bool negative_escape_triggered = false;
+    std::size_t exact_admission_batch_size = 0;
+    std::size_t exact_raw_negative_pool_size = 0;
+    std::size_t raw_unique_negative_count = 0;
+    std::string negative_escape_policy_id;
+    std::string negative_escape_termination_reason;
     bool memory_pressure_triggered = false;
     bool graph_cache_hit = false;
     std::size_t graph_cache_size = 0;
@@ -200,6 +229,22 @@ struct Telemetry {
     std::size_t dssr_repeated_witness_count = 0;
     bool dssr_elementary_witness_returned = false;
     bool dssr_relaxation_no_negative_certificate = false;
+    std::size_t dssr_elementary_batch_count = 0;
+    std::size_t dssr_raw_solution_count = 0;
+    std::size_t dssr_pressure_refinement_count = 0;
+    std::vector<std::string> dssr_pressure_split_task_ids;
+    std::size_t dssr_pressure_abandoned_iteration_count = 0;
+    std::size_t dssr_max_bucket_size = 0;
+    std::size_t dssr_dominance_candidate_checks = 0;
+    bool dssr_pressure_triggered = false;
+    std::string dssr_pressure_split_task_id;
+    bool ng_dssr_enabled = false;
+    std::size_t ng_dssr_initial_neighborhood_size = 0;
+    std::size_t ng_dssr_initial_relation_count = 0;
+    std::size_t ng_dssr_final_relation_count = 0;
+    std::size_t ng_dssr_relation_add_count = 0;
+    std::size_t ng_dssr_forbidden_cycle_count = 0;
+    std::size_t ng_dssr_full_elementary_fallback_count = 0;
     std::vector<DssrIterationTraceRow> dssr_iteration_trace;
 };
 

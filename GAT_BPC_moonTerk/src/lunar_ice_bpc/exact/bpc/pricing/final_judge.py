@@ -6,11 +6,15 @@ from dataclasses import dataclass
 from math import isclose, isfinite
 import os
 from time import perf_counter
+from typing import Callable, Mapping
 
 from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
 from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.master.reduced_cost import ReducedCostContext
+from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
+    PRICING_LIFECYCLE_SCOPE_ROOT_CG,
+)
 from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
     CERTIFYING_PROOF_KINDS,
     EXACT_ELEMENTARY_MODE,
@@ -51,6 +55,22 @@ LABELING_FINAL_JUDGE_MAX_TASKS_ENV = "LUNAR_ICE_LABELING_FINAL_JUDGE_MAX_TASKS"
 LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET_ENV = (
     "LUNAR_ICE_LABELING_FINAL_JUDGE_EXACT_HARVEST_TARGET"
 )
+EXACT_NEGATIVE_ESCAPE_ENABLED_ENV = (
+    "LUNAR_ICE_EXACT_NEGATIVE_ESCAPE_ENABLED"
+)
+EXACT_NEGATIVE_ESCAPE_POLICY_V1 = (
+    "diverse_raw_4x_then_p0v4_selector_v1"
+)
+SPARSE_TAIL_DEVIATION_NOOP = "NOOP"
+SPARSE_TAIL_DEVIATION_TARGETS = {
+    "S1": (1, 1),
+    "S4": (4, 4),
+}
+SPARSE_TAIL_DEVIATION_POLICY_ID = (
+    "one_round_sparse_true_dual_escape_v1"
+)
+SPARSE_TAIL_DEVIATION_DEFAULT_NEGATIVE_EPS = 3.0e-6
+SPARSE_TAIL_DEVIATION_DEFAULT_TIME_CAP_SEC = 60.0
 LABELING_FINAL_JUDGE_PASS_HARVEST_THEN_PROOF = "harvest_then_proof"
 LABELING_FINAL_JUDGE_PASS_PROOF_ONLY = "proof_only"
 LABELING_FINAL_JUDGE_PASS_STRATEGIES = frozenset(
@@ -532,6 +552,7 @@ class FinalJudgeResult:
     pricing_payload: dict
     negative_columns: tuple[JourneyColumn, ...]
     all_priced_columns: tuple[JourneyColumn, ...]
+    audited_candidate_order: tuple[JourneyColumn, ...] = tuple()
 
 
 def run_true_dual_root_final_judge(
@@ -549,6 +570,9 @@ def run_true_dual_root_final_judge(
     column_pool: ColumnPool | None = None,
     master_view: MasterColumnView | None = None,
     node_id: str = "root",
+    pricing_lifecycle_scope: str = (
+        PRICING_LIFECYCLE_SCOPE_ROOT_CG
+    ),
     active_task_sets: set[frozenset[str]] | None = None,
     labeling_final_judge_enabled: bool | None = None,
     labeling_final_judge_max_exact_tasks: int | None = None,
@@ -558,6 +582,18 @@ def run_true_dual_root_final_judge(
     labeling_final_judge_harvest_max_processed_labels: int = 0,
     harvest_discovery_duals: JourneyDuals | None = None,
     harvest_discovery_metadata: dict | None = None,
+    one_deviation_sparse_tail_action: str = (
+        SPARSE_TAIL_DEVIATION_NOOP
+    ),
+    one_deviation_sparse_tail_negative_eps: float = (
+        SPARSE_TAIL_DEVIATION_DEFAULT_NEGATIVE_EPS
+    ),
+    one_deviation_sparse_tail_time_cap_sec: float | None = (
+        SPARSE_TAIL_DEVIATION_DEFAULT_TIME_CAP_SEC
+    ),
+    one_deviation_sparse_tail_action_resolver: (
+        Callable[[Mapping[str, object]], object] | None
+    ) = None,
 ) -> FinalJudgeResult:
     """Run exhaustive fixed-graph pricing with fail-closed proof semantics.
 
@@ -612,6 +648,22 @@ def run_true_dual_root_final_judge(
             ),
             harvest_discovery_duals=harvest_discovery_duals,
             harvest_discovery_metadata=harvest_discovery_metadata,
+            one_deviation_sparse_tail_action=(
+                one_deviation_sparse_tail_action
+            ),
+            one_deviation_sparse_tail_negative_eps=(
+                one_deviation_sparse_tail_negative_eps
+            ),
+            one_deviation_sparse_tail_time_cap_sec=(
+                one_deviation_sparse_tail_time_cap_sec
+            ),
+            one_deviation_sparse_tail_action_resolver=(
+                one_deviation_sparse_tail_action_resolver
+            ),
+            column_pool=column_pool,
+            master_view=master_view,
+            node_id=node_id,
+            pricing_lifecycle_scope=pricing_lifecycle_scope,
         )
         if labeling_mode == "auto":
             result.pricing_payload.update(
@@ -780,6 +832,24 @@ def _run_labeling_pricer_final_judge(
     harvest_max_processed_labels: int = 0,
     harvest_discovery_duals: JourneyDuals | None = None,
     harvest_discovery_metadata: dict | None = None,
+    one_deviation_sparse_tail_action: str = (
+        SPARSE_TAIL_DEVIATION_NOOP
+    ),
+    one_deviation_sparse_tail_negative_eps: float = (
+        SPARSE_TAIL_DEVIATION_DEFAULT_NEGATIVE_EPS
+    ),
+    one_deviation_sparse_tail_time_cap_sec: float | None = (
+        SPARSE_TAIL_DEVIATION_DEFAULT_TIME_CAP_SEC
+    ),
+    one_deviation_sparse_tail_action_resolver: (
+        Callable[[Mapping[str, object]], object] | None
+    ) = None,
+    column_pool: ColumnPool | None = None,
+    master_view: MasterColumnView | None = None,
+    node_id: str = "root",
+    pricing_lifecycle_scope: str = (
+        PRICING_LIFECYCLE_SCOPE_ROOT_CG
+    ),
 ) -> FinalJudgeResult:
     start = perf_counter()
     max_exact_tasks = (
@@ -831,23 +901,129 @@ def _run_labeling_pricer_final_judge(
     normalized_harvest_max_processed_labels = max(
         0, int(harvest_max_processed_labels)
     )
+    negative_escape_requested = _env_bool(
+        EXACT_NEGATIVE_ESCAPE_ENABLED_ENV,
+        default=False,
+    )
+    exact_raw_negative_pool_size = 4 * int(exact_harvest_target)
+    sparse_tail_action = str(
+        one_deviation_sparse_tail_action or SPARSE_TAIL_DEVIATION_NOOP
+    ).strip().upper()
+    if (
+        one_deviation_sparse_tail_action_resolver is not None
+        and sparse_tail_action != SPARSE_TAIL_DEVIATION_NOOP
+    ):
+        raise ValueError(
+            "one-deviation sparse-tail action and post-harvest resolver "
+            "are mutually exclusive"
+        )
+    if (
+        sparse_tail_action != SPARSE_TAIL_DEVIATION_NOOP
+        and sparse_tail_action not in SPARSE_TAIL_DEVIATION_TARGETS
+    ):
+        raise ValueError(
+            "unsupported one-deviation sparse-tail action "
+            f"{one_deviation_sparse_tail_action!r}"
+        )
+    sparse_tail_negative_eps = abs(
+        float(one_deviation_sparse_tail_negative_eps)
+    )
+    if (
+        (
+            sparse_tail_action != SPARSE_TAIL_DEVIATION_NOOP
+            or one_deviation_sparse_tail_action_resolver is not None
+        )
+        and (
+            not isfinite(sparse_tail_negative_eps)
+            or sparse_tail_negative_eps < abs(float(negative_eps))
+        )
+    ):
+        raise ValueError(
+            "one-deviation sparse-tail epsilon must be finite and at "
+            "least the official negative epsilon"
+        )
+    normalized_sparse_tail_time_cap = None
+    if one_deviation_sparse_tail_time_cap_sec is not None:
+        normalized_sparse_tail_time_cap = float(
+            one_deviation_sparse_tail_time_cap_sec
+        )
+        if (
+            not isfinite(normalized_sparse_tail_time_cap)
+            or normalized_sparse_tail_time_cap <= 0.0
+        ):
+            raise ValueError(
+                "one_deviation_sparse_tail_time_cap_sec must be a "
+                "finite positive number"
+            )
 
     def run_labeling_pass(
         *,
         pass_duals: JourneyDuals,
         stop_at_first_negative: bool,
         pass_wall_time_limit_sec: float | None,
-    ) -> tuple[dict, tuple[JourneyColumn, ...], float]:
+        negative_escape_enabled: bool = False,
+        pass_negative_eps: float | None = None,
+        pass_admission_batch_size: int | None = None,
+        pass_raw_negative_pool_size: int | None = None,
+    ) -> tuple[
+        dict,
+        tuple[JourneyColumn, ...],
+        tuple[JourneyColumn, ...],
+        float,
+    ]:
         pass_start = perf_counter()
-        pass_payload, pass_columns = run_bpc_labeling_pricer(
+        active_negative_eps = (
+            float(negative_eps)
+            if pass_negative_eps is None
+            else float(pass_negative_eps)
+        )
+        active_admission_batch_size = (
+            int(exact_harvest_target)
+            if pass_admission_batch_size is None
+            else max(1, int(pass_admission_batch_size))
+        )
+        active_raw_negative_pool_size = (
+            int(exact_raw_negative_pool_size)
+            if pass_raw_negative_pool_size is None
+            else max(
+                active_admission_batch_size,
+                int(pass_raw_negative_pool_size),
+            )
+        )
+        record_full_candidate_order = bool(
+            str(
+                os.getenv("LUNAR_ICE_GAT_TRAINING_ROWS_DIR", "")
+            ).strip()
+            or str(
+                os.getenv("LUNAR_ICE_ONE_DEVIATION_MANIFEST", "")
+            ).strip()
+        )
+        pass_result = run_bpc_labeling_pricer(
             data,
             pass_duals,
             config=LabelingPricingConfig(
                 mode=EXACT_ELEMENTARY_MODE,
+                pricing_lifecycle_scope=(
+                    pricing_lifecycle_scope
+                ),
                 max_exact_tasks=max_exact_tasks,
-                negative_eps=negative_eps,
+                negative_eps=active_negative_eps,
                 wall_time_limit_sec=pass_wall_time_limit_sec,
-                exact_negative_harvest_target=exact_harvest_target,
+                exact_negative_harvest_target=(
+                    active_admission_batch_size
+                ),
+                exact_negative_escape_enabled=bool(
+                    negative_escape_enabled
+                ),
+                exact_admission_batch_size=(
+                    active_admission_batch_size
+                ),
+                exact_raw_negative_pool_size=(
+                    active_raw_negative_pool_size
+                ),
+                exact_negative_escape_policy_id=(
+                    EXACT_NEGATIVE_ESCAPE_POLICY_V1
+                ),
                 harvest_max_processed_labels=(
                     normalized_harvest_max_processed_labels
                     if stop_at_first_negative
@@ -863,8 +1039,25 @@ def _run_labeling_pricer_final_judge(
             branch_context=branch_context,
             cut_context=cut_context,
             cache=cache,
+            return_audited_candidate_order=(
+                record_full_candidate_order
+            ),
         )
-        return dict(pass_payload), tuple(pass_columns), perf_counter() - pass_start
+        if len(pass_result) == 3:
+            (
+                pass_payload,
+                pass_columns,
+                pass_audited_candidate_order,
+            ) = pass_result
+        else:
+            pass_payload, pass_columns = pass_result
+            pass_audited_candidate_order = pass_columns
+        return (
+            dict(pass_payload),
+            tuple(pass_columns),
+            tuple(pass_audited_candidate_order),
+            perf_counter() - pass_start,
+        )
 
     def audit_pass_columns(
         pass_columns: tuple[JourneyColumn, ...],
@@ -927,11 +1120,25 @@ def _run_labeling_pricer_final_judge(
     proof_pass_skip_reason = ""
     proof_pass_payload: dict = {}
     proof_pass_wall = 0.0
+    sparse_tail_attempted = False
+    sparse_tail_executed = False
+    sparse_tail_pass_payload: dict = {}
+    sparse_tail_pass_wall = 0.0
+    sparse_tail_effective_time_limit: float | None = None
+    sparse_tail_fallback_reason = ""
+    sparse_tail_action_resolver_invoked = False
+    sparse_tail_action_resolver_error = ""
     if proof_only:
-        payload, columns, proof_pass_wall = run_labeling_pass(
+        (
+            payload,
+            columns,
+            audited_candidate_order,
+            proof_pass_wall,
+        ) = run_labeling_pass(
             pass_duals=duals,
             stop_at_first_negative=False,
             pass_wall_time_limit_sec=wall_time_limit_sec,
+            negative_escape_enabled=negative_escape_requested,
         )
         proof_pass_payload = dict(payload)
         (
@@ -947,10 +1154,16 @@ def _run_labeling_pricer_final_judge(
             wall_time_limit_sec,
             normalized_harvest_cap,
         )
-        payload, columns, harvest_pass_wall = run_labeling_pass(
+        (
+            payload,
+            columns,
+            audited_candidate_order,
+            harvest_pass_wall,
+        ) = run_labeling_pass(
             pass_duals=discovery_duals,
             stop_at_first_negative=True,
             pass_wall_time_limit_sec=harvest_pass_limit,
+            negative_escape_enabled=False,
         )
         harvest_pass_payload = dict(payload)
         (
@@ -962,10 +1175,157 @@ def _run_labeling_pricer_final_judge(
             manual_branch_feasible_best,
         ) = audit_pass_columns(columns)
     if (
+        one_deviation_sparse_tail_action_resolver is not None
+        and not proof_only
+        and str(node_id) in {"root", "node_000"}
+        and not negative_columns
+    ):
+        sparse_tail_action_resolver_invoked = True
+        resolver_context = {
+            "schema_version": (
+                "lunar_ice_bpc.sparse_tail_post_harvest_context.v1"
+            ),
+            "node_id": str(node_id),
+            "harvest_pass_pricing_state": str(
+                harvest_pass_payload.get("pricing_state") or ""
+            ),
+            "harvest_pass_status": str(
+                harvest_pass_payload.get("status") or ""
+            ),
+            "harvest_pass_wall_time_sec": float(harvest_pass_wall),
+            "harvest_pass_processed_labels": int(
+                harvest_pass_payload.get("processed_labels") or 0
+            ),
+            "harvest_pass_extended_labels": int(
+                harvest_pass_payload.get("extended_labels") or 0
+            ),
+            "harvest_pass_raw_unique_negative_count": int(
+                harvest_pass_payload.get("raw_unique_negative_count")
+                or 0
+            ),
+            "harvest_pass_true_audited_column_count": int(
+                harvest_pass_payload.get("true_audited_column_count")
+                or 0
+            ),
+            "harvest_pass_best_true_rc": (
+                harvest_pass_payload.get("true_best_reduced_cost")
+            ),
+            "harvest_pass_search_exhaustive": bool(
+                harvest_pass_payload.get("search_exhaustive")
+            ),
+            "harvest_pass_frontier_empty": bool(
+                harvest_pass_payload.get("frontier_empty")
+            ),
+            "harvest_pass_can_certify_no_negative": bool(
+                harvest_pass_payload.get("can_certify_no_negative")
+            ),
+            "audited_official_negative_column_count": 0,
+        }
+        try:
+            resolved_action = one_deviation_sparse_tail_action_resolver(
+                resolver_context
+            )
+            sparse_tail_action = str(
+                resolved_action or SPARSE_TAIL_DEVIATION_NOOP
+            ).strip().upper()
+            if (
+                sparse_tail_action != SPARSE_TAIL_DEVIATION_NOOP
+                and sparse_tail_action not in SPARSE_TAIL_DEVIATION_TARGETS
+            ):
+                sparse_tail_action_resolver_error = (
+                    "unsupported_post_harvest_action"
+                )
+                sparse_tail_action = SPARSE_TAIL_DEVIATION_NOOP
+        except Exception as exc:
+            sparse_tail_action_resolver_error = (
+                f"{type(exc).__name__}: {exc}"
+            )
+            sparse_tail_action = SPARSE_TAIL_DEVIATION_NOOP
+    sparse_tail_eligible = bool(
+        sparse_tail_action != SPARSE_TAIL_DEVIATION_NOOP
+        and not proof_only
+        and str(node_id) in {"root", "node_000"}
+        and not negative_columns
+    )
+    if sparse_tail_eligible:
+        remaining_for_sparse_tail = (
+            None
+            if wall_time_limit_sec is None
+            else max(
+                0.0,
+                float(wall_time_limit_sec) - (perf_counter() - start),
+            )
+        )
+        if (
+            remaining_for_sparse_tail is None
+            or remaining_for_sparse_tail > 0.0
+        ):
+            sparse_tail_attempted = True
+            sparse_admission, sparse_raw_pool = (
+                SPARSE_TAIL_DEVIATION_TARGETS[sparse_tail_action]
+            )
+            sparse_tail_effective_time_limit = (
+                _smaller_optional_time_limit(
+                    remaining_for_sparse_tail,
+                    normalized_sparse_tail_time_cap,
+                )
+            )
+            (
+                payload,
+                columns,
+                audited_candidate_order,
+                sparse_tail_pass_wall,
+            ) = run_labeling_pass(
+                pass_duals=duals,
+                stop_at_first_negative=False,
+                pass_wall_time_limit_sec=(
+                    sparse_tail_effective_time_limit
+                ),
+                negative_escape_enabled=True,
+                pass_negative_eps=sparse_tail_negative_eps,
+                pass_admission_batch_size=sparse_admission,
+                pass_raw_negative_pool_size=sparse_raw_pool,
+            )
+            sparse_tail_pass_payload = dict(payload)
+            (
+                manual_rc_rows,
+                manual_negative_rows,
+                branch_feasible_negative_rows,
+                branch_filtered_negative_count,
+                negative_columns,
+                manual_branch_feasible_best,
+            ) = audit_pass_columns(columns)
+            sparse_tail_executed = bool(
+                negative_columns
+                and payload.get("negative_escape_triggered") is True
+            )
+            if sparse_tail_executed:
+                proof_pass_skip_reason = (
+                    "one_deviation_sparse_tail_found_true_negative"
+                )
+            else:
+                sparse_tail_fallback_reason = (
+                    "no_official_true_negative_from_sparse_pass"
+                )
+        else:
+            sparse_tail_fallback_reason = (
+                "no_remaining_wall_time_after_harvest_pass"
+            )
+    elif sparse_tail_action != SPARSE_TAIL_DEVIATION_NOOP:
+        sparse_tail_fallback_reason = (
+            "proof_only_strategy_not_supported"
+            if proof_only
+            else "non_root_context"
+            if str(node_id) not in {"root", "node_000"}
+            else "harvest_already_found_true_negative"
+        )
+    if (
         not proof_only
         and not negative_columns
         and (
-            discovery_dual_differs
+            sparse_tail_attempted
+            or sparse_tail_fallback_reason
+            or discovery_dual_differs
             or _pricing_state_from_payload(payload.get("pricing_state"))
             != PricingState.CERTIFIED_NO_NEGATIVE
         )
@@ -977,10 +1337,16 @@ def _run_labeling_pricer_final_judge(
         )
         if remaining_for_proof is None or remaining_for_proof > 0.0:
             proof_pass_attempted = True
-            payload, columns, proof_pass_wall = run_labeling_pass(
+            (
+                payload,
+                columns,
+                audited_candidate_order,
+                proof_pass_wall,
+            ) = run_labeling_pass(
                 pass_duals=duals,
                 stop_at_first_negative=False,
                 pass_wall_time_limit_sec=remaining_for_proof,
+                negative_escape_enabled=negative_escape_requested,
             )
             proof_pass_payload = dict(payload)
             (
@@ -993,6 +1359,96 @@ def _run_labeling_pricer_final_judge(
             ) = audit_pass_columns(columns)
         else:
             proof_pass_skip_reason = "no_remaining_wall_time_after_harvest_pass"
+    zero_addable_fallback_used = False
+    zero_addable_fallback_skip_reason = ""
+    negative_escape_attempt: dict = {}
+    if (
+        bool(payload.get("negative_escape_triggered"))
+        and column_pool is not None
+        and master_view is not None
+    ):
+        negative_escape_attempt = {
+            "triggered": True,
+            "termination_reason": payload.get(
+                "negative_escape_termination_reason"
+            ),
+            "raw_unique_negative_count": payload.get(
+                "raw_unique_negative_count"
+            ),
+            "native_raw_unique_negative_count": payload.get(
+                "native_raw_unique_negative_count"
+            ),
+            "audited_raw_unique_negative_count": payload.get(
+                "audited_raw_unique_negative_count"
+            ),
+            "selected_diverse_negative_count": payload.get(
+                "selected_diverse_negative_count"
+            ),
+        }
+        addability = _compact_negative_harvest_payload(
+            list(negative_columns),
+            duals,
+            cut_context,
+            negative_eps=negative_eps,
+            candidate_negative_count=len(negative_columns),
+            max_selected=exact_harvest_target,
+            source_phase="exact_negative_escape_addability_audit",
+            column_pool=column_pool,
+            master_view=master_view,
+            node_id=node_id,
+            active_task_sets=active_task_sets,
+            branch_context=branch_context,
+        )
+        addable_columns = tuple(
+            addability.pop("_selected_columns", tuple())
+        )
+        payload.update(addability)
+        if not addable_columns:
+            if sparse_tail_executed:
+                sparse_tail_executed = False
+                sparse_tail_fallback_reason = (
+                    "sparse_true_negative_not_addable"
+                )
+            remaining_for_fallback = (
+                None
+                if wall_time_limit_sec is None
+                else max(
+                    0.0,
+                    float(wall_time_limit_sec)
+                    - (perf_counter() - start),
+                )
+            )
+            if (
+                remaining_for_fallback is None
+                or remaining_for_fallback > 0.0
+            ):
+                zero_addable_fallback_used = True
+                (
+                    payload,
+                    columns,
+                    audited_candidate_order,
+                    fallback_wall,
+                ) = run_labeling_pass(
+                    pass_duals=duals,
+                    stop_at_first_negative=False,
+                    pass_wall_time_limit_sec=remaining_for_fallback,
+                    negative_escape_enabled=False,
+                )
+                proof_pass_attempted = True
+                proof_pass_wall += fallback_wall
+                proof_pass_payload = dict(payload)
+                (
+                    manual_rc_rows,
+                    manual_negative_rows,
+                    branch_feasible_negative_rows,
+                    branch_filtered_negative_count,
+                    negative_columns,
+                    manual_branch_feasible_best,
+                ) = audit_pass_columns(columns)
+            else:
+                zero_addable_fallback_skip_reason = (
+                    "no_remaining_wall_time_after_negative_escape"
+                )
     payload_true_best = _first_float(payload.get("true_best_reduced_cost"))
     manual_consistency_pass = bool(
         (payload_true_best is None and manual_branch_feasible_best is None)
@@ -1018,6 +1474,7 @@ def _run_labeling_pricer_final_judge(
         and state == PricingState.CERTIFIED_NO_NEGATIVE
         and manual_consistency_pass
         and underlying_proof_kind_certifying
+        and not sparse_tail_executed
     )
     final_proof_kind = (
         PROOF_KIND_EXHAUSTIVE_NO_NEGATIVE
@@ -1065,6 +1522,90 @@ def _run_labeling_pricer_final_judge(
                 "explicit_parameter" if max_exact_tasks_override is not None else "environment_or_default"
             ),
             "labeling_final_judge_exact_harvest_target": int(exact_harvest_target),
+            "exact_negative_escape_enabled": bool(
+                negative_escape_requested
+            ),
+            "exact_admission_batch_size": int(exact_harvest_target),
+            "exact_raw_negative_pool_size": int(
+                exact_raw_negative_pool_size
+            ),
+            "exact_negative_escape_policy_id": (
+                EXACT_NEGATIVE_ESCAPE_POLICY_V1
+            ),
+            "negative_escape_zero_addable_fallback_used": bool(
+                zero_addable_fallback_used
+            ),
+            "negative_escape_zero_addable_fallback_skip_reason": (
+                zero_addable_fallback_skip_reason
+            ),
+            "negative_escape_attempt": negative_escape_attempt,
+            "one_deviation_sparse_tail_policy_id": (
+                SPARSE_TAIL_DEVIATION_POLICY_ID
+            ),
+            "one_deviation_sparse_tail_decision_timing": (
+                "after_empty_harvest_before_sparse_pass"
+            ),
+            "one_deviation_sparse_tail_action_resolver_present": bool(
+                one_deviation_sparse_tail_action_resolver is not None
+            ),
+            "one_deviation_sparse_tail_action_resolver_invoked": bool(
+                sparse_tail_action_resolver_invoked
+            ),
+            "one_deviation_sparse_tail_action_resolver_error": (
+                sparse_tail_action_resolver_error
+            ),
+            "one_deviation_sparse_tail_action": sparse_tail_action,
+            "one_deviation_sparse_tail_requested": bool(
+                sparse_tail_action != SPARSE_TAIL_DEVIATION_NOOP
+            ),
+            "one_deviation_sparse_tail_eligible": sparse_tail_eligible,
+            "one_deviation_sparse_tail_attempted": sparse_tail_attempted,
+            "one_deviation_sparse_tail_executed": sparse_tail_executed,
+            "one_deviation_sparse_tail_pass_wall_time": round(
+                sparse_tail_pass_wall,
+                6,
+            ),
+            "one_deviation_sparse_tail_time_cap_sec": (
+                normalized_sparse_tail_time_cap
+            ),
+            "one_deviation_sparse_tail_effective_time_limit_sec": (
+                sparse_tail_effective_time_limit
+            ),
+            "one_deviation_sparse_tail_time_cap_applied": bool(
+                sparse_tail_attempted
+                and normalized_sparse_tail_time_cap is not None
+                and sparse_tail_effective_time_limit is not None
+                and sparse_tail_effective_time_limit
+                <= normalized_sparse_tail_time_cap + 1.0e-9
+            ),
+            "one_deviation_sparse_tail_pass_status": (
+                sparse_tail_pass_payload.get("status", "")
+            ),
+            "one_deviation_sparse_tail_pass_pricing_state": (
+                sparse_tail_pass_payload.get("pricing_state", "")
+            ),
+            "one_deviation_sparse_tail_pass_negative_escape_triggered": bool(
+                sparse_tail_pass_payload.get(
+                    "negative_escape_triggered"
+                )
+            ),
+            "one_deviation_sparse_tail_official_negative_eps": float(
+                negative_eps
+            ),
+            "one_deviation_sparse_tail_discovery_negative_eps": float(
+                sparse_tail_negative_eps
+            ),
+            "one_deviation_sparse_tail_fallback_reason": (
+                sparse_tail_fallback_reason
+            ),
+            "one_deviation_sparse_tail_certificate_authority": "none",
+            "one_deviation_sparse_tail_can_certify_no_negative": False,
+            "one_deviation_sparse_tail_next_round_policy": (
+                "restore_frozen_v5"
+            ),
+            "one_deviation_sparse_tail_exhaustive_miss_policy": (
+                "run_frozen_v5_official_epsilon_proof"
+            ),
             "labeling_final_judge_active_task_sets_for_harvest_count": len(active_task_sets or set()),
             "labeling_final_judge_exact_harvest_target_source": (
                 "explicit_parameter" if exact_harvest_target_override is not None else "environment_or_default"
@@ -1181,6 +1722,7 @@ def _run_labeling_pricer_final_judge(
         pricing_payload=payload,
         negative_columns=negative_columns,
         all_priced_columns=tuple(columns),
+        audited_candidate_order=tuple(audited_candidate_order),
     )
 
 

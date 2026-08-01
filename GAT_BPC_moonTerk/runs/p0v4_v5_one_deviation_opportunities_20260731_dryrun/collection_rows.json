@@ -1,0 +1,42 @@
+[
+  {
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+      "--config",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+      "--scales",
+      "30",
+      "--instance-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030",
+      "--limit",
+      "5",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731_dryrun/exact_runs/scale_030",
+      "--no-resume"
+    ],
+    "route_opportunity_rows_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731_dryrun/route_opportunity_rows",
+    "run_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731_dryrun/exact_runs/scale_030",
+    "scale": 30
+  },
+  {
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+      "--config",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+      "--scales",
+      "50",
+      "--instance-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_050",
+      "--limit",
+      "5",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731_dryrun/exact_runs/scale_050",
+      "--no-resume"
+    ],
+    "route_opportunity_rows_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731_dryrun/route_opportunity_rows",
+    "run_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731_dryrun/exact_runs/scale_050",
+    "scale": 50
+  }
+]

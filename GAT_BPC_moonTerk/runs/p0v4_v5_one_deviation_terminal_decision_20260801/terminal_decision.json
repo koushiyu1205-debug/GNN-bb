@@ -1,0 +1,50 @@
+{
+  "artifacts": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/opportunity_census.json",
+      "sha256": "d5c474955644facd7429aaa605c487d7be719a057f2b2b9c354c63461fe14463"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731/engineering_smoke_gate.json",
+      "sha256": "f152b91cbef0ca319a631c9250bbf25597e96ac1be3fe3d784ec9bc79be2e928"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_fixed_pilot_20260801/fixed_pilot_audit.json",
+      "sha256": "17defb3ab829af7d389fcbc9f952ceb7949751c15b57e4f6769a1c6fe80dc98b"
+    }
+  ],
+  "baseline_mutated": false,
+  "certificate_or_bound_role": "none",
+  "exact_acceptance_may_proceed_without_gat": true,
+  "gat_formal_acceptance_required": false,
+  "gat_performance_claim_authorized": false,
+  "interpretation": "the one-deviation mechanism and safety shell were implemented and exercised, while both action definitions failed their predeclared progression gates; Exact evaluation proceeds without an actionful GAT candidate",
+  "issues": [],
+  "one_deviation_implementation_claim_authorized": true,
+  "route_promotion_branch": {
+    "deployment_authorized": false,
+    "formal_training_authorized": false,
+    "opportunity_gate_pass": false,
+    "oracle_authorized": false,
+    "scale30_context_count": 125,
+    "scale30_instance_count": 5,
+    "scale50_context_count": 0,
+    "scale50_instance_count": 0,
+    "signal_gate_pass": false,
+    "strong_signal_context_count": 0
+  },
+  "schema_version": "lunar_ice_bpc.p0v4_one_deviation_terminal_decision.v1",
+  "sparse_tail_revision_branch": {
+    "artifact_integrity_pass": true,
+    "beneficial_action_count": 3,
+    "calibration_beneficial_action_count": 0,
+    "deployment_authorized": false,
+    "five_percent_gate_evaluable": false,
+    "five_percent_gate_pass": false,
+    "fixed_context_count": 11,
+    "observed_action_count": 22,
+    "runtime_fallback": "NOOP"
+  },
+  "status": "STOPPED_BY_PREDECLARED_GATES",
+  "terminal_decision_valid": true
+}

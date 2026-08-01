@@ -1,0 +1,205 @@
+{
+  "instance_count_per_scale": 10,
+  "official_evaluation_corpus_overlap_count": 0,
+  "purpose": "fixed_E_K_selection_and_one_deviation_train_calibration_only",
+  "row_count": 20,
+  "rows": [
+    {
+      "file_sha256": "9ceb149b97edee135f761205e17c9952cf832bb65d10bff1334e9e47605fc3f4",
+      "index": 1,
+      "instance_content_hash": "7d53353f89929eb0",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_001_logical_graph.json",
+      "scale": 30,
+      "seed": 629300001,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "2be35134f027a6e13d56bd80df37b7e9ae78c32805b76524bb250d68d9c66852",
+      "index": 2,
+      "instance_content_hash": "62838a981ec8dd53",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_002_logical_graph.json",
+      "scale": 30,
+      "seed": 629300002,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "7187024058138b255465723d44cc31241b6ae7bd1b95e8fc79253b2f5cfbf120",
+      "index": 3,
+      "instance_content_hash": "3ee755596f2106db",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_003_logical_graph.json",
+      "scale": 30,
+      "seed": 629300003,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "aa81cf9f1a54a59edfaa5c5a886fd8c5ea8e0ccefde8d35b033c11d84456065f",
+      "index": 4,
+      "instance_content_hash": "38c6df1260241992",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_004_logical_graph.json",
+      "scale": 30,
+      "seed": 629300004,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "56bab31443872ac0cf0bf9d731465d41bf5d7b1ba891463e4155191c9b30a0c0",
+      "index": 5,
+      "instance_content_hash": "f6a2c64b9d6be382",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_005_logical_graph.json",
+      "scale": 30,
+      "seed": 629300005,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "8f63fa664f77f574f11737d0293c494eb915c56e6a8bad8b35b6af9aa1a7cfb2",
+      "index": 6,
+      "instance_content_hash": "856f2bc07d8b7c9a",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_006_logical_graph.json",
+      "scale": 30,
+      "seed": 629300006,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "18da9d6808ef9a39dc1583d3cb3ce0c50a9f53a076b38e7d8ced30b192d49b30",
+      "index": 7,
+      "instance_content_hash": "c870f30d536a3e4d",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_007_logical_graph.json",
+      "scale": 30,
+      "seed": 629300007,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "a26b7c541281079c8479f4728c9114754bcae45ba50386fee0ec569092b2b0e1",
+      "index": 8,
+      "instance_content_hash": "da6a18b85c4b0383",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_008_logical_graph.json",
+      "scale": 30,
+      "seed": 629300008,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "e14d8c9c783aaa7650925db4c132fd5545929cf99034c475477bd799504e815e",
+      "index": 9,
+      "instance_content_hash": "a97f0e3d8aaf9211",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_009_logical_graph.json",
+      "scale": 30,
+      "seed": 629300009,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "151274bef77f1cb03dc8bd48fe43f5e270bda8d9a5ee3455646f0b07458c65c9",
+      "index": 10,
+      "instance_content_hash": "d30c478f287fbd98",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_030/instance_010_logical_graph.json",
+      "scale": 30,
+      "seed": 629300010,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "8190376ae2914767fdb96df13e407ad17d631c0ff23fc10333f373bdaaa00fed",
+      "index": 1,
+      "instance_content_hash": "db7f71ca81925c4e",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_001_logical_graph.json",
+      "scale": 50,
+      "seed": 629500001,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "19a42b34f6277841961fcbd3101fe52bca05209aba133720064bf5a61244d014",
+      "index": 2,
+      "instance_content_hash": "6e1ea4695d082d7d",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_002_logical_graph.json",
+      "scale": 50,
+      "seed": 629500002,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "8c93f8345db57334d704e07537403dd749252927d3c569009ec3e066f895fbb1",
+      "index": 3,
+      "instance_content_hash": "0637423f43bfb499",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_003_logical_graph.json",
+      "scale": 50,
+      "seed": 629500003,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "432945e777738565c71f2e5d2f2d71bf3a1386dbafe3f0fa82801375ec50df9e",
+      "index": 4,
+      "instance_content_hash": "da22fe265262c257",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_004_logical_graph.json",
+      "scale": 50,
+      "seed": 629500004,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "931b07fc39edd3f1a60901f6a54e8ad3048be1880925a38fcdc766292a9cd869",
+      "index": 5,
+      "instance_content_hash": "8fff813c563b48ae",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_005_logical_graph.json",
+      "scale": 50,
+      "seed": 629500005,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "f0bb3d427aac94949bea05841189e5e46c2bc89282aa6f3266c8639d506b49fd",
+      "index": 6,
+      "instance_content_hash": "e5b7b43d893107f7",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_006_logical_graph.json",
+      "scale": 50,
+      "seed": 629500006,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "e0704059e9b8250adc1183d4f2366c22e93a634eb60ed840ac7b0fb4beeea25c",
+      "index": 7,
+      "instance_content_hash": "ab273ef98fafe8dd",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_007_logical_graph.json",
+      "scale": 50,
+      "seed": 629500007,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "8e929a3a83a8af8e68fe205c6afd483797feb49932d17b67dcf2fc3da085184d",
+      "index": 8,
+      "instance_content_hash": "9e2e5d69e54884f0",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_008_logical_graph.json",
+      "scale": 50,
+      "seed": 629500008,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "b9cfa7371ae2d376e33ec178a8ec975080338b4307fbdc9ad3be8b9e40269ad1",
+      "index": 9,
+      "instance_content_hash": "dc184f0a43a8a15f",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_009_logical_graph.json",
+      "scale": 50,
+      "seed": 629500009,
+      "validation_accepted": true
+    },
+    {
+      "file_sha256": "cea2949230feb9b04f75914cb18c32deffadf1954537518e0e09604c892fcfe4",
+      "index": 10,
+      "instance_content_hash": "e42ec4f4cf6c845c",
+      "path": "data/p0v4_fixed_k_gat_development_v1/scale_050/instance_010_logical_graph.json",
+      "scale": 50,
+      "seed": 629500010,
+      "validation_accepted": true
+    }
+  ],
+  "scales": [
+    30,
+    50
+  ],
+  "schema_version": "lunar_ice_bpc.p0v4_fixed_k_gat_development_corpus.v1",
+  "seed_policy": {
+    "30": {
+      "base": 629300000,
+      "formula": "base_plus_one_based_index"
+    },
+    "50": {
+      "base": 629500000,
+      "formula": "base_plus_one_based_index"
+    }
+  },
+  "status": "FROZEN_BEFORE_ALGORITHM_OUTCOMES",
+  "unique_content_hash_count": 20
+}

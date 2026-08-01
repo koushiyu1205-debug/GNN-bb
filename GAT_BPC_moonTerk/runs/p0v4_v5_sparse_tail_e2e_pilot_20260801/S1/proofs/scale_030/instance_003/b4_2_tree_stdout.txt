@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_e2e_pilot_20260801/S1/proofs/scale_030/instance_003/b4_1_report_zh.md

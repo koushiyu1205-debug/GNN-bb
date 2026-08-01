@@ -1,0 +1,90 @@
+{
+  "current_engine_p0v4_noop_compatibility_source": true,
+  "discovered_unique_context_count": 6,
+  "frozen_p0v4_capsule_modified": false,
+  "production_default_changed": false,
+  "required_heavy_snapshot_count": 4,
+  "required_ordinary_snapshot_count": 12,
+  "schema_version": "lunar_ice_bpc.p0v4_snapshot_registry.v1",
+  "snapshots": [
+    {
+      "binding_hash": "038dc765a5d3775563dbc07cd3cf8f0e380b6ab725511adfec7e8326c073e601",
+      "config_hash": "fb9cbaf83076e84932cebb526cc96ac519c55eca883f83202e04d1bc0aba2aba",
+      "engine_hash": "bc3d0be3551ce24d",
+      "mathematical_context_hash": "ed852e0214c63f2ea2fc3a0ad257d7da7df4b9b15f750ce31c6ab010da1a5dc7",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source_run/scale_050/pre_solve_exact_snapshots/6f10a7c64933bf0b/cf84e40f82b3735d5ed1666cb64de75f2e3bcafc337da504aabac0547a438307.json",
+      "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-84",
+      "role": "heavy",
+      "sha256": "19f9aa7f473f0d31cdddf38064b8156a18ab21e7e96e54683706965b8a028819",
+      "snapshot_hash": "cf84e40f82b3735d5ed1666cb64de75f2e3bcafc337da504aabac0547a438307",
+      "source_final_judge_wall_time_sec": 572.506692
+    },
+    {
+      "binding_hash": "fc3daf1871a65fb4995bc95207bab9267d1f5090740c6851b4221e60af96be40",
+      "config_hash": "7534873d7269b6acccf2d836b221c0c75bb10fe147366bcc82b7a92af44f6054",
+      "engine_hash": "bc3d0be3551ce24d",
+      "mathematical_context_hash": "3f0b83cb3fe9f337885d8433e882cfc6de55174b128b164306dc2bcf19d749d9",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source_run/scale_050/pre_solve_exact_snapshots/6f10a7c64933bf0b/c6849811ab2b35292186f7467d21967226d777c0cb24fece253c316ef46ff683.json",
+      "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-56",
+      "role": "heavy",
+      "sha256": "e681e70728d99108117c71797f36d38a05f5ce9024aa9d43959ead0ac7722b3f",
+      "snapshot_hash": "c6849811ab2b35292186f7467d21967226d777c0cb24fece253c316ef46ff683",
+      "source_final_judge_wall_time_sec": 557.993978
+    },
+    {
+      "binding_hash": "000aaee014ee997bf6a499ee8a65aa24c7b126f4cd1fbca43f00ed9d3476d25d",
+      "config_hash": "9d11092ffe64b95fc066dd67711d595494506bb1a06b4de9199245aa6ea125dc",
+      "engine_hash": "bc3d0be3551ce24d",
+      "mathematical_context_hash": "e47810d7ea0f4cc9217bb1fe31a3e03098fe3b8607398b80b1e620b7dd1801ec",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source_run/scale_050/pre_solve_exact_snapshots/6f10a7c64933bf0b/889fed24b0188cf573d29bd71307557ca2c8a9fe317a9eff71e0eba74c1ffe79.json",
+      "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-54",
+      "role": "heavy",
+      "sha256": "5612166cce85edd314c55e85c89af2ff68ad51374a8071d0366a33b157dbedd6",
+      "snapshot_hash": "889fed24b0188cf573d29bd71307557ca2c8a9fe317a9eff71e0eba74c1ffe79",
+      "source_final_judge_wall_time_sec": 490.559616
+    },
+    {
+      "binding_hash": "a51cf5c2ef9c64aacf2528fe179460bc895f0d23e6090a575d96dacc0410eaf3",
+      "config_hash": "e8c54b29fa5cc1615e0cb7b5da336bc41ed9437cbd44a24015ba3ee0cc9f01f9",
+      "engine_hash": "bc3d0be3551ce24d",
+      "mathematical_context_hash": "98d2922354daffee6ece64c79588373b6ea0d8699fda27cc323c0016bf49c0cc",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source_run/scale_050/pre_solve_exact_snapshots/6f10a7c64933bf0b/ed298789bfa95f86820d9cb79eba1ea86b190a4c7d75b26921313cdb2468ba89.json",
+      "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-52",
+      "role": "heavy",
+      "sha256": "dab0ec4afd7d86bc9e53b50ed22a5de78d4dff2b019b4d60397a3fe84f832637",
+      "snapshot_hash": "ed298789bfa95f86820d9cb79eba1ea86b190a4c7d75b26921313cdb2468ba89",
+      "source_final_judge_wall_time_sec": 486.539842
+    },
+    {
+      "binding_hash": "1a7d7c76b76a4921b06314bc9df479afcb00df2d6e8f2ae923db2abdd6d5f7f5",
+      "config_hash": "e2c7ebbce11144708a70fedb725b6ef33412f54be5b9cd470291143f20c764be",
+      "engine_hash": "bc3d0be3551ce24d",
+      "mathematical_context_hash": "7576f8bd478266279caf3710cbef001f61c477b79a7d8e0c025053e2f0b67758",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source_run/scale_050/pre_solve_exact_snapshots/6f10a7c64933bf0b/bf12677d086331c2ac76a052ed6436a58c74a699952cba7b758cc5e85a36b6e7.json",
+      "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-105",
+      "role": "ordinary",
+      "sha256": "c6de2bb527355b1a7d35dec669add51220e24c8268edbdca4a488dde4912d56c",
+      "snapshot_hash": "bf12677d086331c2ac76a052ed6436a58c74a699952cba7b758cc5e85a36b6e7",
+      "source_final_judge_wall_time_sec": 44.173793
+    },
+    {
+      "binding_hash": "dc76d34155de18d10f1f72875e3713b24ac3364de175d7126ee9fdac0ce81d40",
+      "config_hash": "30a75bef1f520ba4905ae08a993254c7017770929b602d1d94075f767e8d570b",
+      "engine_hash": "bc3d0be3551ce24d",
+      "mathematical_context_hash": "c26d31765e9cb934e6581eede48f421fc6ce0f6702d9faa6442db0bdda408892",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source_run/scale_050/pre_solve_exact_snapshots/6f10a7c64933bf0b/6dcedc39d7f9ca9b072f50d245516e0957d22c9b2dcebbb315812b84a93d2d62.json",
+      "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-110",
+      "role": "ordinary",
+      "sha256": "26c00a09e0d885f69face9c46cedce7249d5a5df9f762578986cdcc5e9c51c4f",
+      "snapshot_hash": "6dcedc39d7f9ca9b072f50d245516e0957d22c9b2dcebbb315812b84a93d2d62",
+      "source_final_judge_wall_time_sec": 78.652122
+    }
+  ],
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source/p0v4_noop_source.yaml",
+  "source_config_sha256": "a6d1f087485ae64e47479df47d86b7d2969d7b1af4f15d5c9ff2527b692e67ec",
+  "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source_run/scale_050/pools/scale_050/instance_001/stage_001/probe.json",
+  "source_probe_sha256": "d2bb57f7d31d450d041a9adc773a704dc7504d8979dcff2a30f5d4270812b205",
+  "source_result_state": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/snapshot_source_run/scale_050/b4_2_cold_exact_state.json",
+  "source_result_state_sha256": "9e501a769ba81fe3b8402ccfd00ae2bca54d9e4ff273e561c2c48b6dae06dad6",
+  "status": "INSUFFICIENT_UNIQUE_PROOF_CONTEXTS"
+}

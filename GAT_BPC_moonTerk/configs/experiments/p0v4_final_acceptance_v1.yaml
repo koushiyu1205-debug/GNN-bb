@@ -1,0 +1,58 @@
+schema_version: "lunar_ice_bpc.p0v4_final_acceptance.v1"
+experiment_id: "P0V4_V5_BIDIRECTIONAL_ONE_DEVIATION_FINAL_V1"
+frozen_p0v4_manifest: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/baseline_freeze_manifest.json"
+frozen_p0v4_verifier: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/verify_freeze.py"
+frozen_p0v4_config: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/frozen_config.yaml"
+frozen_p0v4_config_sha256: "9859a8e3d04d6eb966656c0b01858ed13ef98e6ab9e38ea7c403b893de50cfab"
+fixed_k_selection: "runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json"
+one_deviation_deployment_manifest: "runs/p0v4_v5_one_deviation_gat_20260731/deployment/deployment_manifest.json"
+one_deviation_terminal_decision: "runs/p0v4_v5_one_deviation_terminal_decision_20260801/terminal_decision.json"
+
+representative_instances:
+  - "data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json"
+  - "data/instances/lunar_ice_sp50_030/instance_012_logical_graph.json"
+  - "data/instances/lunar_ice_sp50_030/instance_016_logical_graph.json"
+  - "data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json"
+
+official_scale50_held_out:
+  instance_dir: "data/instances/lunar_ice_sp50_050"
+  first_index: 2
+  last_index: 20
+official_scale50_final_non_held_out:
+  - "data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json"
+scale100_diagnostic:
+  instance_dir: "data/instances/lunar_ice_sp50_100"
+  first_index: 1
+  last_index: 5
+
+baseline_evidence:
+  small_scale_current_engine: "runs/p0v4_compat_small_full60_20260729/native_spprc_acceptance_summary.json"
+  scale30_frozen: "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/evidence/scale30_acceptance_summary.json"
+
+gates:
+  exact_count_by_scale:
+    "5": 20
+    "10": 20
+    "20": 20
+    "30": 20
+    "50": 14
+  scale50_held_out_min_exact: 13
+  scale_small_ratio_max:
+    "5": 1.03
+    "10": 1.03
+    "20": 1.03
+    "30": 1.03
+  scale20_30_combined_speedup_min: 0.05
+  scale5_30_combined_speedup_min: 0.05
+  gat_common_exact_speedup_min: 0.05
+  gat_scale50_extra_closure_min: 1
+  inference_p99_ms_max: 10.0
+  correctness_redline_max: 0
+
+execution:
+  large_scale_concurrency: 1
+  scale50_wall_time_limit_sec: 3600
+  scale100_wall_time_limit_sec: 3600
+  effective_native_memory_limit_gb: 10.867
+  production_default_changed: false
+  frozen_p0v4_overwritten: false

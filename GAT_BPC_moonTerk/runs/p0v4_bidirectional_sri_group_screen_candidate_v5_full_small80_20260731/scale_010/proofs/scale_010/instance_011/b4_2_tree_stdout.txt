@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_full_small80_20260731/scale_010/proofs/scale_010/instance_011/b4_1_report_zh.md

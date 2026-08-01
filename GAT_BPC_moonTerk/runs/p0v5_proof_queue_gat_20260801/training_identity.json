@@ -1,0 +1,41 @@
+{
+  "instance_hashes": [
+    "103e4ad5fa78176f",
+    "2fb79d2d6afd0eb1",
+    "32e7e2804578fa0a",
+    "348fca29db1913f6",
+    "37037d48065d317b",
+    "39f5c5475211f753",
+    "4277d0edc78aaeff",
+    "4a7b82692a2ab385",
+    "4c368eccc957e6bd",
+    "4fc392d5ac545bbd",
+    "4fd39191a233502d",
+    "5c27cdbd962c734d",
+    "82ea214bf17d5c38",
+    "c37a19389e5c5fcf",
+    "d16e0a0e2002ebb6"
+  ],
+  "oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/proof_queue_arc_dominance_oracle_gate_v2_summary.json",
+  "oracle_summary_sha256": "b0e07c6717582f9e7cbe0d5f176ebe662c08d0d176d8d36d866384ed82cc773f",
+  "schema_version": "lunar_ice_bpc.p0v5_proof_queue_gat_training.v1",
+  "state_hashes": [
+    "20087c306e2373b8e6f20562b94ba2e1f6576fee792e3da0cf185a6ad831b7a3",
+    "27af815e322664f1367797ff3c64ab71eee6ab78b70d5697caf2d6b2066183a5",
+    "3636f2e51b66123b4a37e794cfdfb382e266c892c4083fdf76c9fa7ae9061d7d",
+    "5a75daca93efaf55335982854b0d08954b74a0d8a10f42be5b004d0a9f499bc3",
+    "60fba12c2773232ab43d0fa2d6fcc3c6bbb11548b9571896f49525084b27b96b",
+    "79636bff694a03d222a24532a6451c86cdade12f779f296fab06ebce868a7cae",
+    "a26830c90f5f45bc3bdd59459830272affbf5fd12bc695a95d44dc768df0404f",
+    "a9033653744a3e932222aac1f91ecb5d37e7da47f4fa4fff0b5ecfdd9651cd7f",
+    "b31dd4f05efcfb44ddd9b77e101f39f16929ff63a0cab096904db236e4d1c27d",
+    "ca6ad6737a21542038769d4d2a56824c9faf5b171471bfe75ad4417c7ee6b6da",
+    "d908c5b2ab294402e408b7a7c80100e02f3bce093490a3d54935f1eba88bda0e",
+    "dd6ea10251fdbafa74a14ffbc6a4f7cb3f201e5c1a15fa25733c3653d80c2809",
+    "e458c2c5bb61c693fcc5de8c6bfb6f492029fd3876113842fd96b84eb04ce7f9",
+    "f6c917aa3c08453dd980a163fd624a0f2590e8bac0cba10fc6ffe47226b860f0",
+    "fb2d376982cda29f8ed09b21e70c80e0532278b69d18b54b00be70a08dfa0180"
+  ],
+  "state_index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v3_gat_landing_search_20260726/proof_queue_arc_linear_cv_v1_summary.json",
+  "state_index_sha256": "eee5a33582d2330e475fd99f2f8ec9ee72242782526f97b46f7d9ebf1af47340"
+}

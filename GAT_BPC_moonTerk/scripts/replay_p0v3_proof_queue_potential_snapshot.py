@@ -46,7 +46,7 @@ from lunar_ice_bpc.exact.master.journey_rmp import JourneyDuals  # noqa: E402
 SNAPSHOT_SCHEMA = "lunar_ice_bpc.p0v3_root_policy_state_snapshot.v1"
 POTENTIAL_SCHEMA = "lunar_ice_bpc.p0v3_proof_queue_potential.v1"
 OUTPUT_SCHEMA = "lunar_ice_bpc.p0v3_proof_queue_potential_replay.v1"
-POLICIES = ("QC0", "QD1", "QG1")
+POLICIES = ("Q0", "QC0", "QD1", "QG1")
 
 
 def _load(path: Path) -> dict:

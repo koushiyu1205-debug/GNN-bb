@@ -1,0 +1,6 @@
+[33m[2026-07-30 12:48:43.560][WARN ] Memory limit (11127 MB) exceeded (current: 11128 MB). Stopping early.
+[0m[33m[2026-07-30 13:01:26.686][WARN ] Memory limit (11127 MB) exceeded (current: 11128 MB). Stopping early.
+[0m[33m[2026-07-30 13:12:48.798][WARN ] Memory limit (11127 MB) exceeded (current: 11128 MB). Stopping early.
+[0m[33m[2026-07-30 13:26:09.886][WARN ] Memory limit (11127 MB) exceeded (current: 11128 MB). Stopping early.
+[0m{"elapsed_sec": 3592.550204, "algorithm_status": "BPC_INCOMPLETE_PRICING", "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER", "pricing_state": "INCOMPLETE_LIMIT", "pricing_round_count": 60, "added_column_count": 13418, "active_column_count": 13472}
+report /home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v2/development/E256/instance_001/scale_050/pools/scale_050/instance_001/stage_001/probe_report_zh.md

@@ -6,7 +6,9 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+from time import sleep
 from types import MappingProxyType, SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -16,13 +18,27 @@ from lunar_ice_bpc.exact.bpc.pricing.backends import (
     BACKEND_MODE_EXACT_PROOF,
     BACKEND_MODE_NEGATIVE_HARVEST,
     BACKEND_OBJECTIVE_PHASE_ONE,
+    NATIVE_BIDIRECTIONAL_MIDPOINT_HYBRID_BACKEND_ID,
+    NATIVE_BIDIRECTIONAL_MIDPOINT_PARTIAL_HYBRID_BACKEND_ID,
+    NATIVE_BIDIRECTIONAL_ROOT_PARTIAL_HYBRID_BACKEND_ID,
+    PRICING_LIFECYCLE_SCOPE_ROOT_CG,
+    PRICING_LIFECYCLE_SCOPE_TREE_NODE,
     BackendPricingRequest,
+    BackendRegistry,
+    NativeBidirectionalMidpointHybridBackend,
+    NativeBidirectionalMidpointPartialHybridBackend,
+    NativeBidirectionalRootPartialHybridBackend,
     NativeDssrHostBackend,
     NativeDssrInprocessBackend,
+    NativeDssrV2HostBackend,
+    NativeDssrV2InprocessBackend,
+    NativeNgDssrV3HostBackend,
+    NativeNgDssrV3InprocessBackend,
     NativeRcsppInprocessBackend,
     NativeRcsppHostBackend,
     native_spprc_scale_profile,
 )
+from lunar_ice_bpc.exact.bpc.pricing.backends import native_rcspp as native_rcspp_module
 from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import (
     SPPRC_EXACT_MODE,
     build_spprc_request,
@@ -35,6 +51,9 @@ from lunar_ice_bpc.exact.bpc.pricing.labeling_pricer import (
     run_bpc_labeling_pricer,
 )
 from lunar_ice_bpc.exact.bpc.guidance.replay import load_pricing_snapshot
+from lunar_ice_bpc.exact.bpc.core.column_signature import (
+    column_signature_from_journey,
+)
 from lunar_ice_bpc.exact.core.branching import (
     DIFFERENT_JOURNEY,
     SAME_JOURNEY,
@@ -110,6 +129,48 @@ class NativeSpprcBackendTests(unittest.TestCase):
                 harvest_max_processed_labels=17,
             )
 
+    def test_exact_negative_escape_is_partial_and_never_certifies(self) -> None:
+        duals = JourneyDuals(
+            cover={task_id: 100.0 for task_id in self.data.task_ids}
+        )
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=duals,
+            exact_negative_escape_enabled=True,
+            exact_admission_batch_size=1,
+            exact_raw_negative_pool_size=4,
+        )
+        result = NativeRcsppInprocessBackend().solve(request)
+        self.assertEqual(result.engine_status, "FOUND_NEGATIVE_PARTIAL")
+        self.assertFalse(result.search_exhaustive)
+        self.assertFalse(result.frontier_empty)
+        self.assertFalse(result.can_enter_certificate_audit)
+        self.assertEqual(len(result.columns), 4)
+        semantic_signatures = tuple(
+            column_signature_from_journey(column)
+            for column in result.columns
+        )
+        self.assertEqual(
+            len(set(semantic_signatures)),
+            len(semantic_signatures),
+        )
+        self.assertTrue(
+            all(
+                manual_journey_reduced_cost(column, duals)
+                < -request.negative_eps
+                for column in result.columns
+            )
+        )
+        self.assertTrue(result.partial_columns_valid)
+        self.assertTrue(result.telemetry["negative_escape_triggered"])
+        self.assertEqual(
+            result.telemetry["raw_unique_negative_count"], 4
+        )
+        self.assertIn(
+            "native_exact_negative_escape_partial",
+            result.certificate_blockers,
+        )
+
     def test_proof_queue_policies_preserve_exact_result_and_report_policy(self) -> None:
         results = {}
         for policy_id in ("Q0", "QC0", "QD1", "QB1"):
@@ -159,6 +220,501 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertLess(
             native.telemetry["dominance_wall_time_seconds"],
             native.telemetry["wall_time_seconds"],
+        )
+
+    def test_bidirectional_feasibility_probe_matches_frozen_native_route(self) -> None:
+        import lunar_spprc_native
+        from lunar_ice_bpc.exact.bpc.pricing.backends.native_rcspp import (
+            _manual_backend_reduced_cost,
+            _native_request_payload,
+            _reconstruct_column,
+        )
+
+        if (
+            lunar_spprc_native.build_info().get(
+                "bidirectional_feasibility_compiled"
+            )
+            != "true"
+        ):
+            self.skipTest(
+                "isolated bidirectional feasibility build is not active"
+            )
+        duals = JourneyDuals(
+            cover={task_id: 100.0 for task_id in self.data.task_ids}
+        )
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=duals,
+        )
+        payload = _native_request_payload(request)
+        raw = dict(lunar_spprc_native.solve(payload))
+        route = next(
+            row
+            for row in raw["routes"]
+            if len(row["sorties"]) >= 2
+        )
+        audit = dict(
+            lunar_spprc_native.bidirectional_feasibility_probe(
+                {
+                    **payload,
+                    "forward_sorties": route["sorties"][:1],
+                    "backward_sorties": route["sorties"][1:],
+                }
+            )
+        )
+        self.assertEqual(
+            audit["status"],
+            "FEASIBLE_JOIN_DIAGNOSTIC_ONLY",
+        )
+        self.assertTrue(audit["feasible"])
+        self.assertTrue(audit["task_sets_disjoint"])
+        self.assertTrue(audit["suffix_boundary_feasible"])
+        self.assertTrue(audit["branch_feasible"])
+        self.assertFalse(audit["can_certify_no_negative"])
+        self.assertEqual(
+            audit["certificate_scope"],
+            "DIAGNOSTIC_BIDIRECTIONAL_FEASIBILITY_ONLY",
+        )
+        self.assertAlmostEqual(
+            audit["true_reduced_cost"],
+            route["reduced_cost"],
+            places=10,
+        )
+        task_meet = dict(
+            lunar_spprc_native.bidirectional_task_meet_frontier_probe(
+                {
+                    **payload,
+                    "bidirectional_max_partial_states_per_direction": (
+                        1_000_000
+                    ),
+                    "bidirectional_max_join_checks": 5_000_000,
+                    "bidirectional_wall_time_limit_sec": 30.0,
+                }
+            )
+        )
+        self.assertEqual(
+            task_meet["status"],
+            "TASK_MEET_SORTIE_ENUMERATION_COMPLETE",
+        )
+        self.assertTrue(task_meet["join_exhaustive"])
+        self.assertGreater(
+            task_meet["feasible_joined_sorties"],
+            task_meet["nondominated_sortie_count"],
+        )
+        self.assertFalse(task_meet["can_certify_no_negative"])
+
+        journey = dict(
+            lunar_spprc_native.bidirectional_journey_frontier_probe(
+                {
+                    **payload,
+                    "bidirectional_max_partial_states_per_direction": (
+                        1_000_000
+                    ),
+                    "bidirectional_max_join_checks": 5_000_000,
+                    "bidirectional_sortie_wall_time_limit_sec": 30.0,
+                    "bidirectional_max_journey_labels": 1_000_000,
+                    "bidirectional_max_journey_extension_checks": (
+                        10_000_000
+                    ),
+                    "bidirectional_journey_wall_time_limit_sec": 30.0,
+                }
+            )
+        )
+        self.assertEqual(
+            journey["status"],
+            "JOURNEY_FRONTIER_COMPLETE_DIAGNOSTIC_ONLY",
+        )
+        self.assertTrue(journey["search_exhaustive"])
+        self.assertTrue(journey["frontier_empty"])
+        self.assertFalse(journey["can_certify_no_negative"])
+        self.assertAlmostEqual(
+            journey["best_true_reduced_cost"],
+            raw["best_found_rc"],
+            places=9,
+        )
+        midpoint = dict(
+            lunar_spprc_native.bidirectional_midpoint_journey_meet(
+                {
+                    **payload,
+                    "bidirectional_max_partial_states_per_direction": (
+                        1_000_000
+                    ),
+                    "bidirectional_max_join_checks": 5_000_000,
+                    "bidirectional_sortie_wall_time_limit_sec": 30.0,
+                    "bidirectional_midpoint_split_fraction": 0.02,
+                    "bidirectional_midpoint_max_forward_labels": 100_000,
+                    "bidirectional_midpoint_max_backward_labels": 100_000,
+                    "bidirectional_midpoint_max_crossing_labels": 100_000,
+                    "bidirectional_midpoint_max_extension_checks": (
+                        10_000_000
+                    ),
+                    "bidirectional_midpoint_max_join_checks": 5_000_000,
+                    "bidirectional_midpoint_wall_time_limit_sec": 30.0,
+                }
+            )
+        )
+        self.assertEqual(
+            midpoint["status"],
+            "MIDPOINT_MEET_COMPLETE_DIAGNOSTIC_ONLY",
+        )
+        self.assertTrue(midpoint["search_exhaustive"])
+        self.assertTrue(midpoint["forward_exhaustive"])
+        self.assertTrue(midpoint["backward_exhaustive"])
+        self.assertTrue(midpoint["crossing_exhaustive"])
+        self.assertTrue(midpoint["join_exhaustive"])
+        self.assertFalse(midpoint["can_certify_no_negative"])
+        self.assertGreater(midpoint["backward_generated_labels"], 1)
+        self.assertGreater(midpoint["crossing_generated_labels"], 0)
+        self.assertEqual(
+            midpoint["join_checks"],
+            midpoint["time_index_candidate_join_pairs"],
+        )
+        self.assertEqual(
+            midpoint["unindexed_active_join_pairs"],
+            midpoint["time_index_candidate_join_pairs"]
+            + midpoint["time_index_pruned_join_pairs"],
+        )
+        self.assertAlmostEqual(
+            midpoint["best_true_reduced_cost"],
+            raw["best_found_rc"],
+            places=9,
+        )
+        self.assertEqual(
+            midpoint["returned_negative_route_count"],
+            len(midpoint["routes"]),
+        )
+        self.assertGreater(midpoint["returned_negative_route_count"], 0)
+        self.assertAlmostEqual(
+            midpoint["routes"][0]["reduced_cost"],
+            midpoint["best_true_reduced_cost"],
+            places=9,
+        )
+        returned_task_sets = set()
+        for native_route in midpoint["routes"]:
+            column = _reconstruct_column(request, native_route)
+            returned_task_sets.add(frozenset(column.task_set))
+            self.assertAlmostEqual(
+                native_route["reduced_cost"],
+                _manual_backend_reduced_cost(column, request),
+                delta=2.0e-6,
+            )
+        self.assertEqual(
+            len(returned_task_sets),
+            midpoint["returned_negative_route_count"],
+        )
+
+    def test_bidirectional_hybrid_runs_midpoint_on_scale5(
+        self,
+    ) -> None:
+        backend = BackendRegistry.create(
+            NATIVE_BIDIRECTIONAL_MIDPOINT_HYBRID_BACKEND_ID
+        )
+        self.assertIsInstance(
+            backend,
+            NativeBidirectionalMidpointHybridBackend,
+        )
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(
+                cover={
+                    task_id: 100.0
+                    for task_id in self.data.task_ids
+                }
+            ),
+            mode=BACKEND_MODE_NEGATIVE_HARVEST,
+        )
+        try:
+            result = backend.solve(request)
+        finally:
+            NativeRcsppHostBackend.close()
+        self.assertEqual(
+            result.backend_id,
+            NATIVE_BIDIRECTIONAL_MIDPOINT_HYBRID_BACKEND_ID,
+        )
+        self.assertTrue(result.columns)
+        self.assertFalse(
+            result.telemetry[
+                "bidirectional_midpoint_hybrid_fallback_used"
+            ]
+        )
+        self.assertTrue(
+            result.telemetry[
+                "bidirectional_midpoint_hybrid_attempted"
+            ]
+        )
+        self.assertTrue(
+            result.telemetry[
+                "bidirectional_midpoint_hybrid_accepted"
+            ]
+        )
+        self.assertEqual(
+            result.engine_status,
+            "FOUND_NEGATIVE_PARTIAL",
+        )
+        self.assertFalse(result.can_enter_certificate_audit)
+
+    def test_bidirectional_hybrid_scale5_no_negative_falls_back_inprocess(
+        self,
+    ) -> None:
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(cover={}),
+        )
+        expected = NativeRcsppInprocessBackend().solve(request)
+        actual = (
+            NativeBidirectionalMidpointHybridBackend()
+            .solve(request)
+        )
+        self.assertEqual(
+            actual.telemetry[
+                "bidirectional_midpoint_fallback_backend_id"
+            ],
+            "native_rcspp_inprocess",
+        )
+        self.assertTrue(
+            actual.telemetry[
+                "bidirectional_midpoint_hybrid_fallback_used"
+            ]
+        )
+        self.assertEqual(
+            actual.engine_status,
+            expected.engine_status,
+        )
+        self.assertEqual(
+            actual.can_enter_certificate_audit,
+            expected.can_enter_certificate_audit,
+        )
+        self.assertEqual(
+            actual.proved_no_rc_below,
+            expected.proved_no_rc_below,
+        )
+        self.assertEqual(actual.columns, expected.columns)
+
+    def test_bidirectional_partial_hybrid_retains_audited_incomplete_witnesses(
+        self,
+    ) -> None:
+        import lunar_spprc_native
+        from lunar_ice_bpc.exact.bpc.pricing.backends.native_rcspp import (
+            _native_request_payload,
+        )
+
+        backend = BackendRegistry.create(
+            NATIVE_BIDIRECTIONAL_MIDPOINT_PARTIAL_HYBRID_BACKEND_ID
+        )
+        self.assertIsInstance(
+            backend,
+            NativeBidirectionalMidpointPartialHybridBackend,
+        )
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(
+                cover={
+                    task_id: 100.0
+                    for task_id in self.data.task_ids
+                }
+            ),
+            mode=BACKEND_MODE_NEGATIVE_HARVEST,
+        )
+        payload = _native_request_payload(request)
+        payload.update(backend._midpoint_parameters(request))
+        raw = dict(
+            lunar_spprc_native.bidirectional_midpoint_journey_meet(
+                payload
+            )
+        )
+        self.assertTrue(raw["routes"])
+        raw.update(
+            {
+                "status": "MIDPOINT_MEET_LABEL_LIMIT",
+                "search_exhaustive": False,
+                "forward_exhaustive": False,
+                "join_exhaustive": False,
+                "can_certify_no_negative": False,
+            }
+        )
+        old_result = (
+            NativeBidirectionalMidpointHybridBackend()
+            ._audit_midpoint_result(
+                request,
+                raw,
+                build_info=dict(lunar_spprc_native.build_info()),
+                elapsed_sec=0.25,
+            )
+        )
+        result = backend._audit_midpoint_result(
+            request,
+            raw,
+            build_info=dict(lunar_spprc_native.build_info()),
+            elapsed_sec=0.25,
+        )
+
+        self.assertIsNone(old_result)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.columns)
+        self.assertEqual(result.engine_status, "FOUND_NEGATIVE_PARTIAL")
+        self.assertFalse(result.search_exhaustive)
+        self.assertFalse(result.can_enter_certificate_audit)
+        self.assertTrue(
+            result.telemetry[
+                "bidirectional_midpoint_partial_witness_accepted"
+            ]
+        )
+        self.assertEqual(
+            result.telemetry[
+                "negative_escape_termination_reason"
+            ],
+            "BIDIRECTIONAL_MIDPOINT_PARTIAL_NEGATIVE_POOL",
+        )
+
+    def test_bidirectional_root_partial_hybrid_is_tree_conservative(
+        self,
+    ) -> None:
+        import lunar_spprc_native
+        from lunar_ice_bpc.exact.bpc.pricing.backends.native_rcspp import (
+            _native_request_payload,
+        )
+
+        backend = BackendRegistry.create(
+            NATIVE_BIDIRECTIONAL_ROOT_PARTIAL_HYBRID_BACKEND_ID
+        )
+        self.assertIsInstance(
+            backend,
+            NativeBidirectionalRootPartialHybridBackend,
+        )
+        base_request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(
+                cover={
+                    task_id: 100.0
+                    for task_id in self.data.task_ids
+                }
+            ),
+            mode=BACKEND_MODE_NEGATIVE_HARVEST,
+            pricing_lifecycle_scope=(
+                PRICING_LIFECYCLE_SCOPE_ROOT_CG
+            ),
+        )
+        payload = _native_request_payload(base_request)
+        payload.update(backend._midpoint_parameters(base_request))
+        raw = dict(
+            lunar_spprc_native.bidirectional_midpoint_journey_meet(
+                payload
+            )
+        )
+        self.assertTrue(raw["routes"])
+        raw.update(
+            {
+                "status": "MIDPOINT_MEET_LABEL_LIMIT",
+                "search_exhaustive": False,
+                "forward_exhaustive": False,
+                "join_exhaustive": False,
+                "can_certify_no_negative": False,
+            }
+        )
+
+        root_result = backend._audit_midpoint_result(
+            base_request,
+            raw,
+            build_info=dict(lunar_spprc_native.build_info()),
+            elapsed_sec=0.25,
+        )
+        tree_result = backend._audit_midpoint_result(
+            replace(
+                base_request,
+                pricing_lifecycle_scope=(
+                    PRICING_LIFECYCLE_SCOPE_TREE_NODE
+                ),
+            ),
+            raw,
+            build_info=dict(lunar_spprc_native.build_info()),
+            elapsed_sec=0.25,
+        )
+        unspecified_result = backend._audit_midpoint_result(
+            replace(
+                base_request,
+                pricing_lifecycle_scope="unspecified",
+            ),
+            raw,
+            build_info=dict(lunar_spprc_native.build_info()),
+            elapsed_sec=0.25,
+        )
+
+        self.assertIsNotNone(root_result)
+        assert root_result is not None
+        self.assertFalse(root_result.can_enter_certificate_audit)
+        self.assertEqual(
+            root_result.telemetry["pricing_lifecycle_scope"],
+            PRICING_LIFECYCLE_SCOPE_ROOT_CG,
+        )
+        self.assertTrue(
+            root_result.telemetry[
+                "bidirectional_midpoint_partial_allowed_for_scope"
+            ]
+        )
+        self.assertEqual(
+            root_result.telemetry[
+                "bidirectional_midpoint_partial_scope_policy"
+            ],
+            "root_cg_only_tree_conservative",
+        )
+        self.assertIsNone(tree_result)
+        self.assertIsNone(unspecified_result)
+
+    def test_bidirectional_partial_hybrid_empty_incomplete_result_falls_back(
+        self,
+    ) -> None:
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(cover={}),
+        )
+        raw = {
+            "status": "MIDPOINT_SORTIE_POOL_INCOMPLETE",
+            "policy_id": "p0v4_frozen_dual_depot_midpoint_meet_v1",
+            "search_exhaustive": False,
+            "can_certify_no_negative": False,
+            "routes": [],
+        }
+        backend = NativeBidirectionalMidpointPartialHybridBackend()
+
+        self.assertIsNone(
+            backend._audit_midpoint_result(
+                request,
+                raw,
+                build_info={},
+                elapsed_sec=0.5,
+            )
+        )
+        telemetry = backend._fallback_prepass_telemetry(raw)
+        self.assertEqual(
+            telemetry["bidirectional_midpoint_raw_status"],
+            "MIDPOINT_SORTIE_POOL_INCOMPLETE",
+        )
+        self.assertEqual(
+            telemetry["bidirectional_midpoint_raw_route_count"],
+            0,
+        )
+
+    def test_bidirectional_hybrid_default_wall_limit_is_bounded(self) -> None:
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(cover={}),
+        )
+        parameters = (
+            NativeBidirectionalMidpointHybridBackend
+            ._midpoint_parameters(request)
+        )
+        self.assertEqual(
+            parameters[
+                "bidirectional_midpoint_wall_time_limit_sec"
+            ],
+            30.0,
+        )
+        self.assertEqual(
+            parameters[
+                "bidirectional_sortie_wall_time_limit_sec"
+            ],
+            30.0,
         )
 
     def test_exact_completion_bound_preserves_negative_columns_and_certificate(self) -> None:
@@ -1345,6 +1901,377 @@ class NativeSpprcBackendTests(unittest.TestCase):
             result.telemetry["dssr_relaxation_no_negative_certificate"]
         )
 
+    def test_dssr_v2_batch_and_policy_binding_are_independent(self) -> None:
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(
+                cover={
+                    task_id: 10.0
+                    for task_id in self.data.task_ids
+                }
+            ),
+            harvest_target=4,
+            config_hash="source-config",
+            engine_hash="dssr-v2-engine",
+            dssr_pressure_max_bucket_size=16_384,
+            dssr_pressure_max_candidate_checks=800_000_000,
+        )
+        result = NativeDssrV2InprocessBackend().solve(request)
+
+        self.assertEqual(
+            result.backend_id,
+            "native_rcspp_dssr_v2_inprocess",
+        )
+        self.assertTrue(result.columns)
+        self.assertLessEqual(len(result.columns), 4)
+        self.assertTrue(result.partial_columns_valid)
+        self.assertFalse(result.can_enter_certificate_audit)
+        self.assertEqual(
+            result.telemetry["dssr_policy_version"],
+            "multi_sortie_counterexample_pressure_refinement_v2",
+        )
+        self.assertEqual(
+            result.telemetry["dssr_elementary_batch_count"],
+            len(result.columns),
+        )
+        self.assertGreaterEqual(
+            result.telemetry["dssr_raw_solution_count"],
+            len(result.columns),
+        )
+        bindings = result.telemetry["request_bindings"]
+        self.assertNotEqual(bindings["config_hash"], "source-config")
+        self.assertEqual(bindings["dssr_negative_batch_target"], 4)
+        self.assertTrue(
+            bindings["dssr_pressure_refinement_enabled"]
+        )
+        canonical = bindings["canonical_solve_binding_v2"]
+        self.assertEqual(
+            canonical["dssr_policy_version"],
+            "multi_sortie_counterexample_pressure_refinement_v2",
+        )
+        self.assertEqual(
+            canonical["dssr_pressure_max_bucket_size"],
+            16_384,
+        )
+        self.assertTrue(result.telemetry["request_bindings_match"])
+
+    def test_dssr_v2_pressure_abort_has_zero_certificate_leak(self) -> None:
+        result = NativeDssrV2InprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=JourneyDuals(
+                    cover={
+                        task_id: 10.0
+                        for task_id in self.data.task_ids
+                    }
+                ),
+                harvest_target=4,
+                dssr_pressure_max_bucket_size=1,
+                dssr_pressure_max_candidate_checks=800_000_000,
+            )
+        )
+
+        self.assertTrue(result.columns)
+        self.assertTrue(result.partial_columns_valid)
+        self.assertFalse(result.can_enter_certificate_audit)
+        self.assertIsNone(result.proved_no_rc_below)
+        self.assertGreater(
+            result.telemetry["dssr_pressure_refinement_count"],
+            0,
+        )
+        self.assertGreaterEqual(
+            result.telemetry[
+                "dssr_pressure_abandoned_iteration_count"
+            ],
+            result.telemetry["dssr_pressure_refinement_count"],
+        )
+        pressure_rows = [
+            row
+            for row in result.telemetry["dssr_iteration_trace"]
+            if row["pressure_refinement_triggered"]
+        ]
+        self.assertTrue(pressure_rows)
+        self.assertTrue(
+            all(
+                int(row["raw_solution_count"]) == 0
+                and int(row["elementary_solution_count"]) == 0
+                and int(row["non_elementary_solution_count"]) == 0
+                for row in pressure_rows
+            )
+        )
+
+    def test_dssr_v2_host_ipc_preserves_policy_and_exact_certificate(
+        self,
+    ) -> None:
+        NativeDssrV2HostBackend.close()
+        try:
+            result = NativeDssrV2HostBackend().solve(
+                BackendPricingRequest(
+                    data=self.data,
+                    true_duals=JourneyDuals(cover={}),
+                    wall_time_limit_sec=10.0,
+                    memory_limit_gb=1.0,
+                    dssr_pressure_max_bucket_size=16_384,
+                    dssr_pressure_max_candidate_checks=800_000_000,
+                )
+            )
+        finally:
+            NativeDssrV2HostBackend.close()
+
+        self.assertEqual(
+            result.backend_id,
+            "native_rcspp_dssr_v2_host",
+        )
+        self.assertTrue(result.can_enter_certificate_audit)
+        self.assertEqual(result.proved_no_rc_below, -1.0e-6)
+        self.assertEqual(
+            result.telemetry["dssr_policy_version"],
+            "multi_sortie_counterexample_pressure_refinement_v2",
+        )
+        self.assertTrue(result.telemetry["request_bindings_match"])
+
+    def test_dssr_v2_branch_and_cut_context_certifies_exactly(
+        self,
+    ) -> None:
+        task_a, task_b, task_c = self.data.task_ids[:3]
+        branch = BranchContext(
+            pair_decisions=(
+                PairBranchDecision(
+                    task_a,
+                    task_b,
+                    SAME_JOURNEY,
+                ),
+            )
+        )
+        cut = subset_row_cut(
+            "dssr-v2-sri",
+            (task_a, task_b, task_c),
+        )
+        result = NativeDssrV2InprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=JourneyDuals(
+                    cover={},
+                    cuts={cut.cut_id: 0.0},
+                ),
+                branch_context=branch,
+                cut_context=CutContext(cuts=(cut,)),
+                dssr_pressure_max_bucket_size=16_384,
+                dssr_pressure_max_candidate_checks=800_000_000,
+            )
+        )
+
+        self.assertTrue(result.can_enter_certificate_audit)
+        self.assertTrue(result.search_exhaustive)
+        self.assertTrue(result.frontier_empty)
+        self.assertFalse(result.labels_dropped)
+        self.assertEqual(result.proved_no_rc_below, -1.0e-6)
+        self.assertTrue(result.telemetry["cut_state_required"])
+        self.assertTrue(result.telemetry["request_bindings_match"])
+
+    def test_dssr_v2_timeout_and_memory_fail_closed(self) -> None:
+        cases = (
+            {
+                "wall_time_limit_sec": 0.0,
+                "memory_limit_gb": 1.0,
+            },
+            {
+                "wall_time_limit_sec": 10.0,
+                "memory_limit_gb": 0.000_001,
+            },
+        )
+        for limits in cases:
+            with self.subTest(limits=limits):
+                result = NativeDssrV2InprocessBackend().solve(
+                    BackendPricingRequest(
+                        data=self.data20,
+                        true_duals=JourneyDuals(cover={}),
+                        dssr_pressure_max_bucket_size=16_384,
+                        dssr_pressure_max_candidate_checks=(
+                            800_000_000
+                        ),
+                        **limits,
+                    )
+                )
+
+                self.assertIn(
+                    result.engine_status,
+                    {"TIMEOUT", "MEMORY_LIMIT"},
+                )
+                self.assertFalse(result.search_exhaustive)
+                self.assertFalse(result.frontier_empty)
+                self.assertFalse(result.can_enter_certificate_audit)
+                self.assertIsNone(result.proved_no_rc_below)
+                self.assertIn(
+                    "native_exact_search_incomplete",
+                    result.certificate_blockers,
+                )
+
+    def test_ng_dssr_v3_binding_and_elementary_batch(self) -> None:
+        result = NativeNgDssrV3InprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=JourneyDuals(
+                    cover={
+                        task_id: 10.0
+                        for task_id in self.data.task_ids
+                    }
+                ),
+                harvest_target=4,
+                config_hash="source-ng-config",
+                engine_hash="ng-dssr-v3-engine",
+                ng_dssr_initial_neighborhood_size=3,
+                completion_bound_enabled=True,
+                subset_dominance_enabled=True,
+                proof_queue_policy_id="QD1",
+            )
+        )
+
+        self.assertEqual(
+            result.backend_id,
+            "native_rcspp_ng_dssr_v3_inprocess",
+        )
+        self.assertTrue(result.columns)
+        self.assertLessEqual(len(result.columns), 4)
+        self.assertTrue(result.partial_columns_valid)
+        self.assertFalse(result.can_enter_certificate_audit)
+        self.assertTrue(result.telemetry["ng_dssr_enabled"])
+        self.assertEqual(
+            result.telemetry["dssr_policy_version"],
+            "multi_sortie_ng_memory_counterexample_refinement_v3",
+        )
+        self.assertEqual(
+            result.telemetry["ng_dssr_initial_neighborhood_size"],
+            3,
+        )
+        self.assertGreaterEqual(
+            result.telemetry["ng_dssr_final_relation_count"],
+            result.telemetry["ng_dssr_initial_relation_count"],
+        )
+        self.assertEqual(
+            result.telemetry["completion_bound_evaluated_labels"],
+            0,
+        )
+        self.assertEqual(
+            result.telemetry["subset_dominance_candidate_checks"],
+            0,
+        )
+        self.assertEqual(
+            result.telemetry["proof_queue_policy_id"],
+            "Q0",
+        )
+        bindings = result.telemetry["request_bindings"]
+        self.assertEqual(
+            bindings["ng_dssr_initial_neighborhood_size"],
+            3,
+        )
+        self.assertEqual(
+            bindings["canonical_solve_binding_v2"][
+                "ng_dssr_initial_neighborhood_size"
+            ],
+            3,
+        )
+        self.assertTrue(result.telemetry["request_bindings_match"])
+        for column in result.columns:
+            task_ids = [
+                task_id
+                for sortie in column.sorties
+                for task_id in sortie.tasks
+            ]
+            self.assertEqual(len(task_ids), len(set(task_ids)))
+
+    def test_ng_dssr_v3_host_ipc_and_zero_dual_certificate(self) -> None:
+        NativeNgDssrV3HostBackend.close()
+        try:
+            result = NativeNgDssrV3HostBackend().solve(
+                BackendPricingRequest(
+                    data=self.data,
+                    true_duals=JourneyDuals(cover={}),
+                    wall_time_limit_sec=10.0,
+                    memory_limit_gb=1.0,
+                    ng_dssr_initial_neighborhood_size=3,
+                )
+            )
+        finally:
+            NativeNgDssrV3HostBackend.close()
+
+        self.assertEqual(
+            result.backend_id,
+            "native_rcspp_ng_dssr_v3_host",
+        )
+        self.assertTrue(result.can_enter_certificate_audit)
+        self.assertEqual(result.proved_no_rc_below, -1.0e-6)
+        self.assertTrue(result.telemetry["ng_dssr_enabled"])
+        self.assertTrue(
+            result.telemetry[
+                "dssr_relaxation_no_negative_certificate"
+            ]
+        )
+        self.assertTrue(result.telemetry["request_bindings_match"])
+
+    def test_ng_dssr_v3_branch_cut_and_resource_limits_fail_closed(
+        self,
+    ) -> None:
+        task_a, task_b, task_c = self.data.task_ids[:3]
+        branch = BranchContext(
+            pair_decisions=(
+                PairBranchDecision(
+                    task_a,
+                    task_b,
+                    SAME_JOURNEY,
+                ),
+            )
+        )
+        cut = subset_row_cut(
+            "ng-dssr-v3-sri",
+            (task_a, task_b, task_c),
+        )
+        exact = NativeNgDssrV3InprocessBackend().solve(
+            BackendPricingRequest(
+                data=self.data,
+                true_duals=JourneyDuals(
+                    cover={},
+                    cuts={cut.cut_id: 0.0},
+                ),
+                branch_context=branch,
+                cut_context=CutContext(cuts=(cut,)),
+                ng_dssr_initial_neighborhood_size=3,
+            )
+        )
+        self.assertTrue(exact.can_enter_certificate_audit)
+        self.assertTrue(exact.search_exhaustive)
+        self.assertTrue(exact.frontier_empty)
+        self.assertFalse(exact.labels_dropped)
+        self.assertTrue(exact.telemetry["cut_state_required"])
+
+        for limits in (
+            {"wall_time_limit_sec": 0.0, "memory_limit_gb": 1.0},
+            {"wall_time_limit_sec": 10.0, "memory_limit_gb": 0.000_001},
+        ):
+            with self.subTest(limits=limits):
+                incomplete = NativeNgDssrV3InprocessBackend().solve(
+                    BackendPricingRequest(
+                        data=self.data20,
+                        true_duals=JourneyDuals(cover={}),
+                        ng_dssr_initial_neighborhood_size=6,
+                        **limits,
+                    )
+                )
+                self.assertIn(
+                    incomplete.engine_status,
+                    {"TIMEOUT", "MEMORY_LIMIT"},
+                )
+                self.assertFalse(incomplete.search_exhaustive)
+                self.assertFalse(incomplete.frontier_empty)
+                self.assertFalse(
+                    incomplete.can_enter_certificate_audit
+                )
+                self.assertIsNone(incomplete.proved_no_rc_below)
+                self.assertIn(
+                    "native_exact_search_incomplete",
+                    incomplete.certificate_blockers,
+                )
+
     def test_pre_solve_exact_snapshot_survives_without_result(self) -> None:
         request = BackendPricingRequest(
             data=self.data,
@@ -1385,6 +2312,47 @@ class NativeSpprcBackendTests(unittest.TestCase):
         )
         self.assertFalse(snapshot.result_summary["search_exhaustive"])
         self.assertFalse(snapshot.censored)
+        self.assertEqual(
+            snapshot.binding.config_hash,
+            request.config_hash,
+        )
+
+    def test_pre_solve_pricing_snapshot_includes_negative_harvest(
+        self,
+    ) -> None:
+        request = BackendPricingRequest(
+            data=self.data,
+            true_duals=JourneyDuals(
+                cover={
+                    task_id: 0.0
+                    for task_id in self.data.task_ids
+                }
+            ),
+            mode=BACKEND_MODE_NEGATIVE_HARVEST,
+            wall_time_limit_sec=10.0,
+            memory_limit_gb=1.0,
+            config_hash="pre-solve-pricing-snapshot-config",
+            engine_hash="pre-solve-pricing-snapshot-engine",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(
+                os.environ,
+                {
+                    "LUNAR_ICE_PRE_SOLVE_PRICING_SNAPSHOT_DIR": (
+                        directory
+                    )
+                },
+            ):
+                NativeRcsppInprocessBackend().solve(request)
+
+            snapshot_paths = sorted(Path(directory).glob("**/*.json"))
+            self.assertEqual(len(snapshot_paths), 1)
+            snapshot = load_pricing_snapshot(snapshot_paths[0])
+
+        self.assertEqual(
+            snapshot.pricing_mode,
+            BACKEND_MODE_NEGATIVE_HARVEST,
+        )
         self.assertEqual(
             snapshot.binding.config_hash,
             request.config_hash,
@@ -1438,6 +2406,103 @@ class NativeSpprcBackendTests(unittest.TestCase):
         self.assertEqual(
             payload["resource_label_core_mode"],
             "native_exact_dssr_counterexample_refinement",
+        )
+
+    def test_dssr_v2_integrates_with_official_labeling_pricer(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "LUNAR_ICE_SPPRC_EXACT_BACKEND": (
+                    "native_rcspp_dssr_v2_inprocess"
+                ),
+                "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB": "1",
+                "LUNAR_ICE_SPPRC_DSSR_NEGATIVE_BATCH_TARGET": "16",
+                "LUNAR_ICE_SPPRC_DSSR_PRESSURE_MAX_BUCKET_SIZE": (
+                    "16384"
+                ),
+                "LUNAR_ICE_SPPRC_DSSR_PRESSURE_MAX_CANDIDATE_CHECKS": (
+                    "800000000"
+                ),
+            },
+        ):
+            payload, columns = run_bpc_labeling_pricer(
+                self.data,
+                JourneyDuals(cover={}),
+                config=LabelingPricingConfig(
+                    mode=EXACT_ELEMENTARY_MODE,
+                    max_exact_tasks=5,
+                    wall_time_limit_sec=10.0,
+                ),
+            )
+
+        self.assertFalse(columns)
+        self.assertEqual(
+            payload["native_backend_id"],
+            "native_rcspp_dssr_v2_inprocess",
+        )
+        self.assertEqual(
+            payload["pricing_state"],
+            "CERTIFIED_NO_NEGATIVE",
+        )
+        self.assertTrue(payload["can_certify_no_negative"])
+        self.assertEqual(
+            payload["exact_pricing_certificate_method"],
+            "DSSR_RELAXATION_LOWER_BOUND",
+        )
+        self.assertEqual(
+            payload["resource_label_core_mode"],
+            "native_exact_dssr_batch_pressure_refinement_v2",
+        )
+
+    def test_ng_dssr_v3_integrates_with_official_labeling_pricer(
+        self,
+    ) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "LUNAR_ICE_SPPRC_EXACT_BACKEND": (
+                    "native_rcspp_ng_dssr_v3_inprocess"
+                ),
+                "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB": "1",
+                "LUNAR_ICE_SPPRC_DSSR_NEGATIVE_BATCH_TARGET": "16",
+                "LUNAR_ICE_SPPRC_NG_DSSR_INITIAL_NEIGHBORHOOD_SIZE": (
+                    "3"
+                ),
+            },
+        ):
+            payload, columns = run_bpc_labeling_pricer(
+                self.data,
+                JourneyDuals(cover={}),
+                config=LabelingPricingConfig(
+                    mode=EXACT_ELEMENTARY_MODE,
+                    max_exact_tasks=5,
+                    wall_time_limit_sec=10.0,
+                ),
+            )
+
+        self.assertFalse(columns)
+        self.assertEqual(
+            payload["native_backend_id"],
+            "native_rcspp_ng_dssr_v3_inprocess",
+        )
+        self.assertEqual(
+            payload["pricing_state"],
+            "CERTIFIED_NO_NEGATIVE",
+        )
+        self.assertTrue(payload["can_certify_no_negative"])
+        self.assertEqual(
+            payload["exact_pricing_certificate_method"],
+            "DSSR_RELAXATION_LOWER_BOUND",
+        )
+        self.assertEqual(
+            payload["resource_label_core_mode"],
+            "native_exact_ng_dssr_local_memory_refinement_v3",
+        )
+        self.assertEqual(
+            payload["elementarity_policy"],
+            "ng_dssr_nearest_memory_local_cycle_refinement_v3",
         )
 
     def test_host_ipc_normalizes_read_only_dual_mappings(self) -> None:
@@ -1619,6 +2684,80 @@ class NativeSpprcBackendTests(unittest.TestCase):
 
 
 class NativeSpprcScaleProfileTests(unittest.TestCase):
+    def test_parent_aware_host_memory_budget_preserves_reserve(self) -> None:
+        gib = 1024**3
+        budget = native_rcspp_module._dynamic_host_memory_budget(
+            configured_native_limit_bytes=11 * gib,
+            host_rss_bytes=300 * 1024**2,
+            available_memory_bytes=8 * gib,
+        )
+
+        self.assertTrue(budget["clamped"])
+        self.assertFalse(budget["preflight_rejected"])
+        self.assertLess(
+            budget["native_limit_bytes"],
+            11 * gib,
+        )
+        self.assertLessEqual(
+            budget["watchdog_limit_bytes"],
+            300 * 1024**2 + 6 * gib,
+        )
+
+    def test_parent_aware_host_memory_budget_rejects_no_headroom(
+        self,
+    ) -> None:
+        gib = 1024**3
+        budget = native_rcspp_module._dynamic_host_memory_budget(
+            configured_native_limit_bytes=11 * gib,
+            host_rss_bytes=500 * 1024**2,
+            available_memory_bytes=2 * gib,
+        )
+
+        self.assertTrue(budget["clamped"])
+        self.assertTrue(budget["preflight_rejected"])
+        self.assertEqual(budget["native_limit_bytes"], 0)
+
+    def test_parent_aware_host_memory_budget_keeps_small_limit(
+        self,
+    ) -> None:
+        gib = 1024**3
+        budget = native_rcspp_module._dynamic_host_memory_budget(
+            configured_native_limit_bytes=1 * gib,
+            host_rss_bytes=200 * 1024**2,
+            available_memory_bytes=12 * gib,
+        )
+
+        self.assertFalse(budget["clamped"])
+        self.assertFalse(budget["preflight_rejected"])
+        self.assertEqual(budget["native_limit_bytes"], 1 * gib)
+
+    def test_heavy_host_recycle_policy_is_large_scale_only(self) -> None:
+        limit_bytes = 10 * 1024**3
+        threshold = native_rcspp_module._host_recycle_threshold_bytes(limit_bytes)
+
+        self.assertEqual(threshold, int(0.25 * limit_bytes))
+        self.assertFalse(
+            native_rcspp_module._should_recycle_host_after_response(
+                task_count=30,
+                peak_rss_bytes=threshold,
+                native_memory_limit_bytes=limit_bytes,
+            )
+        )
+        self.assertFalse(
+            native_rcspp_module._should_recycle_host_after_response(
+                task_count=50,
+                peak_rss_bytes=threshold - 1,
+                native_memory_limit_bytes=limit_bytes,
+            )
+        )
+        self.assertTrue(
+            native_rcspp_module._should_recycle_host_after_response(
+                task_count=50,
+                peak_rss_bytes=threshold,
+                native_memory_limit_bytes=limit_bytes,
+            )
+        )
+
     def test_all_six_scales_have_independent_profiles(self) -> None:
         profiles = [native_spprc_scale_profile(scale) for scale in (5, 10, 20, 30, 50, 100)]
 
@@ -1636,6 +2775,8 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
         from lunar_ice_bpc.runners.native_spprc_acceptance import (
             _acceptance_metrics,
             _adaptive_harvest_cap_for_scale,
+            _adaptive_harvest_schedule_for_scale,
+            _configure_one_deviation_environment,
             _engine_binding_audit,
             _final_judge_pass_policy_for_scale,
             _profile_gate_metrics,
@@ -1644,6 +2785,86 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
 
         project_root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "deployment.json"
+            manifest.write_text(
+                (
+                    '{"allowed_scales":[30,50],'
+                    '"deployment_authorized":true}'
+                ),
+                encoding="utf-8",
+            )
+            environment = {
+                "LUNAR_ICE_ONE_DEVIATION_MANIFEST": "stale"
+            }
+            _configure_one_deviation_environment(
+                environment,
+                config={
+                    "one_deviation_gat_deployment_manifest": str(
+                        manifest
+                    )
+                },
+                root=project_root,
+                scale=30,
+            )
+            self.assertEqual(
+                environment["LUNAR_ICE_ONE_DEVIATION_MANIFEST"],
+                str(manifest.resolve()),
+            )
+            _configure_one_deviation_environment(
+                environment,
+                config={
+                    "one_deviation_gat_deployment_manifest": str(
+                        manifest
+                    )
+                },
+                root=project_root,
+                scale=20,
+            )
+            self.assertNotIn(
+                "LUNAR_ICE_ONE_DEVIATION_MANIFEST", environment
+            )
+            evaluation_manifest = Path(directory) / "evaluation.json"
+            evaluation_manifest.write_text(
+                (
+                    '{"allowed_scales":[30,50],'
+                    '"evaluation_authorized":true,'
+                    '"deployment_authorized":false}'
+                ),
+                encoding="utf-8",
+            )
+            _configure_one_deviation_environment(
+                environment,
+                config={
+                    "one_deviation_gat_deployment_manifest": str(
+                        evaluation_manifest
+                    ),
+                    "one_deviation_gat_evaluation_mode": True,
+                },
+                root=project_root,
+                scale=30,
+            )
+            self.assertEqual(
+                environment[
+                    "LUNAR_ICE_ONE_DEVIATION_EVALUATION_MODE"
+                ],
+                "1",
+            )
+            with self.assertRaisesRegex(
+                ValueError, "manifest hash mismatch"
+            ):
+                _configure_one_deviation_environment(
+                    environment,
+                    config={
+                        "one_deviation_gat_deployment_manifest": str(
+                            manifest
+                        ),
+                        "one_deviation_gat_deployment_manifest_sha256": (
+                            "wrong"
+                        ),
+                    },
+                    root=project_root,
+                    scale=30,
+                )
             summary = run_native_spprc_acceptance(
                 project_root=project_root,
                 config={},
@@ -1651,6 +2872,8 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
                 limit=1,
                 output_dir=directory,
                 dry_run=True,
+                route_opportunity_collection_only_root_pool=True,
+                route_opportunity_collection_root_pool_time_cap_sec=300.0,
             )
 
         by_scale = {row["scale"]: row for row in summary["rows"]}
@@ -1658,6 +2881,19 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
         self.assertEqual(by_scale[5]["final_judge_pass_policy"], "harvest_then_proof")
         self.assertIsNone(by_scale[5]["adaptive_harvest_cap_sec"])
         self.assertIn("--labeling-worker-max-task-cap", by_scale[30]["command"])
+        self.assertIn(
+            "--route-opportunity-collection-only-root-pool",
+            by_scale[30]["command"],
+        )
+        self.assertTrue(
+            by_scale[30][
+                "route_opportunity_collection_only_root_pool"
+            ]
+        )
+        cap_index = by_scale[30]["command"].index(
+            "--route-opportunity-collection-root-pool-time-cap-sec"
+        )
+        self.assertEqual(by_scale[30]["command"][cap_index + 1], "300.0")
         depth_index = by_scale[30]["command"].index("--tree-closure-max-branch-depth")
         self.assertEqual(by_scale[30]["command"][depth_index + 1], "12")
         self.assertEqual(
@@ -1681,6 +2917,39 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
         )
         self.assertIsNone(_adaptive_harvest_cap_for_scale(configured, 20))
         self.assertEqual(_adaptive_harvest_cap_for_scale(configured, 30), 2.0)
+        self.assertIsNone(
+            _adaptive_harvest_schedule_for_scale(configured, 30)
+        )
+        self.assertEqual(
+            _adaptive_harvest_schedule_for_scale(
+                {
+                    "native_adaptive_harvest_schedule": "disabled",
+                    "native_adaptive_harvest_schedule_by_scale": {
+                        "30": "2000:256,4000:128"
+                    },
+                },
+                30,
+            ),
+            "4000:128,2000:256",
+        )
+        self.assertEqual(
+            _adaptive_harvest_schedule_for_scale(
+                {"native_adaptive_harvest_schedule": "off"},
+                50,
+            ),
+            "disabled",
+        )
+        for invalid_schedule in ("", "4000", "x:128", "4000:0"):
+            with self.subTest(invalid_schedule=invalid_schedule):
+                with self.assertRaises(ValueError):
+                    _adaptive_harvest_schedule_for_scale(
+                        {
+                            "native_adaptive_harvest_schedule": (
+                                invalid_schedule
+                            )
+                        },
+                        50,
+                    )
         for invalid in (0, -1, float("nan"), float("inf"), "invalid"):
             with self.subTest(invalid_cap=invalid):
                 with self.assertRaises(ValueError):
@@ -1777,7 +3046,11 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
                 output=b"partial progress",
                 stderr=b"",
             )
-            with patch.object(module.subprocess, "run", side_effect=timeout):
+            with patch.object(
+                module,
+                "_run_process_tree",
+                side_effect=timeout,
+            ):
                 row = module._run_tree_closure(
                     args,
                     instance_index=1,
@@ -1793,6 +3066,48 @@ class NativeSpprcScaleProfileTests(unittest.TestCase):
         self.assertTrue(row["tree_subprocess_timeout"])
         self.assertTrue(row["tree_subprocess_partial_stdout_present"])
         self.assertIn("no certificate", row["fail_reason"])
+
+    def test_b4_2_timeout_kills_the_entire_process_group(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        spec = importlib.util.spec_from_file_location(
+            "native_spprc_b42_process_group_test",
+            project_root / "scripts/run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            child_pid_path = Path(directory) / "child.pid"
+            command = [
+                sys.executable,
+                "-c",
+                (
+                    "import pathlib,subprocess,sys,time;"
+                    "p=subprocess.Popen([sys.executable,'-c','import time;"
+                    "time.sleep(60)']);"
+                    f"pathlib.Path({str(child_pid_path)!r}).write_text(str(p.pid));"
+                    "time.sleep(60)"
+                ),
+            ]
+            with self.assertRaises(subprocess.TimeoutExpired):
+                module._run_process_tree(
+                    command,
+                    cwd=str(project_root),
+                    env=dict(os.environ),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    timeout=0.5,
+                )
+            child_pid = int(
+                child_pid_path.read_text(encoding="utf-8")
+            )
+            for _ in range(20):
+                if not Path(f"/proc/{child_pid}").exists():
+                    break
+                sleep(0.05)
+            self.assertFalse(Path(f"/proc/{child_pid}").exists())
 
     def test_exact_first_skipped_worker_is_vacuously_true_dual_audited(self) -> None:
         from lunar_ice_bpc.exact.bpc.solver.pricing_tail_solver import (

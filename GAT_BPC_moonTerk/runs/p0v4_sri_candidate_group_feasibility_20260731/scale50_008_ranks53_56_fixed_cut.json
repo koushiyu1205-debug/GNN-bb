@@ -1,0 +1,273 @@
+{
+  "active_column_count": 5956,
+  "active_cut_count": 4,
+  "added_column_count": 57,
+  "backend_id": "native_rcspp_bidirectional_root_partial_hybrid_v3",
+  "base_primal_column_count": 9,
+  "base_rmp_bound": 1.589727,
+  "candidate_ranks_1based": [
+    53,
+    54,
+    55,
+    56
+  ],
+  "candidate_rows": [
+    {
+      "activity": 1.5,
+      "cut": {
+        "cut_id": "sri:d2:n3:ice_site_003,ice_site_028,ice_site_039",
+        "cut_type": "subset_row",
+        "divisor": 2,
+        "rhs": 1.0,
+        "tasks": [
+          "ice_site_003",
+          "ice_site_028",
+          "ice_site_039"
+        ]
+      },
+      "rank_1based": 53,
+      "violation": 0.5
+    },
+    {
+      "activity": 1.5,
+      "cut": {
+        "cut_id": "sri:d2:n3:ice_site_003,ice_site_033,ice_site_039",
+        "cut_type": "subset_row",
+        "divisor": 2,
+        "rhs": 1.0,
+        "tasks": [
+          "ice_site_003",
+          "ice_site_033",
+          "ice_site_039"
+        ]
+      },
+      "rank_1based": 54,
+      "violation": 0.5
+    },
+    {
+      "activity": 1.5,
+      "cut": {
+        "cut_id": "sri:d2:n3:ice_site_005,ice_site_032,ice_site_041",
+        "cut_type": "subset_row",
+        "divisor": 2,
+        "rhs": 1.0,
+        "tasks": [
+          "ice_site_005",
+          "ice_site_032",
+          "ice_site_041"
+        ]
+      },
+      "rank_1based": 55,
+      "violation": 0.5
+    },
+    {
+      "activity": 1.5,
+      "cut": {
+        "cut_id": "sri:d2:n3:ice_site_006,ice_site_032,ice_site_034",
+        "cut_type": "subset_row",
+        "divisor": 2,
+        "rhs": 1.0,
+        "tasks": [
+          "ice_site_006",
+          "ice_site_032",
+          "ice_site_034"
+        ]
+      },
+      "rank_1based": 56,
+      "violation": 0.5
+    }
+  ],
+  "certificate_ledger": {
+    "algorithm_status": "BPC_INCOMPLETE_PRICING",
+    "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+    "certificate_status": "NOT_PORTED_TRUE_DUAL_BPC",
+    "issues": [],
+    "pricing_state": "INCOMPLETE_LIMIT",
+    "uses_true_dual_bpc_certificate": false,
+    "valid": true
+  },
+  "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+  "elapsed_sec": 1202.5574060130166,
+  "engine_hash_at_end": "a3be48f74fb8ec8a",
+  "engine_hash_at_start": "a3be48f74fb8ec8a",
+  "engine_hash_valid": true,
+  "exact_safe": false,
+  "final_judge_can_certify_no_negative": false,
+  "fixed_cut_screen_bound": 1.590184,
+  "fixed_cut_screen_gain": 0.00045700000000015173,
+  "history_summary": [
+    {
+      "added_column_count": 32,
+      "can_certify_no_negative": false,
+      "negative_escape_termination_reason": "timeout",
+      "negative_escape_triggered": false,
+      "node_lp_bound": 1.590184,
+      "pricing_state": "FOUND_NEGATIVE",
+      "raw_unique_negative_count": 50,
+      "round": 1,
+      "round_elapsed_wall_time_sec": 12.369517
+    },
+    {
+      "added_column_count": 1,
+      "can_certify_no_negative": false,
+      "negative_escape_termination_reason": "memory_limit",
+      "negative_escape_triggered": false,
+      "node_lp_bound": 1.590184,
+      "pricing_state": "FOUND_NEGATIVE",
+      "raw_unique_negative_count": 8,
+      "round": 2,
+      "round_elapsed_wall_time_sec": 642.388134
+    },
+    {
+      "added_column_count": 24,
+      "can_certify_no_negative": false,
+      "negative_escape_termination_reason": "timeout",
+      "negative_escape_triggered": false,
+      "node_lp_bound": 1.590184,
+      "pricing_state": "FOUND_NEGATIVE",
+      "raw_unique_negative_count": 26,
+      "round": 3,
+      "round_elapsed_wall_time_sec": 654.703386
+    },
+    {
+      "added_column_count": 0,
+      "can_certify_no_negative": false,
+      "negative_escape_termination_reason": "",
+      "negative_escape_triggered": false,
+      "node_lp_bound": 1.590184,
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "raw_unique_negative_count": 0,
+      "round": 4,
+      "round_elapsed_wall_time_sec": 1202.236718
+    }
+  ],
+  "initial_column_count": 5899,
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_008_logical_graph.json",
+  "live_sri_separation_history": [],
+  "live_sri_terminal_reason": "PRICING_NOT_CERTIFIED_BEFORE_SEPARATION",
+  "manual_rc_audit_pass": true,
+  "node_lp_bound": 1.590184,
+  "node_lp_bound_official": false,
+  "node_status": "NODE_INCOMPLETE",
+  "pricing_lifecycle_scope": "tree_node",
+  "pricing_rc_audit_pass": false,
+  "pricing_round_count": 4,
+  "pricing_state": "INCOMPLETE_LIMIT",
+  "primal_columns": [
+    {
+      "column_index": 368,
+      "end_time": 1436.95163,
+      "lambda_value": 1.0,
+      "objective": 0.316502,
+      "sortie_count": 3,
+      "task_count": 11,
+      "tasks": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_030",
+        "ice_site_034",
+        "ice_site_037",
+        "ice_site_041",
+        "ice_site_044",
+        "ice_site_046"
+      ]
+    },
+    {
+      "column_index": 2616,
+      "end_time": 1419.186589,
+      "lambda_value": 1.0,
+      "objective": 0.28853,
+      "sortie_count": 3,
+      "task_count": 9,
+      "tasks": [
+        "ice_site_004",
+        "ice_site_015",
+        "ice_site_022",
+        "ice_site_031",
+        "ice_site_042",
+        "ice_site_045",
+        "ice_site_048",
+        "ice_site_049",
+        "ice_site_050"
+      ]
+    },
+    {
+      "column_index": 2779,
+      "cut_coefficients": {
+        "sri:d2:n3:ice_site_005,ice_site_032,ice_site_041": 1.0,
+        "sri:d2:n3:ice_site_006,ice_site_032,ice_site_034": 1.0
+      },
+      "end_time": 1524.777364,
+      "lambda_value": 1.0,
+      "objective": 0.328212,
+      "sortie_count": 4,
+      "task_count": 8,
+      "tasks": [
+        "ice_site_005",
+        "ice_site_006",
+        "ice_site_014",
+        "ice_site_020",
+        "ice_site_032",
+        "ice_site_038",
+        "ice_site_040",
+        "ice_site_047"
+      ]
+    },
+    {
+      "column_index": 3907,
+      "end_time": 1806.832209,
+      "lambda_value": 1.0,
+      "objective": 0.320573,
+      "sortie_count": 4,
+      "task_count": 10,
+      "tasks": [
+        "ice_site_007",
+        "ice_site_008",
+        "ice_site_011",
+        "ice_site_023",
+        "ice_site_024",
+        "ice_site_026",
+        "ice_site_029",
+        "ice_site_035",
+        "ice_site_036",
+        "ice_site_043"
+      ]
+    },
+    {
+      "column_index": 5665,
+      "cut_coefficients": {
+        "sri:d2:n3:ice_site_003,ice_site_028,ice_site_039": 1.0,
+        "sri:d2:n3:ice_site_003,ice_site_033,ice_site_039": 1.0
+      },
+      "end_time": 1422.42381,
+      "lambda_value": 1.0,
+      "objective": 0.336367,
+      "sortie_count": 3,
+      "task_count": 12,
+      "tasks": [
+        "ice_site_012",
+        "ice_site_013",
+        "ice_site_016",
+        "ice_site_017",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_021",
+        "ice_site_025",
+        "ice_site_027",
+        "ice_site_028",
+        "ice_site_033",
+        "ice_site_039"
+      ]
+    }
+  ],
+  "primal_integral": true,
+  "schema_version": "p0v4_sri_candidate_group_fixed_cut_replay.v1",
+  "source_active_columns_sha256": "d2153a87210d3d66d69e1787499796170d034078f3d1cfdc6c6b0114669bc65f",
+  "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_partial_escape_batch_candidate_v3_full_scale50_20260731/scale_050/pools/scale_050/instance_008/stage_001/probe.json",
+  "source_probe_sha256": "beac5c7a1894eda06773c981c6278a4661c4953184183fb9aae668c5129a43db",
+  "violated_sri_count": 111,
+  "wall_time_limit_sec": 1200.0
+}

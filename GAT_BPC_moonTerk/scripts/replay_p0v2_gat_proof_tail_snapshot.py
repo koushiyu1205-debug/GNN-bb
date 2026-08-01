@@ -67,6 +67,16 @@ def main() -> int:
     parser.add_argument("--negative-eps", type=float, default=1.0e-6)
     parser.add_argument("--dominance-eps", type=float, default=1.0e-12)
     parser.add_argument("--resource-eps", type=float, default=1.0e-9)
+    parser.add_argument(
+        "--negative-escape-batch-size",
+        type=int,
+        choices=(0, 64, 128, 256),
+        default=0,
+        help=(
+            "Enable P0V4 diverse negative escape with raw pool 4K; "
+            "zero preserves the exhaustive replay control."
+        ),
+    )
     args = parser.parse_args()
 
     snapshot = load_pricing_snapshot(args.snapshot)
@@ -100,6 +110,7 @@ def main() -> int:
         f"queue_{args.proof_queue_policy}."
         f"completion_bound_{args.completion_bound}."
         f"subset_dominance_{args.subset_dominance}"
+        f".negative_escape_e{int(args.negative_escape_batch_size)}"
     )
     config_hash = stable_payload_hash(
         {
@@ -111,6 +122,18 @@ def main() -> int:
             "negative_eps": abs(float(args.negative_eps)),
             "dominance_eps": abs(float(args.dominance_eps)),
             "resource_eps": abs(float(args.resource_eps)),
+            "exact_negative_escape_enabled": bool(
+                args.negative_escape_batch_size
+            ),
+            "exact_admission_batch_size": max(
+                1, int(args.negative_escape_batch_size or 1)
+            ),
+            "exact_raw_negative_pool_size": max(
+                4, 4 * int(args.negative_escape_batch_size or 1)
+            ),
+            "exact_negative_escape_policy_id": (
+                "diverse_raw_4x_then_p0v4_selector_v1"
+            ),
         }
     )
     request = BackendPricingRequest(
@@ -131,6 +154,18 @@ def main() -> int:
         negative_eps=abs(float(args.negative_eps)),
         dominance_eps=abs(float(args.dominance_eps)),
         resource_eps=abs(float(args.resource_eps)),
+        exact_negative_escape_enabled=bool(
+            args.negative_escape_batch_size
+        ),
+        exact_admission_batch_size=max(
+            1, int(args.negative_escape_batch_size or 1)
+        ),
+        exact_raw_negative_pool_size=max(
+            4, 4 * int(args.negative_escape_batch_size or 1)
+        ),
+        exact_negative_escape_policy_id=(
+            "diverse_raw_4x_then_p0v4_selector_v1"
+        ),
         completion_bound_enabled=completion_bound,
         subset_dominance_enabled=subset_dominance,
         proof_queue_policy_id=args.proof_queue_policy,
@@ -182,6 +217,15 @@ def main() -> int:
         "proof_queue_policy_id": args.proof_queue_policy,
         "completion_bound_enabled": completion_bound,
         "subset_dominance_enabled": subset_dominance,
+        "exact_negative_escape_enabled": bool(
+            args.negative_escape_batch_size
+        ),
+        "exact_admission_batch_size": int(
+            args.negative_escape_batch_size
+        ),
+        "exact_raw_negative_pool_size": (
+            4 * int(args.negative_escape_batch_size)
+        ),
         "negative_eps": abs(float(args.negative_eps)),
         "dominance_eps": abs(float(args.dominance_eps)),
         "resource_eps": abs(float(args.resource_eps)),
@@ -212,6 +256,10 @@ def main() -> int:
                 "dominance_candidate_checks",
                 "max_visited_bucket_size",
                 "solution_count",
+                "negative_escape_enabled",
+                "negative_escape_triggered",
+                "raw_unique_negative_count",
+                "negative_escape_termination_reason",
                 "completion_bound_evaluated_labels",
                 "completion_bound_pruned_labels",
                 "subset_dominance_rejected_labels",

@@ -1,0 +1,117 @@
+[
+  {
+    "action_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/02136d92173a24561c6d1d934e11180a2491413048af59fc4429c78df6894a19.json",
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_p0v4_one_deviation_oracle.py",
+      "--action-manifest",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/02136d92173a24561c6d1d934e11180a2491413048af59fc4429c78df6894a19.json",
+      "--opportunity-census",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/opportunity_census.json",
+      "--fixed-k-selection",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json",
+      "--instance",
+      "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_030/instance_003_logical_graph.json",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/02136d92173a24561c6d1d934e11180a2491413048af59fc4429c78df6894a19",
+      "--promotion-arm-count",
+      "2",
+      "--engineering-smoke"
+    ],
+    "context_output": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/02136d92173a24561c6d1d934e11180a2491413048af59fc4429c78df6894a19",
+    "instance": "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_030/instance_003_logical_graph.json",
+    "status": "DRY_RUN"
+  },
+  {
+    "action_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/19ba0d7fd48345e534ccd9363b31a4edbcf8c0895034764105c2ec49316a14b9.json",
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_p0v4_one_deviation_oracle.py",
+      "--action-manifest",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/19ba0d7fd48345e534ccd9363b31a4edbcf8c0895034764105c2ec49316a14b9.json",
+      "--opportunity-census",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/opportunity_census.json",
+      "--fixed-k-selection",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json",
+      "--instance",
+      "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_004_logical_graph.json",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/19ba0d7fd48345e534ccd9363b31a4edbcf8c0895034764105c2ec49316a14b9",
+      "--promotion-arm-count",
+      "2",
+      "--engineering-smoke"
+    ],
+    "context_output": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/19ba0d7fd48345e534ccd9363b31a4edbcf8c0895034764105c2ec49316a14b9",
+    "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_004_logical_graph.json",
+    "status": "DRY_RUN"
+  },
+  {
+    "action_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/0210aa7ed867d6f5571a1b6f0b747f89d9bc5d7a1aae8f3b245de80c58d2403a.json",
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_p0v4_one_deviation_oracle.py",
+      "--action-manifest",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/0210aa7ed867d6f5571a1b6f0b747f89d9bc5d7a1aae8f3b245de80c58d2403a.json",
+      "--opportunity-census",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/opportunity_census.json",
+      "--fixed-k-selection",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json",
+      "--instance",
+      "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_002_logical_graph.json",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/0210aa7ed867d6f5571a1b6f0b747f89d9bc5d7a1aae8f3b245de80c58d2403a",
+      "--promotion-arm-count",
+      "2",
+      "--engineering-smoke"
+    ],
+    "context_output": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/0210aa7ed867d6f5571a1b6f0b747f89d9bc5d7a1aae8f3b245de80c58d2403a",
+    "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_002_logical_graph.json",
+    "status": "DRY_RUN"
+  },
+  {
+    "action_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/013541d44c6d1e555276bbd6075d5c380782578ef6d9d73f7c345707d574417b.json",
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_p0v4_one_deviation_oracle.py",
+      "--action-manifest",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/013541d44c6d1e555276bbd6075d5c380782578ef6d9d73f7c345707d574417b.json",
+      "--opportunity-census",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/opportunity_census.json",
+      "--fixed-k-selection",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json",
+      "--instance",
+      "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_030/instance_004_logical_graph.json",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/013541d44c6d1e555276bbd6075d5c380782578ef6d9d73f7c345707d574417b",
+      "--promotion-arm-count",
+      "2",
+      "--engineering-smoke"
+    ],
+    "context_output": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/013541d44c6d1e555276bbd6075d5c380782578ef6d9d73f7c345707d574417b",
+    "instance": "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_030/instance_004_logical_graph.json",
+    "status": "DRY_RUN"
+  },
+  {
+    "action_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/027eeddadabec63531439662a3ea72f2278c5d767f165ac6f1a24ce534c9f8eb.json",
+    "command": [
+      "/home/kai/miniconda3/bin/python",
+      "/home/kai/work/GAT_BPC_moonTerk/scripts/run_p0v4_one_deviation_oracle.py",
+      "--action-manifest",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/action_manifests/027eeddadabec63531439662a3ea72f2278c5d767f165ac6f1a24ce534c9f8eb.json",
+      "--opportunity-census",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_census_pilot_20260731/opportunity_census.json",
+      "--fixed-k-selection",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json",
+      "--instance",
+      "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_030/instance_001_logical_graph.json",
+      "--output-dir",
+      "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/027eeddadabec63531439662a3ea72f2278c5d767f165ac6f1a24ce534c9f8eb",
+      "--promotion-arm-count",
+      "2",
+      "--engineering-smoke"
+    ],
+    "context_output": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_engineering_smoke_suite_scale30_20260731_dry/scale_030/027eeddadabec63531439662a3ea72f2278c5d767f165ac6f1a24ce534c9f8eb",
+    "instance": "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_030/instance_001_logical_graph.json",
+    "status": "DRY_RUN"
+  }
+]

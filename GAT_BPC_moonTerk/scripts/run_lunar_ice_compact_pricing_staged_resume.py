@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -48,6 +49,24 @@ def main() -> int:
     parser.add_argument("--tail-dual-stabilization-enabled", action="store_true")
     parser.add_argument("--tail-dual-stabilization-alpha", type=float, default=0.7)
     parser.add_argument("--tail-dual-stabilization-window", type=int, default=5)
+    parser.add_argument(
+        "--one-deviation-sparse-tail-fixed-action",
+        choices=("NOOP", "S1", "S4"),
+        default="NOOP",
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-time-cap-sec",
+        type=float,
+        default=60.0,
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-gat-manifest",
+        default="",
+    )
+    parser.add_argument(
+        "--one-deviation-sparse-tail-gat-evaluation-mode",
+        action="store_true",
+    )
     parser.add_argument("--negative-search-cap-sec", type=float, default=60.0)
     parser.add_argument(
         "--compact-optimization-harvest-target",
@@ -173,7 +192,27 @@ def main() -> int:
     parser.add_argument("--no-stop-on-certificate", dest="stop_on_certificate", action="store_false")
     args = parser.parse_args()
 
+    if (
+        args.one_deviation_sparse_tail_fixed_action != "NOOP"
+        and str(args.one_deviation_sparse_tail_gat_manifest).strip()
+    ):
+        parser.error("fixed sparse-tail action and GAT manifest are exclusive")
+    if (
+        args.one_deviation_sparse_tail_gat_evaluation_mode
+        and not str(args.one_deviation_sparse_tail_gat_manifest).strip()
+    ):
+        parser.error("sparse-tail GAT evaluation mode requires a manifest")
+
     instance_path = _resolve(args.instance)
+    gat_manifest_path = (
+        _resolve(args.one_deviation_sparse_tail_gat_manifest).resolve()
+        if str(args.one_deviation_sparse_tail_gat_manifest).strip()
+        else None
+    )
+    if gat_manifest_path is not None and not gat_manifest_path.is_file():
+        raise SystemExit(
+            f"sparse-tail GAT manifest is missing: {gat_manifest_path}"
+        )
     output_dir = _resolve(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / "staged_resume_manifest.json"
@@ -205,6 +244,21 @@ def main() -> int:
             "tail_dual_stabilization_enabled": bool(args.tail_dual_stabilization_enabled),
             "tail_dual_stabilization_alpha": float(args.tail_dual_stabilization_alpha),
             "tail_dual_stabilization_window": int(args.tail_dual_stabilization_window),
+            "one_deviation_sparse_tail_fixed_action": str(
+                args.one_deviation_sparse_tail_fixed_action
+            ),
+            "one_deviation_sparse_tail_time_cap_sec": float(
+                args.one_deviation_sparse_tail_time_cap_sec
+            ),
+            "one_deviation_sparse_tail_gat_manifest": (
+                "" if gat_manifest_path is None else str(gat_manifest_path)
+            ),
+            "one_deviation_sparse_tail_gat_manifest_sha256": (
+                "" if gat_manifest_path is None else _sha256(gat_manifest_path)
+            ),
+            "one_deviation_sparse_tail_gat_evaluation_mode": bool(
+                args.one_deviation_sparse_tail_gat_evaluation_mode
+            ),
             "negative_search_cap_sec": float(args.negative_search_cap_sec),
             "compact_optimization_harvest_target": int(args.compact_optimization_harvest_target),
             "compact_optimization_harvest_no_good_scope": str(
@@ -256,8 +310,23 @@ def main() -> int:
             str(args.worker_pricer_kind),
             "--batch-target",
             str(int(args.batch_target)),
+            "--one-deviation-sparse-tail-fixed-action",
+            str(args.one_deviation_sparse_tail_fixed_action),
+            "--one-deviation-sparse-tail-time-cap-sec",
+            str(float(args.one_deviation_sparse_tail_time_cap_sec)),
             "--write-active-columns",
         ]
+        if gat_manifest_path is not None:
+            command.extend(
+                (
+                    "--one-deviation-sparse-tail-gat-manifest",
+                    str(gat_manifest_path),
+                )
+            )
+            if bool(args.one_deviation_sparse_tail_gat_evaluation_mode):
+                command.append(
+                    "--one-deviation-sparse-tail-gat-evaluation-mode"
+                )
         if bool(args.tail_dual_stabilization_enabled):
             command.append("--tail-dual-stabilization-enabled")
         command.extend(
@@ -371,6 +440,14 @@ def main() -> int:
 def _resolve(path: str | Path) -> Path:
     raw = Path(path)
     return raw if raw.is_absolute() else ROOT / raw
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _prepend_pythonpath(existing: str, path: Path) -> str:

@@ -1,0 +1,43 @@
+{
+  "freeze_scope": {
+    "scale30_full20_required": true,
+    "scale50_full_run_requested": false,
+    "scale50_singleton_boundary_preserved": true,
+    "six_scale_promotion_claimed": false
+  },
+  "historical_control_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "scale30": {
+    "candidate_max_sec": 846.962641,
+    "candidate_mean_sec": 151.2165995,
+    "candidate_p50_sec": 63.3728365,
+    "candidate_total_sec": 3024.33199,
+    "control_max_sec": 1157.471105,
+    "control_mean_sec": 197.31347915,
+    "control_p50_sec": 79.579199,
+    "control_total_sec": 3946.2695830000002,
+    "exact_count": 20,
+    "improved_count": 19,
+    "incomplete_count": 0,
+    "instance_content_hash_mismatch_count": 0,
+    "max_objective_delta": 1.000000000139778e-06,
+    "mean_ratio": 0.7663774423897487,
+    "objective_tolerance": 1.1e-06,
+    "paired_geometric_mean_ratio": 0.7631794932365457,
+    "paired_median_ratio": 0.7325719721260242,
+    "redline_count": 0,
+    "regressed_count": 1,
+    "row_count": 20
+  },
+  "scale50_instance001": {
+    "effective_memory_limit_gb": 10.867122,
+    "exact_count": 0,
+    "exact_root_closure": false,
+    "fail_closed_count": 1,
+    "full_scale50_run_complete": false,
+    "redlines_zero": true,
+    "root_added_column_count": 13173,
+    "solver_wall_sec": 3594.280144,
+    "status": "FAIL_CLOSED"
+  },
+  "schema_version": "lunar_ice_bpc.p0v4_validation_summary.v1"
+}

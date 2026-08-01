@@ -1,0 +1,124 @@
+model_id: P0V4_BATCH_ADMISSION_ONLY
+live_sri_policy: P0
+cold_start: true
+minimum_runtime_memory_gb: 1
+native_completion_bound_enabled: false
+native_subset_dominance_enabled: true
+native_cut_state_enabled: true
+native_final_judge_pass_policy: harvest_then_proof
+native_final_judge_pass_policy_by_scale:
+  '30': branch_adaptive_sparse_harvest_v1
+native_adaptive_harvest_cap_sec_by_scale:
+  '30': 2.0
+profiles:
+  '5':
+    worker_max_tasks: 5
+    exact_max_tasks: 5
+    ng_sizes:
+    - 3
+    - 5
+    harvest_target: 8
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 10
+    memory_limit_gb: 2
+    backend_id: native_rcspp_inprocess
+    graph_cache_entries: 4
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 15
+    tree_max_branch_depth: 4
+  '10':
+    worker_max_tasks: 10
+    exact_max_tasks: 10
+    ng_sizes:
+    - 4
+    - 7
+    - 10
+    harvest_target: 16
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 30
+    memory_limit_gb: 4
+    backend_id: native_rcspp_inprocess
+    graph_cache_entries: 2
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 63
+    tree_max_branch_depth: 6
+  '20':
+    worker_max_tasks: 20
+    exact_max_tasks: 20
+    ng_sizes:
+    - 6
+    - 10
+    - 14
+    - 20
+    harvest_target: 32
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 90
+    memory_limit_gb: 8
+    backend_id: native_rcspp_inprocess
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 127
+    tree_max_branch_depth: 8
+  '30':
+    worker_max_tasks: 30
+    exact_max_tasks: 30
+    ng_sizes:
+    - 6
+    - 10
+    - 14
+    - 30
+    harvest_target: 64
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 180
+    memory_limit_gb: 16
+    backend_id: native_rcspp_inprocess
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 255
+    tree_max_branch_depth: 12
+  '50':
+    worker_max_tasks: 50
+    exact_max_tasks: 50
+    ng_sizes:
+    - 8
+    - 16
+    - 32
+    - 50
+    harvest_target: 128
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 300
+    memory_limit_gb: 16
+    backend_id: native_rcspp_host
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 511
+    tree_max_branch_depth: 16
+  '100':
+    worker_max_tasks: 100
+    exact_max_tasks: 100
+    ng_sizes:
+    - 10
+    - 20
+    - 40
+    - 70
+    - 100
+    harvest_target: 128
+    row_time_limit_sec: 3600
+    worker_time_limit_sec: 300
+    memory_limit_gb: 8
+    backend_id: native_rcspp_host
+    graph_cache_entries: 1
+    tree_max_rounds: 16
+    tree_max_columns_per_round: 128
+    tree_max_nodes: 1023
+    tree_max_branch_depth: 24
+exact_negative_escape_enabled: false
+batch_master_admission_enabled: true
+one_deviation_gat_deployment_manifest: ''
+production_default: false
+paper_ablation_id: P0V4_BATCH_ADMISSION

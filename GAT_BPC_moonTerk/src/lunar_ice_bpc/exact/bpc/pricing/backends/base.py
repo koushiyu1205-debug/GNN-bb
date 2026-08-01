@@ -31,6 +31,16 @@ BACKEND_OBJECTIVE_PHASE_ONE = "phase_one"
 BACKEND_OBJECTIVE_MODES = frozenset(
     {BACKEND_OBJECTIVE_OFFICIAL, BACKEND_OBJECTIVE_PHASE_ONE}
 )
+PRICING_LIFECYCLE_SCOPE_UNSPECIFIED = "unspecified"
+PRICING_LIFECYCLE_SCOPE_ROOT_CG = "root_cg"
+PRICING_LIFECYCLE_SCOPE_TREE_NODE = "tree_node"
+PRICING_LIFECYCLE_SCOPES = frozenset(
+    {
+        PRICING_LIFECYCLE_SCOPE_UNSPECIFIED,
+        PRICING_LIFECYCLE_SCOPE_ROOT_CG,
+        PRICING_LIFECYCLE_SCOPE_TREE_NODE,
+    }
+)
 PROOF_QUEUE_POLICY_Q0 = "Q0"
 PROOF_QUEUE_POLICY_QC0 = "QC0"
 PROOF_QUEUE_POLICY_QD1 = "QD1"
@@ -61,6 +71,23 @@ PROOF_QUEUE_EXPERIMENT_MODES = frozenset(
         PROOF_QUEUE_EXPERIMENT_SCALE30_QD1,
         PROOF_QUEUE_EXPERIMENT_SCALE30_BRANCH_OR_CUT_QD1,
     }
+)
+DSSR_POLICY_VERSION_V1 = "multi_sortie_counterexample_refinement_v1"
+DSSR_POLICY_VERSION_V2 = (
+    "multi_sortie_counterexample_pressure_refinement_v2"
+)
+DSSR_POLICY_VERSION_NG_V3 = (
+    "multi_sortie_ng_memory_counterexample_refinement_v3"
+)
+DSSR_POLICY_VERSIONS = frozenset(
+    {
+        DSSR_POLICY_VERSION_V1,
+        DSSR_POLICY_VERSION_V2,
+        DSSR_POLICY_VERSION_NG_V3,
+    }
+)
+EXACT_NEGATIVE_ESCAPE_POLICY_V1 = (
+    "diverse_raw_4x_then_p0v4_selector_v1"
 )
 
 
@@ -128,9 +155,18 @@ class BackendPricingRequest:
     true_duals: JourneyDuals
     mode: str = BACKEND_MODE_EXACT_PROOF
     objective_mode: str = BACKEND_OBJECTIVE_OFFICIAL
+    pricing_lifecycle_scope: str = (
+        PRICING_LIFECYCLE_SCOPE_UNSPECIFIED
+    )
     branch_context: BranchContext = field(default_factory=BranchContext)
     cut_context: CutContext = field(default_factory=CutContext)
     harvest_target: int = 16
+    exact_negative_escape_enabled: bool = False
+    exact_admission_batch_size: int = 16
+    exact_raw_negative_pool_size: int = 64
+    exact_negative_escape_policy_id: str = (
+        EXACT_NEGATIVE_ESCAPE_POLICY_V1
+    )
     harvest_max_processed_labels: int = 0
     wall_time_limit_sec: float | None = None
     memory_limit_gb: float = 0.0
@@ -143,6 +179,12 @@ class BackendPricingRequest:
     proof_queue_policy_id: str = PROOF_QUEUE_POLICY_Q0
     proof_queue_guidance_bucket_width: float = 0.01
     dssr_enabled: bool = False
+    dssr_policy_version: str = ""
+    dssr_negative_batch_target: int = 0
+    dssr_pressure_refinement_enabled: bool = False
+    dssr_pressure_max_bucket_size: int = 8192
+    dssr_pressure_max_candidate_checks: int = 200_000_000
+    ng_dssr_initial_neighborhood_size: int = 10
     cut_dual_projection_enabled: bool = True
     cut_state_enabled: bool = False
     instance_hash: str = ""
@@ -173,7 +215,59 @@ class BackendPricingRequest:
         if objective_mode not in BACKEND_OBJECTIVE_MODES:
             raise ValueError(f"unsupported backend objective mode {objective_mode!r}")
         object.__setattr__(self, "objective_mode", objective_mode)
+        pricing_lifecycle_scope = str(
+            self.pricing_lifecycle_scope
+        ).strip().lower()
+        if pricing_lifecycle_scope not in PRICING_LIFECYCLE_SCOPES:
+            raise ValueError(
+                "unsupported pricing_lifecycle_scope "
+                f"{pricing_lifecycle_scope!r}"
+            )
+        object.__setattr__(
+            self,
+            "pricing_lifecycle_scope",
+            pricing_lifecycle_scope,
+        )
         object.__setattr__(self, "harvest_target", max(1, int(self.harvest_target)))
+        escape_enabled = bool(self.exact_negative_escape_enabled)
+        admission_batch_size = int(self.exact_admission_batch_size)
+        raw_pool_size = int(self.exact_raw_negative_pool_size)
+        escape_policy_id = str(self.exact_negative_escape_policy_id)
+        if admission_batch_size <= 0:
+            raise ValueError(
+                "exact_admission_batch_size must be positive"
+            )
+        if raw_pool_size < admission_batch_size:
+            raise ValueError(
+                "exact_raw_negative_pool_size must be at least "
+                "exact_admission_batch_size"
+            )
+        if raw_pool_size > 4096:
+            raise ValueError(
+                "exact_raw_negative_pool_size cannot exceed 4096"
+            )
+        if escape_enabled:
+            if mode != BACKEND_MODE_EXACT_PROOF:
+                raise ValueError(
+                    "exact negative escape is available only in exact-proof mode"
+                )
+            if escape_policy_id != EXACT_NEGATIVE_ESCAPE_POLICY_V1:
+                raise ValueError(
+                    "unsupported exact_negative_escape_policy_id "
+                    f"{escape_policy_id!r}"
+                )
+        object.__setattr__(
+            self, "exact_negative_escape_enabled", escape_enabled
+        )
+        object.__setattr__(
+            self, "exact_admission_batch_size", admission_batch_size
+        )
+        object.__setattr__(
+            self, "exact_raw_negative_pool_size", raw_pool_size
+        )
+        object.__setattr__(
+            self, "exact_negative_escape_policy_id", escape_policy_id
+        )
         object.__setattr__(
             self,
             "harvest_max_processed_labels",
@@ -240,9 +334,73 @@ class BackendPricingRequest:
             guidance_bucket_width,
         )
         object.__setattr__(self, "dssr_enabled", bool(self.dssr_enabled))
+        if self.dssr_enabled and self.exact_negative_escape_enabled:
+            raise ValueError(
+                "exact negative escape and DSSR cannot be enabled together"
+            )
         if self.dssr_enabled and mode != BACKEND_MODE_EXACT_PROOF:
             raise ValueError(
                 "DSSR relaxation is available only for exact-proof pricing"
+            )
+        dssr_policy_version = str(self.dssr_policy_version)
+        if self.dssr_enabled and not dssr_policy_version:
+            dssr_policy_version = DSSR_POLICY_VERSION_V1
+        if (
+            dssr_policy_version
+            and dssr_policy_version not in DSSR_POLICY_VERSIONS
+        ):
+            raise ValueError(
+                f"unsupported dssr_policy_version {dssr_policy_version!r}"
+            )
+        object.__setattr__(
+            self,
+            "dssr_policy_version",
+            dssr_policy_version,
+        )
+        dssr_batch_target = int(self.dssr_negative_batch_target)
+        if dssr_batch_target <= 0:
+            dssr_batch_target = min(self.harvest_target, 64)
+        object.__setattr__(
+            self,
+            "dssr_negative_batch_target",
+            max(1, min(dssr_batch_target, 64)),
+        )
+        object.__setattr__(
+            self,
+            "dssr_pressure_refinement_enabled",
+            bool(self.dssr_pressure_refinement_enabled),
+        )
+        object.__setattr__(
+            self,
+            "dssr_pressure_max_bucket_size",
+            max(0, int(self.dssr_pressure_max_bucket_size)),
+        )
+        object.__setattr__(
+            self,
+            "dssr_pressure_max_candidate_checks",
+            max(0, int(self.dssr_pressure_max_candidate_checks)),
+        )
+        object.__setattr__(
+            self,
+            "ng_dssr_initial_neighborhood_size",
+            max(
+                1,
+                min(
+                    int(self.ng_dssr_initial_neighborhood_size),
+                    int(self.data.scale),
+                ),
+            ),
+        )
+        if (
+            self.dssr_enabled
+            and self.dssr_pressure_refinement_enabled
+            and (
+                self.dssr_pressure_max_bucket_size <= 0
+                or self.dssr_pressure_max_candidate_checks <= 0
+            )
+        ):
+            raise ValueError(
+                "DSSR pressure thresholds must be positive when enabled"
             )
         if proof_queue_selector != PROOF_QUEUE_EXPERIMENT_OFF:
             object.__setattr__(

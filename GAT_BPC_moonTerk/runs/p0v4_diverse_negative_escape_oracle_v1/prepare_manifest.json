@@ -1,0 +1,22 @@
+{
+  "arm_configs": {
+    "E128": {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/arm_configs/E128.yaml",
+      "sha256": "c832dfb7d72c3ae9ae2bdd899d0d66d1771067810bcca2ae00b3ff298b9bd2ed"
+    },
+    "E256": {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/arm_configs/E256.yaml",
+      "sha256": "61625c36d22ccd9f0cac6ad1cdc1f08a17bbe2a3d167d1c6b63986dc863a3ee2"
+    },
+    "E64": {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_diverse_negative_escape_oracle_v1/arm_configs/E64.yaml",
+      "sha256": "e93ed448680d8eacb5f9f99093703609e2e319609318d60b4ac85814b30cd127"
+    }
+  },
+  "experiment_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v4_diverse_negative_escape_oracle_v1.yaml",
+  "experiment_config_sha256": "edb89bd973025f776c7d03648f8124fd8f97b22ebfd1f5484841f6614eeb75a3",
+  "frozen_control_verified": true,
+  "production_default_changed": false,
+  "schema_version": "lunar_ice_bpc.p0v4_diverse_escape_prepare.v1",
+  "status": "PREPARED"
+}

@@ -1,0 +1,32 @@
+{
+  "all_passed": true,
+  "schema_version": "lunar_ice_bpc.freeze_test_results.v1",
+  "tests": [
+    {
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-memory-opt-v2",
+        "--output-on-failure"
+      ],
+      "name": "ctest",
+      "returncode": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "eb06b3d6e012676487637405d03a15cb693f362c2eff44dac607baa56c17bbdc"
+    },
+    {
+      "command": [
+        "/home/kai/miniconda3/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/native/test_native_spprc_backend.py",
+        "tests/test_lunar_ice_labeling_pricer.py"
+      ],
+      "name": "pytest",
+      "returncode": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "f82339765c4432bfa948d8ed7df6bf8a895193002715b4efa6f2d7468c824a05"
+    }
+  ]
+}

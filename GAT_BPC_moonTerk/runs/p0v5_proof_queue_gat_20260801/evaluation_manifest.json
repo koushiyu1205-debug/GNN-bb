@@ -1,0 +1,68 @@
+{
+  "allowed_exact_config_hashes": [],
+  "allowed_exact_engine_hashes": [],
+  "allowed_scales": [
+    20,
+    30,
+    50
+  ],
+  "calibration": {
+    "beneficial_precision_95_lower": null,
+    "expected_gain_threshold": 1.0,
+    "gate_pass": false,
+    "harmful_action_rate_95_upper": null,
+    "probability_threshold": 1.0
+  },
+  "can_certify": false,
+  "can_change_bound": false,
+  "can_filter": false,
+  "can_prune": false,
+  "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/proof_queue_gat_final.pt",
+  "checkpoint_sha256": "2671f7dcca0b6ac36b0179e876d887484e43da2d72be7c553518776ffa67c83f",
+  "deployment_authorized": false,
+  "evaluation_authorized": true,
+  "evaluation_force_qg1": true,
+  "fallback": "P0V4_V5_Q0",
+  "feature_envelope": {
+    "context_max": [
+      3.4339872044851463,
+      -0.000545,
+      0.10008924999999999,
+      0.06852454761543486,
+      0.02886,
+      0.266950333,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "context_min": [
+      3.044522437723423,
+      -0.096075,
+      0.05338143333333333,
+      0.03685589899621025,
+      -0.041596,
+      0.129452,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "edge_max_abs": 21.107477,
+    "node_max_abs": 3.569529,
+    "relative_margin": 0.25
+  },
+  "grouped_oof_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_proof_queue_gat_20260801/grouped_oof_summary.json",
+  "grouped_oof_summary_sha256": "3f7540610179a49eb87c076e1ca7b71fe70efa2bb5aa2d7eee40ad5c310cfd9e",
+  "ood_policy_version": "precall_feature_envelope.v1",
+  "ordering_only": true,
+  "runtime_implementation_hash": "eda572abe15df747a07fd4881bd57ae63842f6fa38b8f63353836e2cfb1c8d48",
+  "runtime_policy_id": "exact_qg1_arc_order_only_fail_closed_v1",
+  "schema_version": "lunar_ice_bpc.p0v5_proof_queue_gat_manifest.v1",
+  "torch_num_threads": 1,
+  "training_data_hash": "8eae734b4d1a77f3fd46e6c13e0b19422b93312adfa470d82445603cfbf5ff81"
+}

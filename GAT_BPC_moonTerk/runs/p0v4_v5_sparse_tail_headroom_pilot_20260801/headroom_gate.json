@@ -1,0 +1,52 @@
+{
+  "action_call_headroom_threshold_fraction": 0.08,
+  "context_expansion_authorized": false,
+  "deployment_authorized": false,
+  "development_model_prototype_authorized": true,
+  "evidence_scope": "two_pre_registered_mathematical_context_replays_only",
+  "formal_gat_training_authorized": false,
+  "formal_training_blockers": [
+    "only_two_counterfactual_contexts",
+    "end_to_end_cg_round_debt_unmeasured",
+    "no_held_out_instance_level_gain_measurement"
+  ],
+  "next_step": "run_one_bounded_end_to_end_shadow_oracle_pilot_with_the_opt_in_once_per_root_runtime; do_not expand the route-promotion_census",
+  "rows": [
+    {
+      "action_call_wall_gain_fraction": 0.9484250835184413,
+      "action_to_source_wall_ratio": 0.051574916481558666,
+      "artifact": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_headroom_pilot_20260801/scale30_instance003_round049_S1_margin3e6.json",
+      "artifact_status": "SAFE_REPLAY_COMPLETE",
+      "audited_true_negative_count": 1,
+      "best_found_true_rc": -0.002304,
+      "certificate_authority": "none",
+      "host_peak_rss_bytes": 0,
+      "issues": [],
+      "next_round_policy": "restore_frozen_v5",
+      "safety_pass": true,
+      "scale": 30,
+      "source_proof_wall_sec": 212.448192,
+      "source_round": 49,
+      "sparse_action_wall_sec": 10.95699775905814
+    },
+    {
+      "action_call_wall_gain_fraction": 0.9438280205065768,
+      "action_to_source_wall_ratio": 0.05617197949342325,
+      "artifact": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_headroom_pilot_20260801/scale50_instance001_round091_S1_margin3e6.json",
+      "artifact_status": "SAFE_REPLAY_COMPLETE",
+      "audited_true_negative_count": 1,
+      "best_found_true_rc": -0.004207,
+      "certificate_authority": "none",
+      "host_peak_rss_bytes": 1078886400,
+      "issues": [],
+      "next_round_policy": "restore_frozen_v5",
+      "safety_pass": true,
+      "scale": 50,
+      "source_proof_wall_sec": 666.954081,
+      "source_round": 91,
+      "sparse_action_wall_sec": 37.46413096098695
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.sparse_tail_headroom_gate.v1",
+  "status": "SPARSE_TAIL_ACTION_HEADROOM_GATE_PASSED"
+}

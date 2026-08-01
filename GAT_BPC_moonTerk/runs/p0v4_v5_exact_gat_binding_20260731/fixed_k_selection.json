@@ -1,0 +1,102 @@
+{
+  "admission_batch_size_by_scale": {
+    "10": 16,
+    "20": 32,
+    "30": 64,
+    "5": 8,
+    "50": 128
+  },
+  "backend_id": "native_rcspp_bidirectional_root_partial_hybrid_v3",
+  "candidate_manufacturing_used": false,
+  "correctness_redline_count": 0,
+  "engine_build_hash": "a3be48f74fb8ec8a",
+  "formal_e64_e128_e256_development_oracle_complete": false,
+  "formal_exact_promotion_authorized": false,
+  "gat_opportunity_and_oracle_development_authorized": true,
+  "note": "This binding fixes V5/E128 only for GAT opportunity, oracle, training, and calibration development. Formal Exact promotion remains gated by the registered full acceptance protocol.",
+  "production_default_changed": false,
+  "raw_negative_pool_size_by_scale": {
+    "10": 64,
+    "20": 128,
+    "30": 256,
+    "5": 32,
+    "50": 512
+  },
+  "scale50_targeted_evidence": {
+    "exact_count": 3,
+    "redlines_zero": true,
+    "row_count": 3,
+    "rows": [
+      {
+        "algorithm_status": "BPC_OPTIMAL",
+        "cold_start_total_sec": 991.586073,
+        "instance_key": "instance_005",
+        "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_005_probe_20260731/native_spprc_acceptance_summary.json",
+        "summary_sha256": "84ee1bae342e2b0a6c670bae8b0f97eedca8a1134a67351563d52f2abca32884"
+      },
+      {
+        "algorithm_status": "BPC_OPTIMAL",
+        "cold_start_total_sec": 250.840685,
+        "instance_key": "instance_006",
+        "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_006_probe_20260731/native_spprc_acceptance_summary.json",
+        "summary_sha256": "a6a0ce9dd54091b4750dfe8ca65f3825efb8a1e7102a4ef88e19c63f3410261e"
+      },
+      {
+        "algorithm_status": "BPC_OPTIMAL",
+        "cold_start_total_sec": 1682.661645,
+        "instance_key": "instance_010",
+        "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_010_probe_20260731/native_spprc_acceptance_summary.json",
+        "summary_sha256": "e4c34fed095e028e645d007b8cdd463136cab4a2dc331122c66fdc545b68dba8"
+      }
+    ]
+  },
+  "schema_version": "lunar_ice_bpc.p0v4_v5_gat_exact_binding.v1",
+  "selected_arm": "V5_E128",
+  "selected_batch_size": 128,
+  "selected_config": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "selected_config_sha256": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+  "selected_raw_negative_pool_size": 512,
+  "selection_authority": "user_assumed_v5_plus_p0v4_for_gat_development_20260731",
+  "selection_basis": "measured_v5_small80_plus_targeted_scale50_evidence",
+  "small80_evidence": {
+    "10": {
+      "exact_count": 20,
+      "max_cold_start_total_sec": 3.259176,
+      "mean_cold_start_total_sec": 1.194223,
+      "redlines_zero": true,
+      "row_count": 20,
+      "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_full_small80_20260731/scale_010/b4_2_cold_exact_summary.json",
+      "summary_sha256": "c3594dbcdeb661b8697baa91e37756e2564b99db4380f0e472c136d274a746e8"
+    },
+    "20": {
+      "exact_count": 20,
+      "max_cold_start_total_sec": 97.118287,
+      "mean_cold_start_total_sec": 19.651638,
+      "redlines_zero": true,
+      "row_count": 20,
+      "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_full_small80_20260731/scale_020/b4_2_cold_exact_summary.json",
+      "summary_sha256": "b9d770a6f025d256df95ebea9c2c21b6cb36b6cdf306e48f5f83b3dc52128606"
+    },
+    "30": {
+      "exact_count": 20,
+      "max_cold_start_total_sec": 262.852607,
+      "mean_cold_start_total_sec": 81.036313,
+      "redlines_zero": true,
+      "row_count": 20,
+      "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_full_small80_20260731/scale_030/b4_2_cold_exact_summary.json",
+      "summary_sha256": "b7d957bab4b26f8e15bed0884da96e77a54bde4cf69263104a7a30adff63f507"
+    },
+    "5": {
+      "exact_count": 20,
+      "max_cold_start_total_sec": 0.514521,
+      "mean_cold_start_total_sec": 0.457576,
+      "redlines_zero": true,
+      "row_count": 20,
+      "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_full_small80_20260731/scale_005/b4_2_cold_exact_summary.json",
+      "summary_sha256": "ee33690b9edc90a3f203d4f0d77734390e6cd1ccfed32418fa197304c7a9d4ee"
+    }
+  },
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v4_bidirectional_sri_group_screen_all_scale_candidate_v5.yaml",
+  "source_config_sha256": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+  "status": "FIXED_K_SELECTED"
+}

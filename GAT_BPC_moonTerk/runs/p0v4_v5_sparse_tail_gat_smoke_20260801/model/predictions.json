@@ -1,0 +1,74 @@
+[
+  {
+    "action": "S1",
+    "beneficial": true,
+    "conditional_positive_relative_gain": 0.6474519371986389,
+    "context_id": "math_scale30_round049",
+    "expected_positive_relative_gain": 0.3485652347971069,
+    "observed": true,
+    "positive_probability": 0.5383646488189697,
+    "runtime_eligible": false,
+    "source_role": "mathematical_context_only",
+    "split": "train"
+  },
+  {
+    "action": "S4",
+    "beneficial": false,
+    "conditional_positive_relative_gain": 0.6359734535217285,
+    "context_id": "math_scale30_round049",
+    "expected_positive_relative_gain": 0.3325540348546099,
+    "observed": false,
+    "positive_probability": 0.5229055285453796,
+    "runtime_eligible": false,
+    "source_role": "mathematical_context_only",
+    "split": "train"
+  },
+  {
+    "action": "S1",
+    "beneficial": true,
+    "conditional_positive_relative_gain": 0.5801435112953186,
+    "context_id": "math_scale50_round091",
+    "expected_positive_relative_gain": 0.29536580392335665,
+    "observed": true,
+    "positive_probability": 0.5091254115104675,
+    "runtime_eligible": false,
+    "source_role": "mathematical_context_only",
+    "split": "calibration"
+  },
+  {
+    "action": "S4",
+    "beneficial": false,
+    "conditional_positive_relative_gain": 0.579474151134491,
+    "context_id": "math_scale50_round091",
+    "expected_positive_relative_gain": 0.2850404664361452,
+    "observed": false,
+    "positive_probability": 0.49189504981040955,
+    "runtime_eligible": false,
+    "source_role": "mathematical_context_only",
+    "split": "calibration"
+  },
+  {
+    "action": "S1",
+    "beneficial": false,
+    "conditional_positive_relative_gain": 0.6328152418136597,
+    "context_id": "runtime_scale30_round054_harmful",
+    "expected_positive_relative_gain": 0.33722798140816224,
+    "observed": true,
+    "positive_probability": 0.5329011678695679,
+    "runtime_eligible": true,
+    "source_role": "fully_cold_runtime_harmful",
+    "split": "train"
+  },
+  {
+    "action": "S4",
+    "beneficial": false,
+    "conditional_positive_relative_gain": 0.6215236783027649,
+    "context_id": "runtime_scale30_round054_harmful",
+    "expected_positive_relative_gain": 0.3215906671526838,
+    "observed": false,
+    "positive_probability": 0.5174230337142944,
+    "runtime_eligible": true,
+    "source_role": "fully_cold_runtime_harmful",
+    "split": "train"
+  }
+]

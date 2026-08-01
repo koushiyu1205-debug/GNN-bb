@@ -1,0 +1,93 @@
+{
+  "bidirectional_included": true,
+  "bidirectional_inclusion_policy": "only_if_fallback_is_actually_triggered",
+  "configuration_count": 6,
+  "configurations": [
+    {
+      "ablation_id": "P0V4",
+      "components": [],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/configs/P0V4.yaml",
+      "config_sha256": "ec377b09ec3cb9ac9b2203fa769195f07479d4149d2bd8d8981b2d653dfbc356",
+      "included_in_formal_acceptance": true,
+      "order": 1,
+      "requires_authorized_gat": false,
+      "terminally_stopped_by_gate": false
+    },
+    {
+      "ablation_id": "P0V4_BATCH_ADMISSION",
+      "components": [
+        "batch_admission"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/configs/BatchAdmissionOnly.yaml",
+      "config_sha256": "d0769e9e73de7781f3e5b708be277e51e7cbd010077ff7a34856cd90535850f4",
+      "included_in_formal_acceptance": true,
+      "order": 2,
+      "requires_authorized_gat": false,
+      "terminally_stopped_by_gate": false
+    },
+    {
+      "ablation_id": "P0V4_DIVERSE_NEGATIVE_ESCAPE",
+      "components": [
+        "diverse_negative_escape"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/configs/DiverseEscapeOnly.yaml",
+      "config_sha256": "f45f35bc8c069902f8ceea2c9f61cb7f4d95134ae34ed5b3069058ad8b90845f",
+      "included_in_formal_acceptance": true,
+      "order": 3,
+      "requires_authorized_gat": false,
+      "terminally_stopped_by_gate": false
+    },
+    {
+      "ablation_id": "P0V4_ESCAPE_BATCH",
+      "components": [
+        "diverse_negative_escape",
+        "batch_admission"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/configs/EscapeBatchUnidirectional.yaml",
+      "config_sha256": "f80963fa0786013e933dd3f035904dd9babc95c9f22bd2afb85f8ea0d9f76e97",
+      "included_in_formal_acceptance": true,
+      "order": 4,
+      "requires_authorized_gat": false,
+      "terminally_stopped_by_gate": false
+    },
+    {
+      "ablation_id": "P0V4_ESCAPE_BATCH_V5_BIDIRECTIONAL",
+      "components": [
+        "diverse_negative_escape",
+        "batch_admission",
+        "bidirectional_pricing",
+        "live_sri_group_screen"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/configs/Exact.yaml",
+      "config_sha256": "a8ca82802cdce65940e699608237dc4cbfd0ec9d85f99017d5af79e1ee69b70a",
+      "included_in_formal_acceptance": true,
+      "order": 5,
+      "requires_authorized_gat": false,
+      "terminally_stopped_by_gate": false
+    },
+    {
+      "ablation_id": "P0V4_ESCAPE_BATCH_ONE_DEVIATION_GAT",
+      "components": [
+        "diverse_negative_escape",
+        "batch_admission",
+        "bidirectional_pricing",
+        "live_sri_group_screen",
+        "one_deviation_gat"
+      ],
+      "config_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/configs/GAT.yaml",
+      "config_sha256": "1d25fdba142cf3d134e17ee08670f1212876b1bb99b7439a4093629140f45239",
+      "included_in_formal_acceptance": false,
+      "order": 6,
+      "requires_authorized_gat": true,
+      "terminally_stopped_by_gate": true
+    }
+  ],
+  "fixed_k_selection": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json",
+  "fixed_k_selection_sha256": "cf476097eed17b02d8c60a1ac6566829ad00a4c327962cd16ba77b4d1e4b0552",
+  "one_deviation_branch_mode": "stopped",
+  "one_deviation_terminal_decision": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_terminal_decision_20260801/terminal_decision.json",
+  "one_deviation_terminal_decision_sha256": "c4630b43e5eb1e3ebe877156a935df5b357ed97a5dd7ff432f9d24cd0ce8e434",
+  "production_default_changed": false,
+  "schema_version": "lunar_ice_bpc.p0v4_paper_ablation_manifest.v1",
+  "status": "CORE_PLUS_TRIGGERED_BIDIRECTIONAL_MATERIALIZED"
+}

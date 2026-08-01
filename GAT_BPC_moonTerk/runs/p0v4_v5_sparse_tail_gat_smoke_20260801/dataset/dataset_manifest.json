@@ -1,0 +1,123 @@
+{
+  "action_ids": [
+    "S1",
+    "S4"
+  ],
+  "blockers": [
+    "only_one_runtime_eligible_context",
+    "positive_rows_are_mathematical_context_replays",
+    "no_instance_disjoint_harm_calibration_set"
+  ],
+  "dataset": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_gat_smoke_20260801/dataset/sparse_tail_gat_smoke.jsonl",
+  "dataset_sha256": "0cbae00afbd854a0c1bdbf445288d03e12f54190df240f902597ebe72e5bbf7f",
+  "deployment_authorized": false,
+  "evaluation_authorized": false,
+  "feature_schema": {
+    "action_features": [
+      "admission_k_over_4",
+      "raw_pool_q_over_4",
+      "log1p_k_over_log5",
+      "k_over_effective_harvest_target"
+    ],
+    "action_ids": [
+      "S1",
+      "S4"
+    ],
+    "edge_features": [
+      "travel_time_over_horizon",
+      "energy_over_limit",
+      "risk",
+      "distance",
+      "shadow_over_limit",
+      "is_low_time",
+      "is_low_energy",
+      "is_low_risk"
+    ],
+    "global_features": [
+      "log1p_scale",
+      "round_over_100",
+      "log1p_active_column_count",
+      "effective_harvest_target_over_128",
+      "sparse_action_cap_over_60",
+      "previous_added_over_target",
+      "previous_selected_over_target",
+      "previous_raw_unique_over_target",
+      "previous_best_true_rc",
+      "log1p_previous_processed_labels",
+      "previous_final_judge_wall_over_300",
+      "penultimate_added_over_target",
+      "penultimate_selected_over_target",
+      "penultimate_raw_unique_over_target",
+      "penultimate_best_true_rc",
+      "log1p_penultimate_processed_labels",
+      "penultimate_final_judge_wall_over_300",
+      "dual_l1_delta_from_previous",
+      "dual_linf_delta_from_previous",
+      "node_lp_bound",
+      "node_lp_bound_delta",
+      "post_harvest_wall_over_60",
+      "log1p_post_harvest_processed_labels",
+      "log1p_post_harvest_extended_labels",
+      "post_harvest_best_true_rc",
+      "post_harvest_search_exhaustive",
+      "post_harvest_frontier_empty",
+      "post_harvest_can_certify_no_negative",
+      "post_harvest_state_incomplete"
+    ],
+    "node_features": [
+      "is_depot",
+      "is_task",
+      "x_over_extent",
+      "y_over_extent",
+      "science_weight",
+      "demand",
+      "service_time_over_horizon",
+      "service_energy_over_limit",
+      "service_cost",
+      "ready_over_horizon",
+      "due_over_horizon",
+      "window_width_over_horizon",
+      "local_shadow_score",
+      "local_thermal_risk",
+      "mode_detect",
+      "mode_sample",
+      "mode_drill",
+      "true_dual",
+      "absolute_true_dual",
+      "active_column_support_frequency",
+      "active_task_set_frequency"
+    ],
+    "schema_version": "lunar_ice_bpc.sparse_tail_action_features.v1"
+  },
+  "feature_schema_hash": "947e653d53180f2b055699f5501eef56dc44786b19852ebb2c59ddc6501fa13f",
+  "formal_training_authorized": false,
+  "mathematical_context_only_row_count": 2,
+  "observed_action_count": 3,
+  "row_count": 3,
+  "rows": [
+    {
+      "context_id": "math_scale30_round049",
+      "feature_hash": "273b09a3f7d5efa10a8e0163beb53b058e5321d52c54f4c9683e8701f6c9f2dc",
+      "runtime_eligible": false,
+      "source_role": "mathematical_context_only",
+      "split": "train"
+    },
+    {
+      "context_id": "math_scale50_round091",
+      "feature_hash": "4d36073619f05819dbe86594e1f0530e2bcc183e83907c70e638cad86f26b216",
+      "runtime_eligible": false,
+      "source_role": "mathematical_context_only",
+      "split": "calibration"
+    },
+    {
+      "context_id": "runtime_scale30_round054_harmful",
+      "feature_hash": "bd4b5ca0422c408f09759a8caba7f1d75778dbb3bf995afdf5ccc77f94db9dce",
+      "runtime_eligible": true,
+      "source_role": "fully_cold_runtime_harmful",
+      "split": "train"
+    }
+  ],
+  "runtime_eligible_row_count": 1,
+  "schema_version": "lunar_ice_bpc.sparse_tail_gat_smoke_dataset.v1",
+  "status": "ENGINEERING_SMOKE_DATASET_ONLY"
+}

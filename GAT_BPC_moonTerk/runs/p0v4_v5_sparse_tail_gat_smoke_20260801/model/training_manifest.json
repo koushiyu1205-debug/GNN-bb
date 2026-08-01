@@ -1,0 +1,212 @@
+{
+  "action_ids": [
+    "S1",
+    "S4"
+  ],
+  "architecture": "context_gat_2x32x2_two_head",
+  "calibration": {
+    "beneficial_precision_lcb95": null,
+    "expected_gain_threshold": 1000000000.0,
+    "harm_gate_pass": false,
+    "harmful_promotion_rate_ucb95": null,
+    "probability_threshold": 1.0,
+    "reason": "formal_calibration_not_authorized"
+  },
+  "calibration_row_count": 1,
+  "certificate_or_bound_role": "none",
+  "checkpoint": "two_head_sparse_tail_gat.pt",
+  "checkpoint_sha256": "b6abc695629bf58e0d75f7655fcbd972589190cdb815ac35f161c3afb310a405",
+  "dataset": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_gat_smoke_20260801/dataset/sparse_tail_gat_smoke.jsonl",
+  "dataset_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_gat_smoke_20260801/dataset/dataset_manifest.json",
+  "dataset_manifest_sha256": "0a2bfcb60d6339a2f36910b5837f9ada3e41ef06ec0cd275b1ad1ec29c491e61",
+  "dataset_sha256": "0cbae00afbd854a0c1bdbf445288d03e12f54190df240f902597ebe72e5bbf7f",
+  "deployment_authorized": false,
+  "deployment_failure_policy": "always_noop",
+  "dimensions": {
+    "action_input_dim": 4,
+    "edge_input_dim": 8,
+    "global_input_dim": 29,
+    "heads": 2,
+    "hidden_dim": 32,
+    "layers": 2,
+    "node_input_dim": 21
+  },
+  "evaluation_authorized": false,
+  "feature_envelope": {
+    "allowed_scales": [
+      30,
+      50
+    ],
+    "global_max": [
+      3.9318256327243257,
+      0.91,
+      9.245321340871428,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      8.0,
+      -5.1e-05,
+      13.81795656405084,
+      0.0377999,
+      0.65625,
+      0.65625,
+      1.65625,
+      -0.00383625,
+      14.177463250056244,
+      2.2545013833333334,
+      0.5632205,
+      0.0969035,
+      1.459042,
+      0.0,
+      0.19065823333333334,
+      14.119305370207458,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "global_min": [
+      3.4339872044851463,
+      0.49,
+      7.908019444632471,
+      0.5,
+      1.0,
+      0.046875,
+      0.046875,
+      0.046875,
+      -0.051549,
+      12.549942452531823,
+      0.010633813333333334,
+      0.1875,
+      0.1875,
+      0.375,
+      -0.0231408,
+      13.849555399373491,
+      0.037646950000000005,
+      0.537974,
+      0.064438,
+      1.386609,
+      0.0,
+      0.18519658333333336,
+      13.761776392335921,
+      0.0,
+      -0.012467,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "policy": "closed_box_training_envelope_v1"
+  },
+  "feature_schema": {
+    "action_features": [
+      "admission_k_over_4",
+      "raw_pool_q_over_4",
+      "log1p_k_over_log5",
+      "k_over_effective_harvest_target"
+    ],
+    "action_ids": [
+      "S1",
+      "S4"
+    ],
+    "edge_features": [
+      "travel_time_over_horizon",
+      "energy_over_limit",
+      "risk",
+      "distance",
+      "shadow_over_limit",
+      "is_low_time",
+      "is_low_energy",
+      "is_low_risk"
+    ],
+    "global_features": [
+      "log1p_scale",
+      "round_over_100",
+      "log1p_active_column_count",
+      "effective_harvest_target_over_128",
+      "sparse_action_cap_over_60",
+      "previous_added_over_target",
+      "previous_selected_over_target",
+      "previous_raw_unique_over_target",
+      "previous_best_true_rc",
+      "log1p_previous_processed_labels",
+      "previous_final_judge_wall_over_300",
+      "penultimate_added_over_target",
+      "penultimate_selected_over_target",
+      "penultimate_raw_unique_over_target",
+      "penultimate_best_true_rc",
+      "log1p_penultimate_processed_labels",
+      "penultimate_final_judge_wall_over_300",
+      "dual_l1_delta_from_previous",
+      "dual_linf_delta_from_previous",
+      "node_lp_bound",
+      "node_lp_bound_delta",
+      "post_harvest_wall_over_60",
+      "log1p_post_harvest_processed_labels",
+      "log1p_post_harvest_extended_labels",
+      "post_harvest_best_true_rc",
+      "post_harvest_search_exhaustive",
+      "post_harvest_frontier_empty",
+      "post_harvest_can_certify_no_negative",
+      "post_harvest_state_incomplete"
+    ],
+    "node_features": [
+      "is_depot",
+      "is_task",
+      "x_over_extent",
+      "y_over_extent",
+      "science_weight",
+      "demand",
+      "service_time_over_horizon",
+      "service_energy_over_limit",
+      "service_cost",
+      "ready_over_horizon",
+      "due_over_horizon",
+      "window_width_over_horizon",
+      "local_shadow_score",
+      "local_thermal_risk",
+      "mode_detect",
+      "mode_sample",
+      "mode_drill",
+      "true_dual",
+      "absolute_true_dual",
+      "active_column_support_frequency",
+      "active_task_set_frequency"
+    ],
+    "schema_version": "lunar_ice_bpc.sparse_tail_action_features.v1"
+  },
+  "feature_schema_hash": "947e653d53180f2b055699f5501eef56dc44786b19852ebb2c59ddc6501fa13f",
+  "formal_context_gate_pass": false,
+  "history": [
+    {
+      "epoch": 1,
+      "mean_loss": 0.8770984709262848
+    },
+    {
+      "epoch": 2,
+      "mean_loss": 0.8283631503582001
+    },
+    {
+      "epoch": 3,
+      "mean_loss": 0.7839526534080505
+    },
+    {
+      "epoch": 4,
+      "mean_loss": 0.7570646703243256
+    },
+    {
+      "epoch": 5,
+      "mean_loss": 0.7373336553573608
+    }
+  ],
+  "inference_p99_gate_pass": true,
+  "inference_p99_ms": 2.209132,
+  "mathematical_context_only_row_count": 2,
+  "runtime_eligible_row_count": 1,
+  "schema_version": "lunar_ice_bpc.sparse_tail_action_training_manifest.v1",
+  "status": "DEVELOPMENT_SMOKE_TRAINED",
+  "training_row_count": 2
+}

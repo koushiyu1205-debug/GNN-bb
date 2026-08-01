@@ -6,9 +6,10 @@ one exact-safe place for task-cover and fleet-limit dual arithmetic.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import isfinite
 import os
+from time import perf_counter
 from typing import Iterable, Mapping
 
 from lunar_ice_bpc.exact.core.branching import BranchContext, filter_journey_columns_by_branch_context
@@ -51,6 +52,8 @@ class RestrictedRMPResult:
     cut_rows_active: bool = False
     primal_cut_activities: tuple[dict, ...] = tuple()
     primal_cut_violation_max: float | None = None
+    rmp_model_assembly_wall_time_sec: float = 0.0
+    rmp_lp_solve_wall_time_sec: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,8 @@ class _SimplexResult:
     solution: tuple[float, ...]
     row_duals: tuple[float, ...]
     iterations: int
+    model_assembly_wall_time_sec: float = 0.0
+    lp_solve_wall_time_sec: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -234,6 +239,8 @@ def solve_restricted_journey_rmp(
     objective: float | None = None
     min_rc: float | None = None
     simplex_status = "NOT_RUN"
+    model_assembly_wall_time_sec = 0.0
+    lp_solve_wall_time_sec = 0.0
     for iteration in range(1, int(max_iterations) + 1):
         active_columns = tuple(active.values())
         simplex = _solve_dual_lp(
@@ -243,6 +250,12 @@ def solve_restricted_journey_rmp(
             cut_context=active_cut_context,
         )
         simplex_status = simplex.status
+        model_assembly_wall_time_sec += float(
+            simplex.model_assembly_wall_time_sec
+        )
+        lp_solve_wall_time_sec += float(
+            simplex.lp_solve_wall_time_sec
+        )
         if simplex.status != "OPTIMAL" or simplex.objective is None:
             return RestrictedRMPResult(
                 status=f"RMP_{simplex.status}",
@@ -264,6 +277,10 @@ def solve_restricted_journey_rmp(
                 cut_context=cut_payload,
                 cut_count=cut_count,
                 cut_rows_active=cut_rows_active,
+                rmp_model_assembly_wall_time_sec=(
+                    model_assembly_wall_time_sec
+                ),
+                rmp_lp_solve_wall_time_sec=lp_solve_wall_time_sec,
             )
         objective = round(simplex.objective, 6)
         duals = _solution_to_duals(ordered_tasks, simplex.solution, active_cut_context)
@@ -333,6 +350,10 @@ def solve_restricted_journey_rmp(
                 cut_rows_active=cut_rows_active,
                 primal_cut_activities=cut_activities,
                 primal_cut_violation_max=_max_cut_violation(cut_activities),
+                rmp_model_assembly_wall_time_sec=(
+                    model_assembly_wall_time_sec
+                ),
+                rmp_lp_solve_wall_time_sec=lp_solve_wall_time_sec,
             )
 
     return RestrictedRMPResult(
@@ -355,6 +376,8 @@ def solve_restricted_journey_rmp(
         cut_context=cut_payload,
         cut_count=cut_count,
         cut_rows_active=cut_rows_active,
+        rmp_model_assembly_wall_time_sec=model_assembly_wall_time_sec,
+        rmp_lp_solve_wall_time_sec=lp_solve_wall_time_sec,
     )
 
 
@@ -665,6 +688,7 @@ def _solve_dual_lp(
     cut_context: CutContext | None = None,
     phase_one: bool = False,
 ) -> _SimplexResult:
+    assembly_started = perf_counter()
     n = len(task_ids)
     context = cut_context or CutContext()
     task_index = {task_id: index for index, task_id in enumerate(task_ids)}
@@ -714,12 +738,23 @@ def _solve_dual_lp(
             row[n + index] = -1.0
             rows.append(row)
             rhs.append(1.0)
+    assembly_wall = perf_counter() - assembly_started
+    solve_started = perf_counter()
     solver = os.environ.get("LUNAR_ICE_RMP_SOLVER", "highs").strip().lower()
     if solver not in {"simplex", "python"}:
         highs = _highs_max_leq(objective, rows, rhs)
         if highs is not None:
-            return highs
-    return _simplex_max_leq(objective, rows, rhs)
+            return replace(
+                highs,
+                model_assembly_wall_time_sec=assembly_wall,
+                lp_solve_wall_time_sec=perf_counter() - solve_started,
+            )
+    simplex = _simplex_max_leq(objective, rows, rhs)
+    return replace(
+        simplex,
+        model_assembly_wall_time_sec=assembly_wall,
+        lp_solve_wall_time_sec=perf_counter() - solve_started,
+    )
 
 
 def _solve_stabilized_dual_lp(

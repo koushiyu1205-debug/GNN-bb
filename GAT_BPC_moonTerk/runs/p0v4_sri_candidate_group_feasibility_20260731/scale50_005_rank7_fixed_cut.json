@@ -1,0 +1,270 @@
+{
+  "active_column_count": 3992,
+  "active_cut_count": 1,
+  "added_column_count": 263,
+  "backend_id": "native_rcspp_bidirectional_root_partial_hybrid_v3",
+  "base_primal_column_count": 9,
+  "base_rmp_bound": 1.560919,
+  "candidate_ranks_1based": [
+    7
+  ],
+  "candidate_rows": [
+    {
+      "activity": 1.5,
+      "cut": {
+        "cut_id": "sri:d2:n3:ice_site_005,ice_site_017,ice_site_018",
+        "cut_type": "subset_row",
+        "divisor": 2,
+        "rhs": 1.0,
+        "tasks": [
+          "ice_site_005",
+          "ice_site_017",
+          "ice_site_018"
+        ]
+      },
+      "rank_1based": 7,
+      "violation": 0.5
+    }
+  ],
+  "certificate_ledger": {
+    "algorithm_status": "BPC_GAP_AVAILABLE",
+    "certificate_scope": "BPC_NODE_LP_CERTIFIED",
+    "certificate_status": "CERTIFIED_NO_NEGATIVE",
+    "issues": [],
+    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+    "uses_true_dual_bpc_certificate": true,
+    "valid": true
+  },
+  "certificate_scope": "BPC_NODE_LP_CERTIFIED",
+  "elapsed_sec": 235.04624744399916,
+  "engine_hash_at_end": "a3be48f74fb8ec8a",
+  "engine_hash_at_start": "a3be48f74fb8ec8a",
+  "engine_hash_valid": true,
+  "exact_safe": true,
+  "final_judge_can_certify_no_negative": true,
+  "fixed_cut_screen_bound": 1.570038,
+  "fixed_cut_screen_gain": 0.0091190000000001,
+  "history_summary": [
+    {
+      "added_column_count": 128,
+      "can_certify_no_negative": false,
+      "negative_escape_termination_reason": "BIDIRECTIONAL_MIDPOINT_EXHAUSTIVE_NEGATIVE_POOL",
+      "negative_escape_triggered": true,
+      "node_lp_bound": 1.570038,
+      "pricing_state": "FOUND_NEGATIVE",
+      "raw_unique_negative_count": 512,
+      "round": 1,
+      "round_elapsed_wall_time_sec": 3.102875
+    },
+    {
+      "added_column_count": 6,
+      "can_certify_no_negative": false,
+      "negative_escape_termination_reason": "timeout",
+      "negative_escape_triggered": false,
+      "node_lp_bound": 1.563755,
+      "pricing_state": "FOUND_NEGATIVE",
+      "raw_unique_negative_count": 7,
+      "round": 2,
+      "round_elapsed_wall_time_sec": 14.852519
+    },
+    {
+      "added_column_count": 1,
+      "can_certify_no_negative": false,
+      "negative_escape_termination_reason": "timeout",
+      "negative_escape_triggered": false,
+      "node_lp_bound": 1.563755,
+      "pricing_state": "FOUND_NEGATIVE",
+      "raw_unique_negative_count": 2,
+      "round": 3,
+      "round_elapsed_wall_time_sec": 26.311379
+    },
+    {
+      "added_column_count": 128,
+      "can_certify_no_negative": false,
+      "negative_escape_termination_reason": "EXHAUSTIVE_FRONTIER_COMPLETE",
+      "negative_escape_triggered": false,
+      "node_lp_bound": 1.563755,
+      "pricing_state": "FOUND_NEGATIVE",
+      "raw_unique_negative_count": 182,
+      "round": 4,
+      "round_elapsed_wall_time_sec": 144.451353
+    },
+    {
+      "added_column_count": 0,
+      "can_certify_no_negative": true,
+      "negative_escape_termination_reason": "EXHAUSTIVE_FRONTIER_COMPLETE",
+      "negative_escape_triggered": false,
+      "node_lp_bound": 1.563359,
+      "pricing_state": "CERTIFIED_NO_NEGATIVE",
+      "raw_unique_negative_count": 7,
+      "round": 5,
+      "round_elapsed_wall_time_sec": 234.83742
+    }
+  ],
+  "initial_column_count": 3729,
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_005_logical_graph.json",
+  "live_sri_separation_history": [
+    {
+      "activation": {
+        "active_cut_context_hash": "1e0b9efcc220cebc352c193f0b3a8812d67aaab74fd0aeb52d081f6e3b534dda",
+        "active_cut_count": 1,
+        "added_cut_count": 0,
+        "added_cut_ids": [],
+        "addition_cap": 3,
+        "committed": false,
+        "cut_lineage_hash": "e60096581fd47023164f154ed045e19c76bac07f6209b612d1c7044b38c75771",
+        "global_cut_count": 1,
+        "lineage_local_cut_count": 0,
+        "live_cut_policy_hash": "9f0e7c4f7e2cab50267e197d55a17950aeee35aad388e47448f24873a7e92ba1",
+        "requested_selected_count": 0,
+        "scope": "global"
+      },
+      "depth": 0,
+      "divisor": 2,
+      "enumerated_candidate_count": 19600,
+      "expected_candidate_count": 19600,
+      "family_no_violated_sri_certified": true,
+      "full_enumeration_completed": true,
+      "max_violation": null,
+      "node_id": "node_000_sri_candidate_group_replay",
+      "positive_primal_column_count": 5,
+      "rmp_bound_before": 1.563359,
+      "schema_version": "lunar_ice_bpc.live_sri_separation.v1",
+      "selected": [],
+      "selected_candidate_count": 0,
+      "selection_cap_reached": false,
+      "selection_capacity": 3,
+      "separation_round": 1,
+      "separator_policy_version": "native_live_sri_complete_enumeration_v1",
+      "subset_sizes": [
+        3
+      ],
+      "terminal_reason": "COMPLETE_ENUMERATION_NO_NEW_VIOLATED_SRI",
+      "terminal_separation": true,
+      "unselected_violated_count": 0,
+      "violated_candidate_count": 0,
+      "violation_eps": 1e-06
+    }
+  ],
+  "live_sri_terminal_reason": "COMPLETE_ENUMERATION_NO_NEW_VIOLATED_SRI",
+  "manual_rc_audit_pass": true,
+  "node_lp_bound": 1.563359,
+  "node_lp_bound_official": true,
+  "node_status": "NODE_LP_CERTIFIED",
+  "pricing_lifecycle_scope": "tree_node",
+  "pricing_rc_audit_pass": true,
+  "pricing_round_count": 5,
+  "pricing_state": "CERTIFIED_NO_NEGATIVE",
+  "primal_columns": [
+    {
+      "column_index": 76,
+      "end_time": 1552.131904,
+      "lambda_value": 1.0,
+      "objective": 0.335043,
+      "sortie_count": 4,
+      "task_count": 13,
+      "tasks": [
+        "ice_site_001",
+        "ice_site_002",
+        "ice_site_003",
+        "ice_site_008",
+        "ice_site_016",
+        "ice_site_028",
+        "ice_site_030",
+        "ice_site_031",
+        "ice_site_040",
+        "ice_site_043",
+        "ice_site_046",
+        "ice_site_049",
+        "ice_site_050"
+      ]
+    },
+    {
+      "column_index": 1958,
+      "end_time": 1362.57389,
+      "lambda_value": 1.0,
+      "objective": 0.252022,
+      "sortie_count": 4,
+      "task_count": 8,
+      "tasks": [
+        "ice_site_004",
+        "ice_site_024",
+        "ice_site_027",
+        "ice_site_029",
+        "ice_site_039",
+        "ice_site_041",
+        "ice_site_045",
+        "ice_site_048"
+      ]
+    },
+    {
+      "column_index": 2029,
+      "cut_coefficients": {
+        "sri:d2:n3:ice_site_005,ice_site_017,ice_site_018": 1.0
+      },
+      "end_time": 1563.879703,
+      "lambda_value": 1.0,
+      "objective": 0.359238,
+      "sortie_count": 3,
+      "task_count": 9,
+      "tasks": [
+        "ice_site_005",
+        "ice_site_007",
+        "ice_site_012",
+        "ice_site_013",
+        "ice_site_018",
+        "ice_site_019",
+        "ice_site_020",
+        "ice_site_021",
+        "ice_site_022"
+      ]
+    },
+    {
+      "column_index": 2736,
+      "end_time": 1389.025151,
+      "lambda_value": 1.0,
+      "objective": 0.3043,
+      "sortie_count": 4,
+      "task_count": 10,
+      "tasks": [
+        "ice_site_006",
+        "ice_site_017",
+        "ice_site_025",
+        "ice_site_026",
+        "ice_site_032",
+        "ice_site_033",
+        "ice_site_034",
+        "ice_site_035",
+        "ice_site_036",
+        "ice_site_042"
+      ]
+    },
+    {
+      "column_index": 3042,
+      "end_time": 1410.27556,
+      "lambda_value": 1.0,
+      "objective": 0.312756,
+      "sortie_count": 3,
+      "task_count": 10,
+      "tasks": [
+        "ice_site_009",
+        "ice_site_010",
+        "ice_site_011",
+        "ice_site_014",
+        "ice_site_015",
+        "ice_site_023",
+        "ice_site_037",
+        "ice_site_038",
+        "ice_site_044",
+        "ice_site_047"
+      ]
+    }
+  ],
+  "primal_integral": true,
+  "schema_version": "p0v4_sri_candidate_group_fixed_cut_replay.v1",
+  "source_active_columns_sha256": "9cf4e5de8e1b59603d3141ca9b3534ae2b9b9e8328a8b96b3aff01cab3a294d3",
+  "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_partial_escape_batch_candidate_v3_full_scale50_20260731/scale_050/pools/scale_050/instance_005/stage_001/probe.json",
+  "source_probe_sha256": "3839aa97db307314350cc25119b40068ff767bc371d79b5a984da24f4ab82d2f",
+  "violated_sri_count": 33,
+  "wall_time_limit_sec": 900.0
+}

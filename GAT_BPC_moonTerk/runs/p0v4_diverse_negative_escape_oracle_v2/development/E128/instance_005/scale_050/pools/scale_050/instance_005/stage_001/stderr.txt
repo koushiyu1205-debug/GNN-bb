@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_compact_pricing_batch_probe.py", line 363, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_compact_pricing_batch_probe.py", line 92, in main
+    result = solve_node_pricing_with_b2b_r3(
+        data,
+    ...<15 lines>...
+        ),
+    )
+  File "/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/exact/bpc/solver/pricing_tail_solver.py", line 1130, in solve_node_pricing_with_b2b_r3
+    remaining_after_candidate_generation = remaining_wall_time()
+                                           ^^^^^^^^^^^^^^^^^^^
+NameError: name 'remaining_wall_time' is not defined. Did you mean: '_remaining_wall_time_limit'?

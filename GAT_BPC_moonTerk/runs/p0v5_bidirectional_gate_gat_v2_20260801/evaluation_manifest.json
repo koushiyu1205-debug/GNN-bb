@@ -1,0 +1,78 @@
+{
+  "allowed_exact_engine_hashes": [],
+  "allowed_scales": [
+    30,
+    50
+  ],
+  "calibration": {
+    "beneficial_action_precision_95_lower": 0.06483621249103803,
+    "criteria": {
+      "beneficial_action_precision_95_lower": 0.8,
+      "false_skip_count": 0
+    },
+    "expected_waste_threshold_sec": 7.814309775819224e-16,
+    "failure_probability_threshold": 4.379145046584654e-09,
+    "false_skip_count": 228,
+    "gate_pass": false,
+    "harmful_skip_rate_observed": 0.9047619047619048,
+    "selected_count": 252,
+    "true_failure_count": 24
+  },
+  "can_certify": false,
+  "can_change_bound": false,
+  "can_change_reduced_cost": false,
+  "can_prune": false,
+  "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_bidirectional_gate_gat_v2_20260801/bidirectional_gate_gat_final.pt",
+  "checkpoint_sha256": "43b19de02677350a46c9bc02592efdddd6f80ca6d3786a69ded71b79811a0bcd",
+  "deployment_authorized": false,
+  "evaluation_authorized": false,
+  "fallback_on_error_or_ood": "RUN_V5",
+  "feature_envelope": {
+    "context_max": [
+      3.9318256327243257,
+      0.0,
+      1.40018914,
+      2.690623903537722,
+      0.026494,
+      4.876537,
+      0.0,
+      4.31748811353631,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      1.0,
+      1.0,
+      2.5649493574615367
+    ],
+    "context_min": [
+      3.4339872044851463,
+      -13.662885,
+      0.028585319999999997,
+      0.015231215212941938,
+      -6.233167524,
+      0.060235,
+      0.0,
+      0.6931471805599453,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "edge_max_abs": 21.929208,
+    "node_max_abs": 6.233167524,
+    "relative_margin": 0.25
+  },
+  "policy_id": "v5_midpoint_run_or_exact_p0v4_fallback_v1",
+  "runtime_implementation_hash": "24c23e8f79c82804f1e46e51f3f54ec40a303a07561cacb14cf543b863021c54",
+  "schema_version": "lunar_ice_bpc.p0v5_bidirectional_gate_manifest.v1",
+  "torch_num_threads": 1,
+  "training_data_hash": "75047fcf5198995a51782bff1d8d4a6a340ed1049d7f239d39d8aeb5669e21a0",
+  "training_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_bidirectional_gate_gat_v2_20260801/training_report.json",
+  "training_report_sha256": "7eac99571670e1ebe804959a2d7334dd53e7e1bd597a64b61fbe01a9a31c5b1b"
+}

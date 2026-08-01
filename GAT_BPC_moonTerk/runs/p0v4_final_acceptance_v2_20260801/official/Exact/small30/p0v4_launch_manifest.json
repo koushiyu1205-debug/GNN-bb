@@ -1,0 +1,34 @@
+{
+  "command": [
+    "/home/kai/miniconda3/bin/python",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_native_spprc_acceptance.py",
+    "--config",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/configs/Exact.yaml",
+    "--scales",
+    "5",
+    "10",
+    "20",
+    "30",
+    "--output-dir",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/official/Exact/small30",
+    "--resume"
+  ],
+  "config": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_final_acceptance_v2_20260801/configs/Exact.yaml",
+  "config_sha256": "a8ca82802cdce65940e699608237dc4cbfd0ec9d85f99017d5af79e1ee69b70a",
+  "evidence_usable": true,
+  "implementation_binding_hash_after": "eee39db81bf00cef4900f9da72414a60dbf8cdd2bc34fd35f8013aea618374f5",
+  "implementation_binding_hash_before": "eee39db81bf00cef4900f9da72414a60dbf8cdd2bc34fd35f8013aea618374f5",
+  "implementation_stable_during_launch": true,
+  "instances": [],
+  "large_scale_concurrency": 1,
+  "native_build_dir": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1",
+  "native_module_sha256": "09ced849b30241bd994fee7351332df2592f7cd0e54de38b056238063cf9c7a8",
+  "returncode": 0,
+  "scales": [
+    5,
+    10,
+    20,
+    30
+  ],
+  "schema_version": "lunar_ice_bpc.p0v4_acceptance_launch.v1"
+}

@@ -1,0 +1,1962 @@
+{
+  "action_manifest_count": 125,
+  "admission_batch_size_by_scale": {
+    "20": 32,
+    "30": 64,
+    "50": 128
+  },
+  "audit": {
+    "failure_policy": "stop_route_gat_and_report_insufficient_action_opportunity",
+    "gat_oracle_authorized": false,
+    "gate_pass": false,
+    "minimum_omitted_candidates": 8,
+    "rejected_reasons": {
+      "insufficient_remaining_matched_rollout_budget": 2
+    },
+    "scales": {
+      "30": {
+        "eligible_context_count": 125,
+        "eligible_instance_count": 5,
+        "gate_pass": true,
+        "minimum_contexts": 20,
+        "minimum_instances": 5
+      },
+      "50": {
+        "eligible_context_count": 0,
+        "eligible_instance_count": 0,
+        "gate_pass": false,
+        "minimum_contexts": 20,
+        "minimum_instances": 5
+      }
+    },
+    "schema_version": "lunar_ice_bpc.route_opportunity_census.v1"
+  },
+  "candidate_manufacturing_used": false,
+  "census_binding_payload": {
+    "eligibility_policy": "root_true_rc_audited_post_generation_budget_min8_v2",
+    "eligible_snapshots": [
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "013541d44c6d1e555276bbd6075d5c380782578ef6d9d73f7c345707d574417b",
+        "source_snapshot_sha256": "beefc60610c00b18ddc9c3797c83c56a8469d2c41e37c45fa2fd2b92c1c49d2f"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "01fcc97de9b016893d4814e7ac2c981b3e782c3b8a577a2b57d5566be7542fa5",
+        "source_snapshot_sha256": "186b83d99a523094b24ca82c5a2fc089bd1b20488a2105c709ec22504bfa42cc"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "0210aa7ed867d6f5571a1b6f0b747f89d9bc5d7a1aae8f3b245de80c58d2403a",
+        "source_snapshot_sha256": "85cebe0df22373b569f40de8ccabb1a21142449e2ecd873d84e629a6ed87be79"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "02136d92173a24561c6d1d934e11180a2491413048af59fc4429c78df6894a19",
+        "source_snapshot_sha256": "3a2f7db7779ca121f86dd5305424e7f5187d0432c15211b0f21bf5334ad43705"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "027eeddadabec63531439662a3ea72f2278c5d767f165ac6f1a24ce534c9f8eb",
+        "source_snapshot_sha256": "c3fca615ec29706181a4a3a009e9b8457a05e93fbbdd18996f2fec195e78a0ff"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "05e415b5a056b377aa6f64b0f6260453ae10024d6d14ebb53397a0979a9e36f9",
+        "source_snapshot_sha256": "b3fbe279aa008e1a33ab5cca5fafbcfacc41b1fc587b26519a85b46a6d131a28"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "072d45cbcc9f1c23ed8c8e87ad91b0a3f8f1e1bb6e0ef93d2116c4ea9dd0f239",
+        "source_snapshot_sha256": "7d43f535bf687afc84bc5e870188cd1bc2402af79962f1fb5fd4535c22144e18"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "07479f840e4030580a644cff237b467e7d4da2d5d0d0ae782b9cae11c7b5f015",
+        "source_snapshot_sha256": "ad3903d084e37fabc67047c6e717680f7d992d79161f7bad88bc625f8be7e9b7"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "0a1564d9856967949d094a626c5cbdf14e3ef8b1059e3d75cff01b8aeb3e4c70",
+        "source_snapshot_sha256": "d43069f5b6d17b721e38956092700a94b0fb40b98a80e0f6b6e4302c8995a5f4"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "0b83b6a6ac3df8fc0ba925831abd0212755d912f53143ab62d13036a985fdd6e",
+        "source_snapshot_sha256": "3e137605930b5f1e0d7372d28a90c75c69c545ac51b839b5b99346c90176b653"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "0ca6207adf81dd472dbdbe921161fd834a8c5590c6743b25654ade4e0073bbc9",
+        "source_snapshot_sha256": "8b165de10cf67e472c908a28e129d0be398e3756321bbab26d53e639786f0f9e"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "0d18a3da07a65663ca18528a7086c9dc9dafdf4a1887c884b6ad597f9014fb12",
+        "source_snapshot_sha256": "4c3697a213ed1a6db0256f74d49d6aedf3ffdc10319a4db2dac7d3ca86827621"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "0f29135659d30ca65956d78b1a549c6e4fbbc419f13a7169760f35381c1df171",
+        "source_snapshot_sha256": "14da837ca95b391e4bb3ebef894f05fc8fed3b6744238b3ce1b33e71d2be69eb"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "12596d4315586bb737eae1984d21ba7b6707bcad99bd37440adffcb059820c24",
+        "source_snapshot_sha256": "ebe5b5dbc9b48f5c801f126cbcf92bc269e7809e3155fd783e719355af271326"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "1670f1430b713dd0c0fbc903bf2d96ca9b0ef9bc29c09e6c9919061cb346bbc2",
+        "source_snapshot_sha256": "43138cd0f91ed8cec847c2c8d59fda013773dd1be271b1d8783ed65a4f81fa93"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "16e9b2e17779b18beb692bc65e6e415a6fa8e99c6d61a4218cdc1108a39a80e5",
+        "source_snapshot_sha256": "e4df4c1936fc712ad3e90fbb84e245f8b95042006457fd806c463e6ef8c73e63"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "17a6805bd1fa04a2b9966a336ae3cf9e2120d3474b1945dc93241baa3f8a579d",
+        "source_snapshot_sha256": "8bc549f19bd06203908bcdc12ccf76040c5568b652b494d60ac77e22cd94c652"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "17c4d1cd081360887a43f28f2ac5265ef4d4d7de8d812fc396be2497db029ba0",
+        "source_snapshot_sha256": "f87db1b46f5df383a7c8800f32f98a2ac74ed735a7fa8782184b144530c39d40"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "1905cc20fb2685172d12154db7b961569da9a2475c11f7425341d8fdb80a8253",
+        "source_snapshot_sha256": "b7981420fb53392f2acaab136b57ff9d483c2554d4de028383d9e5b4294882aa"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "19ba0d7fd48345e534ccd9363b31a4edbcf8c0895034764105c2ec49316a14b9",
+        "source_snapshot_sha256": "0cf6456ecd170851a253e6db1062d8b892e9899be779d0485ddb4800f0911a7b"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "1db823f838ee97992d9df3c9b6805c23838feea3310d0347752c4c378963fa15",
+        "source_snapshot_sha256": "9be3d1d7ae4e524751f20e8830f7b1dd09594af96928aa330955539764467aaa"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "1de4f80ff47104a80e5a7e6b0b1218113eea076d9d5dca5ca14486ac73767772",
+        "source_snapshot_sha256": "41cb5fd6bb530cefa36201c4d7d6806bc0169d29ef1e31f27f5c562ba1003c93"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "1f6a7d9148c041c0729e0d1a2e2d53ae77df0ec57d93684374ed56035dc4f409",
+        "source_snapshot_sha256": "3a6a8f4ed83ff7b52deabd678a88263d1638dc4cbcc3c61d3329938728c2bf79"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "217b7678c57e74cda43491a87ff7ffac9a8b7181a6214ed5c6dcf5ad8e86e098",
+        "source_snapshot_sha256": "31b71deda80faf68b0b1ffed27a26888b24ad7449fc59439d3740902af36f2b3"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "24d4ae52f40cf9df9169b89943d21cc852243a5f8141169733d5388826b8c1b5",
+        "source_snapshot_sha256": "1c05fcd8ccb4761bafb812b3e950803255cb7c71897c70d697a2f1bb03747763"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "258b21ae641c7df47e5d08533442e49434264013b9eea8e81ff724dc89d169fc",
+        "source_snapshot_sha256": "526fa8d12143268aa28516876b031b0ae885e4134a8ec25c73f9241e0fb0d8a7"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "2639207f6c168ebd8852f027c715d2af2f8fc7382412d52b372b28629e073022",
+        "source_snapshot_sha256": "183f2e7a103b7ba7dd9350ef7ddeaecd422a63e8b681001fed5e170348e5b8c0"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "2e3e04a7850c380d0c99ba89e87788ed9c81159e2c480b33cfa4370adc8b127e",
+        "source_snapshot_sha256": "a0242c1c9c02a7ea3e41ebf58321e60f90dfa885daaf8f545f53ee12499589b7"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "31982b93fc7966b6fc67cbb6a8e153390263f538ff4e626aeb979e6427b5ba26",
+        "source_snapshot_sha256": "35280d6ea99062f181341f84a6c72999e91d31cc620d812925f8c09c768054bd"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "35d02ff5368944a4f588a7565754202ea3984adb68748627a6733b600cb87518",
+        "source_snapshot_sha256": "1182be8f3a5a8de103cbf44bc386397580a5ea9f43233eed830ee4e1a9b91b8f"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "368514c4b021e80773fe06b0d1f66bbe2f1acc232c785ad0cc5708a17e6a6536",
+        "source_snapshot_sha256": "00b0218a5eca0aba8392234d8fb16e840127f1108d9e461a186fe9130cd4b414"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "3b73475169f40d24d2ce3174349ddaba9748e28b53ac048e0e36e16fe358dcdf",
+        "source_snapshot_sha256": "81233e16a38e6ed217d031f03b2835505f9b2e7cab82db1f76884049a7db4cf5"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "3c0add128eca3e2f80a74146dfa5129dbaf96a0942d926d66e25d03ec53911b1",
+        "source_snapshot_sha256": "ca54d3e4db63274e077fac497cb606ccef0b18e4f956ee8a2f98ed4ca99a8683"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "3ca7d7534c42486f81b00ef416f4acb1ae1a826a3e90e1d6d23e2fffa7b49c5d",
+        "source_snapshot_sha256": "226902a9b3df3beed04b6c4da02df706923a650967d5f8c3e607266b3db217ae"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "3f53399167b6f44822dc4e2a63c7bbebb5ba1c1a9ab1f44be8a61a2fd7186dac",
+        "source_snapshot_sha256": "d7dabc0d185959f61985061fbb80db5c1452aea8defef43df1c6a368aee16715"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "4092e17bc3a0465d5c04af4f45b721c444031f5e83b1238a25c462ac2c629ca0",
+        "source_snapshot_sha256": "61b0efcdabe96e99371543bd514d530a3ed2e4eca5cd238aeb7e14f10165b6ee"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "43222d50b6ede0ca67c38dd65060b92a9bb67704c9d479b3bf95bed149f5aaf3",
+        "source_snapshot_sha256": "6a0722b51ed69c1b93a9dfcd3b8a5ca071cd1578529974418e2face3d1c6a7cd"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "43f30ba54d51ca38020a917455b6df438ccde69d01c323709189deb1d939441e",
+        "source_snapshot_sha256": "dc89c79ac5d30fdf7a5676e00fb26d7b0b8ccdee845842167c78b6ba3e327179"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "4518a9c0520ab483f201eb21ab051d6981048f4f48a8b824bc39ccd34f71ffa7",
+        "source_snapshot_sha256": "c4223b9b6dd84a2c9b2ead428b41be1b413266b9dad539da2d0d2f6ea36d6fa0"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "456beecc0b4e5af7d522ccd3fdae74466e6bed1f68f16ebc65b7200a7bd64033",
+        "source_snapshot_sha256": "a2db4a93ddbabf113c961d9b6f9487858002b6cdb19c2cc0fc672983e1c498c9"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "45b1b3fc873a698fcd874268040ada0003a408e0ffea9f6053ccc809c31448e5",
+        "source_snapshot_sha256": "86125aee3cd872b489b89e737f65c6491ef5cda49f42b9dc2e5d5c71a632fdbc"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "47a7e39524a155c094ed07c85a595c86aaf8ffb340e7119b49fdc7c76e355aff",
+        "source_snapshot_sha256": "50c71a9e2cb03e2500b4bc3ba3ee778cfc180998497fefeba27b412fc6449bc4"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "4c172a8d7488596a716cbb74c40a80d1665e2026186a8b5fc737064b444a5563",
+        "source_snapshot_sha256": "aed7a68299895d0619e384dcd3f31a7cb0ba306f7c4c9148ef32fc825fe76032"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "4ebdfe139fddc39069d19a5b814d693348f8db123226f15a79630d3b7a579c74",
+        "source_snapshot_sha256": "687f755115c27f3304c2cb565d2e34481cb4ac910f6b3b0f98e2414d306b56f6"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "4f576e4719c41107a9beb8ed385f9ec78c0125fda3fdb285ef63521da72e6b1c",
+        "source_snapshot_sha256": "ca3c91f448d9a6d97f5341eccd1f4f04e7532c2125d80245a285f4c42ef18844"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "50c7d35187b6ab3bf6dbd679bbe7143974f42cb52ff2f130d72c3359e66358d5",
+        "source_snapshot_sha256": "2ad7b38ec7fc8b12ef2257abd5c38c61bce575bf7ff61bb4486d2e290000b411"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "547ca25ca254bdaa8def5feccedcb917c076fb6348f6329215d534557a84d6b7",
+        "source_snapshot_sha256": "3d81913b0e0460b5371885256e5e4c4b4860ee925ae9288e128e6e36202da277"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "55337bd8edac4b9af277d358d7380f8600235e6155948a4c858e4d76a1202b12",
+        "source_snapshot_sha256": "bcd1dd21139f2b49475f6149fd06b59977d3e362b1e7996a21d73edaa1946bae"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "5688a16b7f4bcdba0f15b84e6b2ae004c2cf3147b67e3cf97cea42145fa45636",
+        "source_snapshot_sha256": "0bb1db6feca0961e73936ed739eb915c9b9a8aa1dd2b6f50dce3e37ec16dd06a"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "5791c7c8ff027514f06d44eead71b0e658afb12c91f8507328c55a69fa7dcae9",
+        "source_snapshot_sha256": "59f0767b33f2c335031260f8d13a266ebc39a722b0eed0db83ded651c6020563"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "5872bc70f8d351a3816ceb9bc2c37f5fe32e1267d707e6ee080f4b11f5ab01e7",
+        "source_snapshot_sha256": "3bd7977f0a9d43b7760e3ae0c92ce5c32ac47cf9fea208a847d02929d1f93c9c"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "5a6338cbb900ee4b69abca730717cf23ddcf8e5cf0836a4d70bf91b6b7501704",
+        "source_snapshot_sha256": "667496429dbb130bd1ac2471ed7dee03f1658df4a8cb6b8196e6c545bbc5e8a7"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "5c70d1d755b06516948d75b173605d7fa29dd98b7ffa98748217c293fe54bd52",
+        "source_snapshot_sha256": "17d9199654e8a84d29a8fc4052e533ce2c81f1d14d6a16050fa71bb576ad3b1c"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "5d299a6609f87804de7b8340bc23a68e37a75b518ce9a40e3bbf79296b0e05b3",
+        "source_snapshot_sha256": "1449c9aba3dcda6d3027fa5884526cb737f65ebe12d3750fd289d3667802161d"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "5e21018cc408aa05507d8bfe42afd9d635c8392d76b6e73000474178575e5649",
+        "source_snapshot_sha256": "96243cd61835ea98e3f2f761798941fb9f73fca364194cbd5d68255a04f73470"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "5e83ddad2b4247ad25984218e6631da3c16748b8a2b593c606a5685ef8cdc6e0",
+        "source_snapshot_sha256": "3b800645654ddc8eb0492c040e752d90fbbb9fa41ad77aec3589f3ebbd49bd72"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "6167a2f6603422baa91dcc6e1e95df3d4e1464cda60bcdc64a4d81555f837419",
+        "source_snapshot_sha256": "58e5bcd4f15adc21c09773561fba19ab7c982bb03518e5051593f5816f6d241d"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "63e21effb53b07bcec887744a19777320aa8f5f24fbe5656bd482331a38aa65d",
+        "source_snapshot_sha256": "195b23057c2ba0f2c67ad4d0d57a37079dbf170d1fe08fe536a17b1cff54d725"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "6416e97519ffed5db24846c53efccd87b3349cabffca62e4a81a288b82d9f4c9",
+        "source_snapshot_sha256": "b1d2f21107f102b0736592ab0f0e450c4b444758b55611f5d0ab9b243c763527"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "6749e17f1303963d3b32f375fce89ce66d109754e2146d138559ed1a4bcedda3",
+        "source_snapshot_sha256": "cdb78d3154d0a85a5c493ddc94f177f8a6776fa593b70a694bcfeb4f46cfc301"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "689d31f55595243474b7f042ee9b826304a839b30d2ac8110d024a29eb39b806",
+        "source_snapshot_sha256": "0712a38f4c011b37c4715bb081464711169c6b13d00541b70694566b3dc66f84"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "6ae81004d1edcddd104f9bc4d9f9d0b0862f07c7094fb92bb88592c7588d7c0e",
+        "source_snapshot_sha256": "669722037a98113fe2d154e86a2372b4fdc1a3b0a988b7d9589f050b01b6d39a"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "6b98bf8fd6a25a55e3d90911b2977aaae531723e9ff3c61e13117fcd4fd50b2d",
+        "source_snapshot_sha256": "e7f0d27d870d109117e92028e02c3d31e079962197598c52fbdd2d72aa95fca9"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "6cc27f773b9d5f75d692efe978dd6ef764d3433a7e3d0befe0926c32f0d5a64b",
+        "source_snapshot_sha256": "3361cc1c7061aa8b7a692979a441947228221c565f73dd5d796d533048885348"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "6ed58f90c7a3c716d1c9612d7025c0967a8b4fdebb11f6164df35b852d701621",
+        "source_snapshot_sha256": "52002d5895a66b2fa2daa9c9b9c0071e01a0407f9dc0640546f6bceb4b59c31a"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "71c682c26b87158840d6577310cc646ad158a6a3fb96adf837a03b6ea497828d",
+        "source_snapshot_sha256": "33c02f395d00960671a9e24a53e212e7579af059f7f4dd4c1a5102a13d182f96"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "720074f4631b062ed33540de6ccba2b680ac4dde3ed3d42df55f3aea3c41c8ec",
+        "source_snapshot_sha256": "752993756e79982c2b1fcb1d05afb4cc4dfb3fa28fdb00c861895bcd9be2d2a7"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "750a77ef3e000bec8051aff86f40afea2a97a118984b8c0a6ad9c28a2f113e68",
+        "source_snapshot_sha256": "795cecb065f739c3de8d69c6ef24f2ce71646ae2667778135651043a5c8d3a7b"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "7759b3b99aea78572c94ed94fd81b621e25529152c3956b33a4a3749da1df32e",
+        "source_snapshot_sha256": "9cd4baade427c145130eac4187849c00a122963b137e806b14c0ecb5a8db9db0"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "78c777bcca92d52e29ba271f561edef27b14f32e6ba515465380bfc33be4b00b",
+        "source_snapshot_sha256": "0b13d28ce73d90b80ce260841f2d6c4109c4b41b7686e7bb18512e08128c20a5"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "794e14ce15f49cf2ef5985eeeb007b5970659ae3533ed27fe79a28180c8fdbb4",
+        "source_snapshot_sha256": "2f9296a8417dc73ab1704f49585f516b81b9b79be4a270d7e0c2314a7bef5a18"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "7b842798840d1a3251cdbb3b4dda35e5f8e4f045bff73ef5e0566e570d83dd98",
+        "source_snapshot_sha256": "05594ee3ae0927819a901860df365002454a9b9b845f61541e3b4b1b7a05cd45"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "7d355f9c91daa2697b557ae9c523be7a671904ae6e0ebc4bedbee944c06b9f22",
+        "source_snapshot_sha256": "b975301e8eaa22d09c6ce79ce83c55a7ae1b741533ea08f6c50b3ab2248d6389"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "7dd6e7dec7fabdd9c913b63ddd3f4b5b14a4e2d54dfc0614ed95e084c9a8549e",
+        "source_snapshot_sha256": "6ce10ebe9daf1c44182e07a124517864dabc38d0b199c4613b6813c245d9d575"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "7f1c42c9513fcc959033255d9085b7e33f498374242162e788002f86771341d1",
+        "source_snapshot_sha256": "9369a4d6f32bf215f2c3770cb8f676508c63a9f1144beff576636b9c91143576"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "840ed1284894b12ebd0eac0c121ac75ee24bfdd280f60beebd6a686a46119546",
+        "source_snapshot_sha256": "f53986dc257925a49b7bf85f70646c779d035589c62cf7a9da12b8e06bda0d9a"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "8450df4bc4422a521c5ccca41086d3a1970bb3adc5dae291e968cdd10dbf20b5",
+        "source_snapshot_sha256": "db914ae1d74ffbf3613fa886a59ba911aafd3313bc30a30de4178b849acdf757"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "85fe94906ddaf8464274334cdfc2d1622baa720516623706ceccd192dba62ae7",
+        "source_snapshot_sha256": "6ff5af6f06caca0237e09ae03c28279898a7b0a4e85534d1f54b808d77868b13"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "880d36b2c7ae06d536fb1390a61151d3619e0d970b3218efd9bd98fd65214148",
+        "source_snapshot_sha256": "2591b6d86c046f0531eb33f252c8fb4842aa0cf4bfab5341f5927f47d412c3b8"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "88113c52fc939ed9a0008480e5f3f70a6159a3d4b396a2bd939195e7b83c5b60",
+        "source_snapshot_sha256": "899644119e8b85ddb9999ec2f7f86df1285fa9bbcb41ff03a187c91a2df5f9cd"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "88c2aaddccfa2f082be7a8843bcc79f1a952756206cea54ccb9b57f986bfbceb",
+        "source_snapshot_sha256": "45de90e9f7bf17db4da46ee46e61e2716df31bdc58f1f4b200096c0eab49ea95"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "8c5921c31504002e33c4a1cf482351122c916ecdbf288c5f5e88f5e43b647235",
+        "source_snapshot_sha256": "4a6700e2d09303d4cccf553cc95dcbad0869e9e3e15546bde1b895ee32319cb3"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "8d89e81d5689d040b9ecd17f23716d38b88e48a407b27941516cda57cf8f4a89",
+        "source_snapshot_sha256": "4c3f176f1107305b6498b1f31121b282a3f76736b75e31961afd76b53a916849"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "8dca43dd6ce51dd3f0cdaedb8004d499c66caccefa12864acf9ef0f0b36b253b",
+        "source_snapshot_sha256": "3085642daee2ef1b5be5f485b813283dcb65fa1261d35d544d9575cb1531d567"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "8f6bd5798e3d4b4f86c3f1deeafeb12bbb5de213578649ae2745542b11b7af9e",
+        "source_snapshot_sha256": "0c8f36c66f1aa84c44084c48e9976c3fd6b1add77d63cfeda5086c5a406efde1"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "9218cd9625442c40449f80d97e8ba3d3b3e86060c649bac9e2dcc194223f1c71",
+        "source_snapshot_sha256": "0e7535d9d5ea52f3cf64bee309dd8ae136c6109b7c2509ce4534778dc7b009a9"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "965d7171c9f698fcb184e58f8877c397b0452c09214c6f3af5b863cccb6684e2",
+        "source_snapshot_sha256": "84fd8f272b58892c3cfb638fe8d5edacf71bcc5620b907a6d3f3f8028cc13d22"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "966df7e976a0befdbd6de11df4be00443bb82a50df0950789401a4651d1417ab",
+        "source_snapshot_sha256": "e6e797ca148a4ad703d31d6452f8fe61cd20930d17ba902beab391f65af313bb"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "9691dbfa84d2dbd8cf49f04d8aec56cb6337e1aa72da5d3bd82af793b80e6c67",
+        "source_snapshot_sha256": "b0ec920ee4e770fd42054f2e461b22351df9c0499d70d5f6cd6d7e30c25546fa"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "9a01f288115bbc9c947932e3ac5e46286bad10fd5b05855e1f620ad403d5fc36",
+        "source_snapshot_sha256": "7b5f75aa7b53b4dac41c33a57851ecf8e7529b2f656835a2c53452ec871e5303"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "9a628edc47542b814f0e0ee571b35e2a35e6218ee59f3854c4c932049b489bb4",
+        "source_snapshot_sha256": "bcdba4cee6c206d09d4d32daacd72aaba0375d2a0efc1b383f66150a84631fc3"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "9b5061811e8eb07105a92b00e088b605eb71976edfde6d27df0ddf8d87a0a37d",
+        "source_snapshot_sha256": "f97db7037968c60ea2cffa37466a09146b265f576d8898945f266135f68e4fed"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "a0d66fcb942795473e70c9149266998065db135e6df855054b5b1cd6cad3b118",
+        "source_snapshot_sha256": "44ab35c3a6d4e64d142a82b0c2b5e33b6bfff58e198fb73e908d6605fa2a3cb9"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "a3611d00ed3314949aa1058a91298c450ba4720f32e3a371b674f3f1c001c00d",
+        "source_snapshot_sha256": "24842f5139b3c4ae64a8fbaa2962815dc0f905583a1185151989a2e56392b509"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "a5d7451905e9b87c2c0cee9e0412fdf0dc485626a3e8e4dae8a526988db298ba",
+        "source_snapshot_sha256": "1a6a09625662362aeab6ac68777043aaccaf2194b6c5ee5c7e3baf27aab9d5b8"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "a7b3bfce61e1630b3cfe1d82fdc1aa0383718437dea1e91071bc3c477bc55204",
+        "source_snapshot_sha256": "57d71150c67b07e4bcfbaafc99a82f76dfb49ae8de5027427cfcb29e8a1b22d5"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "a862ba658d4a26e689af245bc80b3de74b68fd46a8f4cf4ded4c548243e4e79d",
+        "source_snapshot_sha256": "66bdf195ca2481cf3dbaac2aa85e440d0d0a4e725dfab2742912176e4535e8b6"
+      },
+      {
+        "instance_content_hash": "fc2fcb5cd8441d07",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "a95c64440aac2c2ccbfab909521372f383e22d109fb367652431f46c76a0f528",
+        "source_snapshot_sha256": "fd5f5b6509cc5fe345504b85b3b3689481848df52f2418c9076077d8bd14aab1"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "ac25737a6bb468e23110ffe11d298eb62fd36d0087447f1f57f81d2fa9780c26",
+        "source_snapshot_sha256": "80be32faff9372222eb44642f1578e1eccd3cde600f37c86dba75b529e42b53c"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "ac795f2857283b34eb229a1f42621d6f0c907443aca8594bb092a69811582190",
+        "source_snapshot_sha256": "9bbdee249f67c234c9698dc2468a2449160305a37880bbee713e789fe223428e"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "c0b447f5aaf943ae54a8d9d7af2021548b260b191c6362bbc86673722b9adc06",
+        "source_snapshot_sha256": "61a7217feab061c5622fffee51f0be2e2cd82f3de9ac5262f45b3a51bd87b795"
+      },
+      {
+        "instance_content_hash": "38c6df1260241992",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "c1438b224df9bb5cc1f2ea0f8f09118a1c6c14104ba1d050c25dfb846dfac054",
+        "source_snapshot_sha256": "dba2be1548090064223cf34a36c438a4703c8f11bfc24ef193bf40c6721ed052"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "c28ea3e41fde96afef5446b3d5321651af91d97daba6f01d4d55ad5b441128f2",
+        "source_snapshot_sha256": "61debeb5b410c0a821b6e3609ad515046ed259209a6f032477546a6a87d10b20"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "c6142c140841d534218acffc077431536f62515f854b822d65fbaa5ccdb8f9a7",
+        "source_snapshot_sha256": "f8d468cec8a18c6bfc93e96a4bd32b6b5c403bc7a8257efb513b37502dacfa61"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "c7a19dac903f835f7ac42200f88a89ca9dec4d7e64023b82f3c58715a08df055",
+        "source_snapshot_sha256": "eed80db482519c75c90c282f3804da21c4c9228a895dfbbe9f426156751c5773"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "c7d3562e27c85754b726b22807cc1b13ad0a8b9763bd0476154bfefde1993165",
+        "source_snapshot_sha256": "59bef585dcaa7b89ee3b94c7845b8c877606a7534d4536aedfc27c6318df116d"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "ccb478b0a667e6f48b06a194e8cf0ccd92d6bed25ea5543afc808d3a5fc9f664",
+        "source_snapshot_sha256": "370d89345a051ac011e47c75ea1dfe89b0f65bda8a067aaec7cd812fc2a3ecc6"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "d2cb3c3137c678b525fac4edd5b51b371087d9386f108dc6536bc8dfd39c4cae",
+        "source_snapshot_sha256": "ff4774f11725fca572e261ed2a9b63658114efa6f8a5d5ca578f12dff8aaf825"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "d694c1e33cfa0e7f3858c35b6125a4287d72ab0d575f317aa49128ac87aff58d",
+        "source_snapshot_sha256": "5a4160fa4fd050fef2c48251c169cd94eff7902133ed1b1fcd14ce4772647123"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "d8fa5c719e36c1bd0d343ecfdc3e321cfbbba2cae29206422ce74d27f8b198bd",
+        "source_snapshot_sha256": "c6c0d85097017773eaa8dc32767eca8a31def59a592e2193f907a73f09327310"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "d92396a094530bccf6e64af67d26b9abfe382b3086e710dde9a82f1a748a62a7",
+        "source_snapshot_sha256": "73804327c68931bc7254b56d42388157ee3f179b6b704b43b5043cd70043b637"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "dcce4e38426d273c0afcfc42b37ab8e220979608fe6e3643ebe3caf74770330a",
+        "source_snapshot_sha256": "2a6289a398a7a82eb90d558fb82f35540253c8e6599370fdc99de47a1fe962e1"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "df260a4983d43676375e0b6302616bbdf999a74ba723f354bbc86224e171478e",
+        "source_snapshot_sha256": "f1b8abed91b2b91c55699ce61ab96ce3858be0bade5dd4bfbf28787a5d22f5f2"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "e366e669737aa2a89134b4f839e5820af1b895f7785f06c59f1528a0af96bf85",
+        "source_snapshot_sha256": "fad5719a1b84c548f0db0da3509b2c6dfeb1eb92268f167fa1027913b86c31ac"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "e49a9cc180fc8e8379f62432d71006f73b7a8e234202c0bc667f29558a154f61",
+        "source_snapshot_sha256": "30d5cf5e08d0f6895a771c3fd29a00de4bf521f5bddd8230fbc962dc20481fd7"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "e6c59d66b37f724d19a12d73b15f45638a1239972fffb84c12f3223d15eb5b96",
+        "source_snapshot_sha256": "203dc0519fc0ae36018bff64a9d0288fa830463c52dc64eaea925a906758a2f7"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "e7e974bac23291130691ead7615830c2b23feff95d791eeb528bb6257c1c9a9a",
+        "source_snapshot_sha256": "05164fd326922c471433f30532f85863304d1685a8a8d11534ede25685e33241"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "eecdf0e85597a0edfead9113b0f63542329f25a2641a0651019a9efa248267d0",
+        "source_snapshot_sha256": "b37860940d8f319ad307b7bbc06b76e2f9bac438abd28ab8196d26a94d45525a"
+      },
+      {
+        "instance_content_hash": "1e78838da1b6a8c2",
+        "instance_split": "calibration",
+        "scale": 30,
+        "snapshot_hash": "f157619ba4f6b42e4f9c329cd3ec9e737af365227645d63056ad30780d9199df",
+        "source_snapshot_sha256": "ca6fb25282caa9fdd2a0b00f9262b3a565c37dcb3754dc8269ae74b4459ecd46"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "f2ea6dd4a70b3bfabcbf86cf3e30ba938c0423cb10764c752464889d4367eda5",
+        "source_snapshot_sha256": "6b951d09613432bb7eef001f64c018c8bb466c3de9a204f04ad0793219b129b1"
+      },
+      {
+        "instance_content_hash": "9eaaee08f3108eca",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "f7ac33321abe0533d0ae4037828631b78e261639fbc3a5b0debb8afdd5f1fec5",
+        "source_snapshot_sha256": "9920b3672398904910886f8aba1f88de9ef680e3cb8e543346dca0f8a8ad8faa"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "f7c3c4e5c949e387f45ebda9be594a98c802410b6aa4c1bb99758f8e7771d994",
+        "source_snapshot_sha256": "6d9dd5fed471446bef43ecc6d1a6a0dd9487078097926d0e60f7d6a6f3bea620"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "fc24a01a6954ee7ed6c946db227b5a1a35b6f7d02e9ea559132278de3aa908b7",
+        "source_snapshot_sha256": "d82dd191800b03d59d20d3eeb632075ade8858fab0caa3ae1a9c3965dd4a8db3"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "fc41368c0e79ffcb07cb445424931686dbfa9e3120c4e6b00033465e855341e3",
+        "source_snapshot_sha256": "c5b690aae976ea691c3fc03af54526a63092086105ced189ea8b4a4068dabb56"
+      },
+      {
+        "instance_content_hash": "62838a981ec8dd53",
+        "instance_split": "train",
+        "scale": 30,
+        "snapshot_hash": "fd07cee86412faeab1f91f8bba5e572e72f71a64427cb38b6acb015327bd2336",
+        "source_snapshot_sha256": "264c24b5ff3343e64fa12aa39c5c83ec3e750a51ac049b4563e1554170342d68"
+      }
+    ],
+    "fixed_k_selection_sha256": "cf476097eed17b02d8c60a1ac6566829ad00a4c327962cd16ba77b4d1e4b0552",
+    "instance_split_by_hash": {
+      "1e78838da1b6a8c2": "calibration",
+      "38c6df1260241992": "train",
+      "62838a981ec8dd53": "train",
+      "9eaaee08f3108eca": "train",
+      "ab18975e3fe870c5": "calibration",
+      "fc2fcb5cd8441d07": "train"
+    },
+    "instance_split_policy": "pre_outcome_scale_stratified_sorted_every_fifth_calibration_v1",
+    "schema_version": "lunar_ice_bpc.p0v4_route_opportunity_census_binding.v1"
+  },
+  "census_content_binding_hash": "857b8f7bb226b1120ce245495e914096013bd2dc65ca41f27dcd1ac98100dde2",
+  "discovered_snapshot_count": 128,
+  "duplicate_snapshot_count": 0,
+  "duplicate_snapshot_paths": [],
+  "eligible_snapshot_count": 125,
+  "eligible_snapshots": [
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "013541d44c6d1e555276bbd6075d5c380782578ef6d9d73f7c345707d574417b",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/ba3d21058568bc71e078fe53cc54eadfb22c5006e1abc6f5b82e03c01fe577e7/route_admission_snapshot.json",
+      "source_snapshot_sha256": "beefc60610c00b18ddc9c3797c83c56a8469d2c41e37c45fa2fd2b92c1c49d2f"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "01fcc97de9b016893d4814e7ac2c981b3e782c3b8a577a2b57d5566be7542fa5",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/7c6dacd5184322785d6b837294c9a6488d5cbdf1f052a62fce44c8423f729978/route_admission_snapshot.json",
+      "source_snapshot_sha256": "186b83d99a523094b24ca82c5a2fc089bd1b20488a2105c709ec22504bfa42cc"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "0210aa7ed867d6f5571a1b6f0b747f89d9bc5d7a1aae8f3b245de80c58d2403a",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/692f0c30fe7f14d6361f464e5fac0e76fb1d21fefbf67adf4d3934059b0e412b/route_admission_snapshot.json",
+      "source_snapshot_sha256": "85cebe0df22373b569f40de8ccabb1a21142449e2ecd873d84e629a6ed87be79"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "02136d92173a24561c6d1d934e11180a2491413048af59fc4429c78df6894a19",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/026f1e0ab4a1ca0588433e7f91dfee8e4c3691211389a9b2888eec63c87137af/route_admission_snapshot.json",
+      "source_snapshot_sha256": "3a2f7db7779ca121f86dd5305424e7f5187d0432c15211b0f21bf5334ad43705"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "027eeddadabec63531439662a3ea72f2278c5d767f165ac6f1a24ce534c9f8eb",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/22a7949101b73d83915454996c477fd125059f8b6db970823f25a6daed4516cf/route_admission_snapshot.json",
+      "source_snapshot_sha256": "c3fca615ec29706181a4a3a009e9b8457a05e93fbbdd18996f2fec195e78a0ff"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "05e415b5a056b377aa6f64b0f6260453ae10024d6d14ebb53397a0979a9e36f9",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/fd99684257c22fa1239df8d1669a2524f51e9cc25a30f1a024e5db4e800b4b78/route_admission_snapshot.json",
+      "source_snapshot_sha256": "b3fbe279aa008e1a33ab5cca5fafbcfacc41b1fc587b26519a85b46a6d131a28"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "072d45cbcc9f1c23ed8c8e87ad91b0a3f8f1e1bb6e0ef93d2116c4ea9dd0f239",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/c783a80185f78393a83448c1bcfa8436757ab56013c9f4f141b91887810a3da5/route_admission_snapshot.json",
+      "source_snapshot_sha256": "7d43f535bf687afc84bc5e870188cd1bc2402af79962f1fb5fd4535c22144e18"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "07479f840e4030580a644cff237b467e7d4da2d5d0d0ae782b9cae11c7b5f015",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/1a2724c0100c69e776692a3f70bd06e1020f342cf3e9ae11d97b03f00d77dbc8/route_admission_snapshot.json",
+      "source_snapshot_sha256": "ad3903d084e37fabc67047c6e717680f7d992d79161f7bad88bc625f8be7e9b7"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "0a1564d9856967949d094a626c5cbdf14e3ef8b1059e3d75cff01b8aeb3e4c70",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/0351e1544eb5c7c7699e335c5d8cd609b0001becfbb7fe7cfbf4814c322b877e/route_admission_snapshot.json",
+      "source_snapshot_sha256": "d43069f5b6d17b721e38956092700a94b0fb40b98a80e0f6b6e4302c8995a5f4"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "0b83b6a6ac3df8fc0ba925831abd0212755d912f53143ab62d13036a985fdd6e",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/0a4b1d22a71388ef6150ab62506c8fe5ccb85e20f9a353be1a7a4ee1572d7351/route_admission_snapshot.json",
+      "source_snapshot_sha256": "3e137605930b5f1e0d7372d28a90c75c69c545ac51b839b5b99346c90176b653"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "0ca6207adf81dd472dbdbe921161fd834a8c5590c6743b25654ade4e0073bbc9",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/52347f8cf60c6aa4e08e4de5daea011d646105efb9532623727f38aefeff925e/route_admission_snapshot.json",
+      "source_snapshot_sha256": "8b165de10cf67e472c908a28e129d0be398e3756321bbab26d53e639786f0f9e"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "0d18a3da07a65663ca18528a7086c9dc9dafdf4a1887c884b6ad597f9014fb12",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/c09300b8b9bb1dc656fe6c031130f0c841843c6660862530b3e643f4c466ffaa/route_admission_snapshot.json",
+      "source_snapshot_sha256": "4c3697a213ed1a6db0256f74d49d6aedf3ffdc10319a4db2dac7d3ca86827621"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "0f29135659d30ca65956d78b1a549c6e4fbbc419f13a7169760f35381c1df171",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/54aea7154f35367b879436fec87f861a0265352e68968addd9aa9bdd4b934051/route_admission_snapshot.json",
+      "source_snapshot_sha256": "14da837ca95b391e4bb3ebef894f05fc8fed3b6744238b3ce1b33e71d2be69eb"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "12596d4315586bb737eae1984d21ba7b6707bcad99bd37440adffcb059820c24",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/3252e9c656474c0e062e3948f6b2dbcb352971f58eb4d6fbfc33722982a288e5/route_admission_snapshot.json",
+      "source_snapshot_sha256": "ebe5b5dbc9b48f5c801f126cbcf92bc269e7809e3155fd783e719355af271326"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "1670f1430b713dd0c0fbc903bf2d96ca9b0ef9bc29c09e6c9919061cb346bbc2",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/cd94c2393d66a4cd70788362dc6ca96f58dab9bb5325450ab6731d56307aa090/route_admission_snapshot.json",
+      "source_snapshot_sha256": "43138cd0f91ed8cec847c2c8d59fda013773dd1be271b1d8783ed65a4f81fa93"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "16e9b2e17779b18beb692bc65e6e415a6fa8e99c6d61a4218cdc1108a39a80e5",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/e9b045fa9b4fefd5e951f3649274cd929078d2499515b5c720d89cfba9d5a90b/route_admission_snapshot.json",
+      "source_snapshot_sha256": "e4df4c1936fc712ad3e90fbb84e245f8b95042006457fd806c463e6ef8c73e63"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "17a6805bd1fa04a2b9966a336ae3cf9e2120d3474b1945dc93241baa3f8a579d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/45c75521182ac7f81716e684db4cc8228a7570a427538cbf4d6d34db9d6f9997/route_admission_snapshot.json",
+      "source_snapshot_sha256": "8bc549f19bd06203908bcdc12ccf76040c5568b652b494d60ac77e22cd94c652"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "17c4d1cd081360887a43f28f2ac5265ef4d4d7de8d812fc396be2497db029ba0",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/b22d32148a1dbd84bd2a2a7d12aba89d12c5b67f52b9eedbbe688e4f73cf69b2/route_admission_snapshot.json",
+      "source_snapshot_sha256": "f87db1b46f5df383a7c8800f32f98a2ac74ed735a7fa8782184b144530c39d40"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "1905cc20fb2685172d12154db7b961569da9a2475c11f7425341d8fdb80a8253",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/815e874bd1c2124eec9e99fe2d1bd52d3a3263885c90c3ec4dabfc51aa661e46/route_admission_snapshot.json",
+      "source_snapshot_sha256": "b7981420fb53392f2acaab136b57ff9d483c2554d4de028383d9e5b4294882aa"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "19ba0d7fd48345e534ccd9363b31a4edbcf8c0895034764105c2ec49316a14b9",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/b7f3f6b926f40a96975fdfd75aecfe5b9965de05a8f1ff67c6b08d6354fc9719/route_admission_snapshot.json",
+      "source_snapshot_sha256": "0cf6456ecd170851a253e6db1062d8b892e9899be779d0485ddb4800f0911a7b"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "1db823f838ee97992d9df3c9b6805c23838feea3310d0347752c4c378963fa15",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/a25311958bd4744317832ec832ddff6aae29699701674768e42e6d0119e36a2d/route_admission_snapshot.json",
+      "source_snapshot_sha256": "9be3d1d7ae4e524751f20e8830f7b1dd09594af96928aa330955539764467aaa"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "1de4f80ff47104a80e5a7e6b0b1218113eea076d9d5dca5ca14486ac73767772",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/115b4e391866f785101e9bfe628fe61a99908307cee8bf56bc256d8c4153c67f/route_admission_snapshot.json",
+      "source_snapshot_sha256": "41cb5fd6bb530cefa36201c4d7d6806bc0169d29ef1e31f27f5c562ba1003c93"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "1f6a7d9148c041c0729e0d1a2e2d53ae77df0ec57d93684374ed56035dc4f409",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/d6652306c4f910d3e1583d57da1c71587268982b6d055471bbbd08e4b2fa1395/route_admission_snapshot.json",
+      "source_snapshot_sha256": "3a6a8f4ed83ff7b52deabd678a88263d1638dc4cbcc3c61d3329938728c2bf79"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "217b7678c57e74cda43491a87ff7ffac9a8b7181a6214ed5c6dcf5ad8e86e098",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/57eaf253121e919a2cf89edbf5b23d4e1f12639fe22875a963760f4d99f078d7/route_admission_snapshot.json",
+      "source_snapshot_sha256": "31b71deda80faf68b0b1ffed27a26888b24ad7449fc59439d3740902af36f2b3"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "24d4ae52f40cf9df9169b89943d21cc852243a5f8141169733d5388826b8c1b5",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/769558eb4f8532efdcf1ad6c7a04d96c8290aa53143b935e57865140d156322c/route_admission_snapshot.json",
+      "source_snapshot_sha256": "1c05fcd8ccb4761bafb812b3e950803255cb7c71897c70d697a2f1bb03747763"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "258b21ae641c7df47e5d08533442e49434264013b9eea8e81ff724dc89d169fc",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/722f954252dc5ab460a8acb2431b80412040584218149396653fe8cfc12c95af/route_admission_snapshot.json",
+      "source_snapshot_sha256": "526fa8d12143268aa28516876b031b0ae885e4134a8ec25c73f9241e0fb0d8a7"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "2639207f6c168ebd8852f027c715d2af2f8fc7382412d52b372b28629e073022",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/b95106004bae8e5403e542722c7f5c1a9c6f65a3a76a660194f9aa7b84d0969c/route_admission_snapshot.json",
+      "source_snapshot_sha256": "183f2e7a103b7ba7dd9350ef7ddeaecd422a63e8b681001fed5e170348e5b8c0"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "2e3e04a7850c380d0c99ba89e87788ed9c81159e2c480b33cfa4370adc8b127e",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/4b5b05d1d2069201433a07ca29d7f3757db3cfd20a6c382e8b3b498d58c17253/route_admission_snapshot.json",
+      "source_snapshot_sha256": "a0242c1c9c02a7ea3e41ebf58321e60f90dfa885daaf8f545f53ee12499589b7"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "31982b93fc7966b6fc67cbb6a8e153390263f538ff4e626aeb979e6427b5ba26",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/6f2a4549bee724d711477f6172b9d5d5422273d739b13c8723b2178b32e856ff/route_admission_snapshot.json",
+      "source_snapshot_sha256": "35280d6ea99062f181341f84a6c72999e91d31cc620d812925f8c09c768054bd"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "35d02ff5368944a4f588a7565754202ea3984adb68748627a6733b600cb87518",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/3110763070d4540191ad20c1b06d2d03e67e2374eb4b4a9d3b47ede1193b0011/route_admission_snapshot.json",
+      "source_snapshot_sha256": "1182be8f3a5a8de103cbf44bc386397580a5ea9f43233eed830ee4e1a9b91b8f"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "368514c4b021e80773fe06b0d1f66bbe2f1acc232c785ad0cc5708a17e6a6536",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/f9752dc012365b105ce7ee32c3e7a3a49c330874bb09e7da522b8f8a0f749894/route_admission_snapshot.json",
+      "source_snapshot_sha256": "00b0218a5eca0aba8392234d8fb16e840127f1108d9e461a186fe9130cd4b414"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "3b73475169f40d24d2ce3174349ddaba9748e28b53ac048e0e36e16fe358dcdf",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/6016ca9f0351d11ecef63e643f3b69c7b0fd119bbd4da0364294e01c4a61bbdb/route_admission_snapshot.json",
+      "source_snapshot_sha256": "81233e16a38e6ed217d031f03b2835505f9b2e7cab82db1f76884049a7db4cf5"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "3c0add128eca3e2f80a74146dfa5129dbaf96a0942d926d66e25d03ec53911b1",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/42f9118fcebf6604aa171e5c896efd5f0a32dce2ebbf5d83ed4453fdfeb7bb6d/route_admission_snapshot.json",
+      "source_snapshot_sha256": "ca54d3e4db63274e077fac497cb606ccef0b18e4f956ee8a2f98ed4ca99a8683"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "3ca7d7534c42486f81b00ef416f4acb1ae1a826a3e90e1d6d23e2fffa7b49c5d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/3c79a28f778363eab77c6312a79110be86ac56cc703cadd643a7cd2427ca7dcf/route_admission_snapshot.json",
+      "source_snapshot_sha256": "226902a9b3df3beed04b6c4da02df706923a650967d5f8c3e607266b3db217ae"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "3f53399167b6f44822dc4e2a63c7bbebb5ba1c1a9ab1f44be8a61a2fd7186dac",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/eacaf8c0dfab249bf9d6c7e67fc56ee96caee1deebfbd547f59a22e10471797f/route_admission_snapshot.json",
+      "source_snapshot_sha256": "d7dabc0d185959f61985061fbb80db5c1452aea8defef43df1c6a368aee16715"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "4092e17bc3a0465d5c04af4f45b721c444031f5e83b1238a25c462ac2c629ca0",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/b65a4917e503b6e0bee935030c565ad393add310802a63348d1e0e2c8477ec9d/route_admission_snapshot.json",
+      "source_snapshot_sha256": "61b0efcdabe96e99371543bd514d530a3ed2e4eca5cd238aeb7e14f10165b6ee"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "43222d50b6ede0ca67c38dd65060b92a9bb67704c9d479b3bf95bed149f5aaf3",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/04ba79d8e7bd96b344f08b8f832575ec021488219f9d6ee736082842883e5035/route_admission_snapshot.json",
+      "source_snapshot_sha256": "6a0722b51ed69c1b93a9dfcd3b8a5ca071cd1578529974418e2face3d1c6a7cd"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "43f30ba54d51ca38020a917455b6df438ccde69d01c323709189deb1d939441e",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/1c66837283c32eafa6bbbd3c2a74ff815d28062f02d6b4ae7e5dbd34950c3b5b/route_admission_snapshot.json",
+      "source_snapshot_sha256": "dc89c79ac5d30fdf7a5676e00fb26d7b0b8ccdee845842167c78b6ba3e327179"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "4518a9c0520ab483f201eb21ab051d6981048f4f48a8b824bc39ccd34f71ffa7",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/fddf026b44e14cc00faa096d1f9262c7a051e45cc68620cf74d15fad1ca87372/route_admission_snapshot.json",
+      "source_snapshot_sha256": "c4223b9b6dd84a2c9b2ead428b41be1b413266b9dad539da2d0d2f6ea36d6fa0"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "456beecc0b4e5af7d522ccd3fdae74466e6bed1f68f16ebc65b7200a7bd64033",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/1bee59eaaa1fc64cef6e68e56e6ae951e3abae5698e8b164a5588a3eb8161b9d/route_admission_snapshot.json",
+      "source_snapshot_sha256": "a2db4a93ddbabf113c961d9b6f9487858002b6cdb19c2cc0fc672983e1c498c9"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "45b1b3fc873a698fcd874268040ada0003a408e0ffea9f6053ccc809c31448e5",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/cea01775010ea86a79e84a975786087d9c479b17b6569287acb08313d670cbfb/route_admission_snapshot.json",
+      "source_snapshot_sha256": "86125aee3cd872b489b89e737f65c6491ef5cda49f42b9dc2e5d5c71a632fdbc"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "47a7e39524a155c094ed07c85a595c86aaf8ffb340e7119b49fdc7c76e355aff",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/e920b8cca7c8269a1844b81027d3b32a80f1d9b718834810563084cf77fd486a/route_admission_snapshot.json",
+      "source_snapshot_sha256": "50c71a9e2cb03e2500b4bc3ba3ee778cfc180998497fefeba27b412fc6449bc4"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "4c172a8d7488596a716cbb74c40a80d1665e2026186a8b5fc737064b444a5563",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/74a5208ba6acacc4db338090035770ec37848b4dabca64a5357a85af71440f35/route_admission_snapshot.json",
+      "source_snapshot_sha256": "aed7a68299895d0619e384dcd3f31a7cb0ba306f7c4c9148ef32fc825fe76032"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "4ebdfe139fddc39069d19a5b814d693348f8db123226f15a79630d3b7a579c74",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/5a6b13c29ded570301f445d2510a73554d5e2a1ff3f00b685c3b8a15a27ba411/route_admission_snapshot.json",
+      "source_snapshot_sha256": "687f755115c27f3304c2cb565d2e34481cb4ac910f6b3b0f98e2414d306b56f6"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "4f576e4719c41107a9beb8ed385f9ec78c0125fda3fdb285ef63521da72e6b1c",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/f4c842974baa6dc3439df35814870c8952a2b5aee0d5cf4638575bb6fb705acc/route_admission_snapshot.json",
+      "source_snapshot_sha256": "ca3c91f448d9a6d97f5341eccd1f4f04e7532c2125d80245a285f4c42ef18844"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "50c7d35187b6ab3bf6dbd679bbe7143974f42cb52ff2f130d72c3359e66358d5",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/b2485f5af726696949418f3ecc0a0942898e7bee991f833514330876a03500ce/route_admission_snapshot.json",
+      "source_snapshot_sha256": "2ad7b38ec7fc8b12ef2257abd5c38c61bce575bf7ff61bb4486d2e290000b411"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "547ca25ca254bdaa8def5feccedcb917c076fb6348f6329215d534557a84d6b7",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/b1019dbc4a440d6a40a5b7eb1efc6ae76e5e7d1912946d9bc017e55eacd454cb/route_admission_snapshot.json",
+      "source_snapshot_sha256": "3d81913b0e0460b5371885256e5e4c4b4860ee925ae9288e128e6e36202da277"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "55337bd8edac4b9af277d358d7380f8600235e6155948a4c858e4d76a1202b12",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/b526982ac5538bf6673da07ab87ef494d9103d0df9a9b1bca70bca801a3b0d94/route_admission_snapshot.json",
+      "source_snapshot_sha256": "bcd1dd21139f2b49475f6149fd06b59977d3e362b1e7996a21d73edaa1946bae"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "5688a16b7f4bcdba0f15b84e6b2ae004c2cf3147b67e3cf97cea42145fa45636",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/a0d765f1276f00b2be844a8ef21afdf00a627dd491ebe343276f7e6fd1164c13/route_admission_snapshot.json",
+      "source_snapshot_sha256": "0bb1db6feca0961e73936ed739eb915c9b9a8aa1dd2b6f50dce3e37ec16dd06a"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "5791c7c8ff027514f06d44eead71b0e658afb12c91f8507328c55a69fa7dcae9",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/bd0e033a6189109f38b2f5dad2a852685d5e640681d5f9ded24e6ffdee8a5935/route_admission_snapshot.json",
+      "source_snapshot_sha256": "59f0767b33f2c335031260f8d13a266ebc39a722b0eed0db83ded651c6020563"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "5872bc70f8d351a3816ceb9bc2c37f5fe32e1267d707e6ee080f4b11f5ab01e7",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/83a0f6720712e8869623fcb327e14c5a64131b1776ffb2b4c00bb21e576895d0/route_admission_snapshot.json",
+      "source_snapshot_sha256": "3bd7977f0a9d43b7760e3ae0c92ce5c32ac47cf9fea208a847d02929d1f93c9c"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "5a6338cbb900ee4b69abca730717cf23ddcf8e5cf0836a4d70bf91b6b7501704",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/52a3f61c3182e1ede45e28e166a5969c380251297f8955615433a0fad38aee1d/route_admission_snapshot.json",
+      "source_snapshot_sha256": "667496429dbb130bd1ac2471ed7dee03f1658df4a8cb6b8196e6c545bbc5e8a7"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "5c70d1d755b06516948d75b173605d7fa29dd98b7ffa98748217c293fe54bd52",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/d78e78e85a5116614c4f4aed90d35be66dcf614a10434d7a2f3f60a916a9d9f0/route_admission_snapshot.json",
+      "source_snapshot_sha256": "17d9199654e8a84d29a8fc4052e533ce2c81f1d14d6a16050fa71bb576ad3b1c"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "5d299a6609f87804de7b8340bc23a68e37a75b518ce9a40e3bbf79296b0e05b3",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/df5e260420feaa1e383ccd8d0a7d910b00084dc939fd949fe386e229e7b07b93/route_admission_snapshot.json",
+      "source_snapshot_sha256": "1449c9aba3dcda6d3027fa5884526cb737f65ebe12d3750fd289d3667802161d"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "5e21018cc408aa05507d8bfe42afd9d635c8392d76b6e73000474178575e5649",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/08628288ed1a1d3f37690fc23c30f19fc6b2e0254365c85e27b512017a1c4d8c/route_admission_snapshot.json",
+      "source_snapshot_sha256": "96243cd61835ea98e3f2f761798941fb9f73fca364194cbd5d68255a04f73470"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "5e83ddad2b4247ad25984218e6631da3c16748b8a2b593c606a5685ef8cdc6e0",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/16eecaeb5d7750d9e058f2e24538b731f5644d2fabb1f9ebcc7bab1d61d448ec/route_admission_snapshot.json",
+      "source_snapshot_sha256": "3b800645654ddc8eb0492c040e752d90fbbb9fa41ad77aec3589f3ebbd49bd72"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "6167a2f6603422baa91dcc6e1e95df3d4e1464cda60bcdc64a4d81555f837419",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/0d42cf2740e59db639b4178370855e4f1e1563ad50730190624f5b9bf61504e9/route_admission_snapshot.json",
+      "source_snapshot_sha256": "58e5bcd4f15adc21c09773561fba19ab7c982bb03518e5051593f5816f6d241d"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "63e21effb53b07bcec887744a19777320aa8f5f24fbe5656bd482331a38aa65d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/0c49347bd2a8e068c067742e3b2e5b569a196c987ab4bc93c7c305f52fb4174b/route_admission_snapshot.json",
+      "source_snapshot_sha256": "195b23057c2ba0f2c67ad4d0d57a37079dbf170d1fe08fe536a17b1cff54d725"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "6416e97519ffed5db24846c53efccd87b3349cabffca62e4a81a288b82d9f4c9",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/f8c26aac6f76cedbfe1338a9496d12a9c6b5d8ecefd1ff37b3e4c0f92efb6870/route_admission_snapshot.json",
+      "source_snapshot_sha256": "b1d2f21107f102b0736592ab0f0e450c4b444758b55611f5d0ab9b243c763527"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "6749e17f1303963d3b32f375fce89ce66d109754e2146d138559ed1a4bcedda3",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/92feda67a7ef69959503fb69c74fa2bcbd92394b7bbff126981b5269e0223409/route_admission_snapshot.json",
+      "source_snapshot_sha256": "cdb78d3154d0a85a5c493ddc94f177f8a6776fa593b70a694bcfeb4f46cfc301"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "689d31f55595243474b7f042ee9b826304a839b30d2ac8110d024a29eb39b806",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/720b63552addba660cbec5d973e917f5cb161d2c25fbb1d380650f1956b71234/route_admission_snapshot.json",
+      "source_snapshot_sha256": "0712a38f4c011b37c4715bb081464711169c6b13d00541b70694566b3dc66f84"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "6ae81004d1edcddd104f9bc4d9f9d0b0862f07c7094fb92bb88592c7588d7c0e",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/3c72da3e06143c634b1cb50fa5e513fafc076266d3b9d38a37e0ce80fecbb6f7/route_admission_snapshot.json",
+      "source_snapshot_sha256": "669722037a98113fe2d154e86a2372b4fdc1a3b0a988b7d9589f050b01b6d39a"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "6b98bf8fd6a25a55e3d90911b2977aaae531723e9ff3c61e13117fcd4fd50b2d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/a79fc2a5714aae0ba59ae4c7a12b98b7e1cb18de97a6e343518d44b9ac9cc7ab/route_admission_snapshot.json",
+      "source_snapshot_sha256": "e7f0d27d870d109117e92028e02c3d31e079962197598c52fbdd2d72aa95fca9"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "6cc27f773b9d5f75d692efe978dd6ef764d3433a7e3d0befe0926c32f0d5a64b",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/01a41db0149c7df8073a49bcc77a4239f5ede4485cb97a2e955d7659837e40ce/route_admission_snapshot.json",
+      "source_snapshot_sha256": "3361cc1c7061aa8b7a692979a441947228221c565f73dd5d796d533048885348"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "6ed58f90c7a3c716d1c9612d7025c0967a8b4fdebb11f6164df35b852d701621",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/25e5d313084708bce20f2789abe093fd6ee07342a648363dd3c79acad2a41e93/route_admission_snapshot.json",
+      "source_snapshot_sha256": "52002d5895a66b2fa2daa9c9b9c0071e01a0407f9dc0640546f6bceb4b59c31a"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "71c682c26b87158840d6577310cc646ad158a6a3fb96adf837a03b6ea497828d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/c388d738531b9122e71e5e8e037319a1ad88f0646c4e3f75c483077077da9650/route_admission_snapshot.json",
+      "source_snapshot_sha256": "33c02f395d00960671a9e24a53e212e7579af059f7f4dd4c1a5102a13d182f96"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "720074f4631b062ed33540de6ccba2b680ac4dde3ed3d42df55f3aea3c41c8ec",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/f628d8d286e13de8018fce291ca03d891c50967faae1dbae9e9d3ebdca3a47ff/route_admission_snapshot.json",
+      "source_snapshot_sha256": "752993756e79982c2b1fcb1d05afb4cc4dfb3fa28fdb00c861895bcd9be2d2a7"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "750a77ef3e000bec8051aff86f40afea2a97a118984b8c0a6ad9c28a2f113e68",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/6d417fd7b47a36236da5bf048a80e688073d2cac7935eccbd23fc20d9de51559/route_admission_snapshot.json",
+      "source_snapshot_sha256": "795cecb065f739c3de8d69c6ef24f2ce71646ae2667778135651043a5c8d3a7b"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "7759b3b99aea78572c94ed94fd81b621e25529152c3956b33a4a3749da1df32e",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/ea2a9a44f9bef1e6b47c66b130201d999028202ab77ef60b9448008fbe964ae7/route_admission_snapshot.json",
+      "source_snapshot_sha256": "9cd4baade427c145130eac4187849c00a122963b137e806b14c0ecb5a8db9db0"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "78c777bcca92d52e29ba271f561edef27b14f32e6ba515465380bfc33be4b00b",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/4946add6fd261e1054fb5ea164220b5e1d58fcbb583c147e2f0fb047d0f1d9d9/route_admission_snapshot.json",
+      "source_snapshot_sha256": "0b13d28ce73d90b80ce260841f2d6c4109c4b41b7686e7bb18512e08128c20a5"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "794e14ce15f49cf2ef5985eeeb007b5970659ae3533ed27fe79a28180c8fdbb4",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/49e132fb44d978421c5287564b86db42017125dfc90b4dff8e0f28201b6e8296/route_admission_snapshot.json",
+      "source_snapshot_sha256": "2f9296a8417dc73ab1704f49585f516b81b9b79be4a270d7e0c2314a7bef5a18"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "7b842798840d1a3251cdbb3b4dda35e5f8e4f045bff73ef5e0566e570d83dd98",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/7ce4b365d03e4173cdb5f800523588583445074aababe0b0f5bd16067232eff4/route_admission_snapshot.json",
+      "source_snapshot_sha256": "05594ee3ae0927819a901860df365002454a9b9b845f61541e3b4b1b7a05cd45"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "7d355f9c91daa2697b557ae9c523be7a671904ae6e0ebc4bedbee944c06b9f22",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/5689bec462a4b49e02800efd7269ccd9b3e2d709e1dbac7e629ed42e2f9e8fd9/route_admission_snapshot.json",
+      "source_snapshot_sha256": "b975301e8eaa22d09c6ce79ce83c55a7ae1b741533ea08f6c50b3ab2248d6389"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "7dd6e7dec7fabdd9c913b63ddd3f4b5b14a4e2d54dfc0614ed95e084c9a8549e",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/7cd7e45c46de81ae5cd52d75e5885136e341e6a5b179aa5c63cd18c8dacd16d3/route_admission_snapshot.json",
+      "source_snapshot_sha256": "6ce10ebe9daf1c44182e07a124517864dabc38d0b199c4613b6813c245d9d575"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "7f1c42c9513fcc959033255d9085b7e33f498374242162e788002f86771341d1",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/fb84d8e7410d91b127dcca3f0302cac4abaa70dfa409beb6e376777e0fdbfee6/route_admission_snapshot.json",
+      "source_snapshot_sha256": "9369a4d6f32bf215f2c3770cb8f676508c63a9f1144beff576636b9c91143576"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "840ed1284894b12ebd0eac0c121ac75ee24bfdd280f60beebd6a686a46119546",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/a42382c02c8dda0867b01b4e4109410394cbdd270898c87429933923e11b4f0e/route_admission_snapshot.json",
+      "source_snapshot_sha256": "f53986dc257925a49b7bf85f70646c779d035589c62cf7a9da12b8e06bda0d9a"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "8450df4bc4422a521c5ccca41086d3a1970bb3adc5dae291e968cdd10dbf20b5",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/068b2291662a082567e38c4a3759e0fc1ca452097740e93242981b93cd48ee9c/route_admission_snapshot.json",
+      "source_snapshot_sha256": "db914ae1d74ffbf3613fa886a59ba911aafd3313bc30a30de4178b849acdf757"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "85fe94906ddaf8464274334cdfc2d1622baa720516623706ceccd192dba62ae7",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/272562371a2f5f17dc32472b9dec1b47b55c51755b37e56e5a7d9929a1499f03/route_admission_snapshot.json",
+      "source_snapshot_sha256": "6ff5af6f06caca0237e09ae03c28279898a7b0a4e85534d1f54b808d77868b13"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "880d36b2c7ae06d536fb1390a61151d3619e0d970b3218efd9bd98fd65214148",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/f8661f8fdd41ba87592adfa72902a7d2f8848583d1f246a9d2a5fb155b06865f/route_admission_snapshot.json",
+      "source_snapshot_sha256": "2591b6d86c046f0531eb33f252c8fb4842aa0cf4bfab5341f5927f47d412c3b8"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "88113c52fc939ed9a0008480e5f3f70a6159a3d4b396a2bd939195e7b83c5b60",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/31ac55463bbee73a51a6d1f13253efc87b0eaaab604b70ddd740148d5e83e8c3/route_admission_snapshot.json",
+      "source_snapshot_sha256": "899644119e8b85ddb9999ec2f7f86df1285fa9bbcb41ff03a187c91a2df5f9cd"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "88c2aaddccfa2f082be7a8843bcc79f1a952756206cea54ccb9b57f986bfbceb",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/dd9bd0f7c9d4c9d9560410526d6fc9ca7fc8b8a488a56018299417f0ddf9630c/route_admission_snapshot.json",
+      "source_snapshot_sha256": "45de90e9f7bf17db4da46ee46e61e2716df31bdc58f1f4b200096c0eab49ea95"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "8c5921c31504002e33c4a1cf482351122c916ecdbf288c5f5e88f5e43b647235",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/fff48709448ce54ba9efd3aa104c1aef9270cd6f6c584fab673a2ac8ec76b6d3/route_admission_snapshot.json",
+      "source_snapshot_sha256": "4a6700e2d09303d4cccf553cc95dcbad0869e9e3e15546bde1b895ee32319cb3"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "8d89e81d5689d040b9ecd17f23716d38b88e48a407b27941516cda57cf8f4a89",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/7f2bb49a5211e836d2f7eb18e59e6948ab192d02ef6658029d12b31eff588f9a/route_admission_snapshot.json",
+      "source_snapshot_sha256": "4c3f176f1107305b6498b1f31121b282a3f76736b75e31961afd76b53a916849"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "8dca43dd6ce51dd3f0cdaedb8004d499c66caccefa12864acf9ef0f0b36b253b",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/37def363eb2d0fb88ab85baaf506b1dfa234737a8e8d35b8633bfda24b835ce7/route_admission_snapshot.json",
+      "source_snapshot_sha256": "3085642daee2ef1b5be5f485b813283dcb65fa1261d35d544d9575cb1531d567"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "8f6bd5798e3d4b4f86c3f1deeafeb12bbb5de213578649ae2745542b11b7af9e",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/d5abfaa565f39bb3b8a0bb4ead575236a8e1a9b70d4aa820b18e443e193f8481/route_admission_snapshot.json",
+      "source_snapshot_sha256": "0c8f36c66f1aa84c44084c48e9976c3fd6b1add77d63cfeda5086c5a406efde1"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "9218cd9625442c40449f80d97e8ba3d3b3e86060c649bac9e2dcc194223f1c71",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/555e308f8fe664ea286a39e3c8917d524e1f936c5db69b7fa2cc623e33ba6ee5/route_admission_snapshot.json",
+      "source_snapshot_sha256": "0e7535d9d5ea52f3cf64bee309dd8ae136c6109b7c2509ce4534778dc7b009a9"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "965d7171c9f698fcb184e58f8877c397b0452c09214c6f3af5b863cccb6684e2",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/675f2ed286d82d88e733a104d4a4439bf2ef879fd3db2b4fc7a22055c6fdeb8a/route_admission_snapshot.json",
+      "source_snapshot_sha256": "84fd8f272b58892c3cfb638fe8d5edacf71bcc5620b907a6d3f3f8028cc13d22"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "966df7e976a0befdbd6de11df4be00443bb82a50df0950789401a4651d1417ab",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/92c39e2b2cbc98449f3ce478ce6f3cfa8e3ef2ff96e6538ef2f18f3cb04d5f9c/route_admission_snapshot.json",
+      "source_snapshot_sha256": "e6e797ca148a4ad703d31d6452f8fe61cd20930d17ba902beab391f65af313bb"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "9691dbfa84d2dbd8cf49f04d8aec56cb6337e1aa72da5d3bd82af793b80e6c67",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/4fd310957360ab50f3ba2ddb2c9d34195bbe3d28b4e67a00971508f8a1d18df8/route_admission_snapshot.json",
+      "source_snapshot_sha256": "b0ec920ee4e770fd42054f2e461b22351df9c0499d70d5f6cd6d7e30c25546fa"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "9a01f288115bbc9c947932e3ac5e46286bad10fd5b05855e1f620ad403d5fc36",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/e8076784e09e020623ff34fcb97460108f983a8ba067b168c10302a7513b3ad9/route_admission_snapshot.json",
+      "source_snapshot_sha256": "7b5f75aa7b53b4dac41c33a57851ecf8e7529b2f656835a2c53452ec871e5303"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "9a628edc47542b814f0e0ee571b35e2a35e6218ee59f3854c4c932049b489bb4",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/c9b3ad5d5d0541b86ecce9173da6694eebad610be10bb025769a781e541f1ce6/route_admission_snapshot.json",
+      "source_snapshot_sha256": "bcdba4cee6c206d09d4d32daacd72aaba0375d2a0efc1b383f66150a84631fc3"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "9b5061811e8eb07105a92b00e088b605eb71976edfde6d27df0ddf8d87a0a37d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/036cc9a816a3b3db1759937cffe96478aaf8052e9ff7b788920951c7aa1be05b/route_admission_snapshot.json",
+      "source_snapshot_sha256": "f97db7037968c60ea2cffa37466a09146b265f576d8898945f266135f68e4fed"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "a0d66fcb942795473e70c9149266998065db135e6df855054b5b1cd6cad3b118",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/4dcdc0d97d636f4817145cce8b80c2620da22b85e96c088c7b082fa75c990297/route_admission_snapshot.json",
+      "source_snapshot_sha256": "44ab35c3a6d4e64d142a82b0c2b5e33b6bfff58e198fb73e908d6605fa2a3cb9"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "a3611d00ed3314949aa1058a91298c450ba4720f32e3a371b674f3f1c001c00d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/d934442d1412241e0c50931c64f64e68eafaad811d89ccf377a95daa1b9e2b5f/route_admission_snapshot.json",
+      "source_snapshot_sha256": "24842f5139b3c4ae64a8fbaa2962815dc0f905583a1185151989a2e56392b509"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "a5d7451905e9b87c2c0cee9e0412fdf0dc485626a3e8e4dae8a526988db298ba",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/3543c54877053e8ecdf28f3b7fe845644fd29ae0aba3a3b0a75e78847e3feb0c/route_admission_snapshot.json",
+      "source_snapshot_sha256": "1a6a09625662362aeab6ac68777043aaccaf2194b6c5ee5c7e3baf27aab9d5b8"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "a7b3bfce61e1630b3cfe1d82fdc1aa0383718437dea1e91071bc3c477bc55204",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/21d381f0f23aec326421c1f3014c136e7b773fdf8a237f0eb9d81f4656a283ff/route_admission_snapshot.json",
+      "source_snapshot_sha256": "57d71150c67b07e4bcfbaafc99a82f76dfb49ae8de5027427cfcb29e8a1b22d5"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "a862ba658d4a26e689af245bc80b3de74b68fd46a8f4cf4ded4c548243e4e79d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/dc5661811b5bef268c8f507bb400d8a0b64333b188d5d7e3a4764c9a2c87b22a/route_admission_snapshot.json",
+      "source_snapshot_sha256": "66bdf195ca2481cf3dbaac2aa85e440d0d0a4e725dfab2742912176e4535e8b6"
+    },
+    {
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "a95c64440aac2c2ccbfab909521372f383e22d109fb367652431f46c76a0f528",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/fc2fcb5cd8441d07/16fd2073a6ab4d808ec25e73b7eaafb9b0191be7fdd940b5422e062d89620b04/route_admission_snapshot.json",
+      "source_snapshot_sha256": "fd5f5b6509cc5fe345504b85b3b3689481848df52f2418c9076077d8bd14aab1"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "ac25737a6bb468e23110ffe11d298eb62fd36d0087447f1f57f81d2fa9780c26",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/e2d21462789db7bd19df7d5dba34449745b2e76d863e8731a2b077c85ca4b808/route_admission_snapshot.json",
+      "source_snapshot_sha256": "80be32faff9372222eb44642f1578e1eccd3cde600f37c86dba75b529e42b53c"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "ac795f2857283b34eb229a1f42621d6f0c907443aca8594bb092a69811582190",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/742dc40f1dbf81f8ae3b29adaae2d008fbf08762869db67f0aef92531e0d09d5/route_admission_snapshot.json",
+      "source_snapshot_sha256": "9bbdee249f67c234c9698dc2468a2449160305a37880bbee713e789fe223428e"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "c0b447f5aaf943ae54a8d9d7af2021548b260b191c6362bbc86673722b9adc06",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/6976b0f01a2d36f38df0fd84819247d9155504b0865be49680272402b85fd756/route_admission_snapshot.json",
+      "source_snapshot_sha256": "61a7217feab061c5622fffee51f0be2e2cd82f3de9ac5262f45b3a51bd87b795"
+    },
+    {
+      "instance_content_hash": "38c6df1260241992",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "c1438b224df9bb5cc1f2ea0f8f09118a1c6c14104ba1d050c25dfb846dfac054",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/2370f369d5bae237cd2a26cd8ad1fb6753d034fd80d1ee19cfb382247abe6d24/route_admission_snapshot.json",
+      "source_snapshot_sha256": "dba2be1548090064223cf34a36c438a4703c8f11bfc24ef193bf40c6721ed052"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "c28ea3e41fde96afef5446b3d5321651af91d97daba6f01d4d55ad5b441128f2",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/369fb4ae631dcc4d089689087fd1c25de38242df935790a6eedc7f7226fc0648/route_admission_snapshot.json",
+      "source_snapshot_sha256": "61debeb5b410c0a821b6e3609ad515046ed259209a6f032477546a6a87d10b20"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "c6142c140841d534218acffc077431536f62515f854b822d65fbaa5ccdb8f9a7",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/b3d288d2270dcca9fb7abe1f66ba4db9515863a2f4f345707eab230f78c2433b/route_admission_snapshot.json",
+      "source_snapshot_sha256": "f8d468cec8a18c6bfc93e96a4bd32b6b5c403bc7a8257efb513b37502dacfa61"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "c7a19dac903f835f7ac42200f88a89ca9dec4d7e64023b82f3c58715a08df055",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/870fcc6db59d5d699abc0f038c86a6e0f92de976240362b84bf02e77797c35b0/route_admission_snapshot.json",
+      "source_snapshot_sha256": "eed80db482519c75c90c282f3804da21c4c9228a895dfbbe9f426156751c5773"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "c7d3562e27c85754b726b22807cc1b13ad0a8b9763bd0476154bfefde1993165",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/f63cc583e2e6fc178fa3a75e46d3e6765dd54e47c8561f6168c326b34d2d9c88/route_admission_snapshot.json",
+      "source_snapshot_sha256": "59bef585dcaa7b89ee3b94c7845b8c877606a7534d4536aedfc27c6318df116d"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "ccb478b0a667e6f48b06a194e8cf0ccd92d6bed25ea5543afc808d3a5fc9f664",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/6d830f6dcfe6b7851892e1baf410694ec81a5e40587e42f8063443f6e5d4430a/route_admission_snapshot.json",
+      "source_snapshot_sha256": "370d89345a051ac011e47c75ea1dfe89b0f65bda8a067aaec7cd812fc2a3ecc6"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "d2cb3c3137c678b525fac4edd5b51b371087d9386f108dc6536bc8dfd39c4cae",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/00db710a87a549473bf6a22a09db69dfe2641f9ec1ccaa1c1ccf07aed975c858/route_admission_snapshot.json",
+      "source_snapshot_sha256": "ff4774f11725fca572e261ed2a9b63658114efa6f8a5d5ca578f12dff8aaf825"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "d694c1e33cfa0e7f3858c35b6125a4287d72ab0d575f317aa49128ac87aff58d",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/ef24ee7ba2bc09221e8ded374eb0d3f3aa0dcfd5c5c5840a026e9b96f0faefff/route_admission_snapshot.json",
+      "source_snapshot_sha256": "5a4160fa4fd050fef2c48251c169cd94eff7902133ed1b1fcd14ce4772647123"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "d8fa5c719e36c1bd0d343ecfdc3e321cfbbba2cae29206422ce74d27f8b198bd",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/ab8465e224906e2ca84bce3f5fb5683b6c24bff5c7ea7ef576ac488b6e41cae8/route_admission_snapshot.json",
+      "source_snapshot_sha256": "c6c0d85097017773eaa8dc32767eca8a31def59a592e2193f907a73f09327310"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "d92396a094530bccf6e64af67d26b9abfe382b3086e710dde9a82f1a748a62a7",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/ec0fda2a813cb777334f8409807904a4955cfd6f1729616cf4ca7d7d46d510e8/route_admission_snapshot.json",
+      "source_snapshot_sha256": "73804327c68931bc7254b56d42388157ee3f179b6b704b43b5043cd70043b637"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "dcce4e38426d273c0afcfc42b37ab8e220979608fe6e3643ebe3caf74770330a",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/906470c0148540f3385f5e326c964c54d2fe50383a3f69819e4fc07cdf59b683/route_admission_snapshot.json",
+      "source_snapshot_sha256": "2a6289a398a7a82eb90d558fb82f35540253c8e6599370fdc99de47a1fe962e1"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "df260a4983d43676375e0b6302616bbdf999a74ba723f354bbc86224e171478e",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/efb283ca9b48a4928bdfdab9d6e7179787b1f37cd6ceb3b43151b75a8e0e36a4/route_admission_snapshot.json",
+      "source_snapshot_sha256": "f1b8abed91b2b91c55699ce61ab96ce3858be0bade5dd4bfbf28787a5d22f5f2"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "e366e669737aa2a89134b4f839e5820af1b895f7785f06c59f1528a0af96bf85",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/50c27f21ddfe1418a93141763fbb5ec8d1bc3d410344083a417b8fc589888182/route_admission_snapshot.json",
+      "source_snapshot_sha256": "fad5719a1b84c548f0db0da3509b2c6dfeb1eb92268f167fa1027913b86c31ac"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "e49a9cc180fc8e8379f62432d71006f73b7a8e234202c0bc667f29558a154f61",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/07b6555941488470cba9621d29e8cadab57a59e0afa2803cf4926a6022a9f891/route_admission_snapshot.json",
+      "source_snapshot_sha256": "30d5cf5e08d0f6895a771c3fd29a00de4bf521f5bddd8230fbc962dc20481fd7"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "e6c59d66b37f724d19a12d73b15f45638a1239972fffb84c12f3223d15eb5b96",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/693678b52f884c4dcf646932371e47b0bad3ffdf19e80a85bb67394a38b91eb2/route_admission_snapshot.json",
+      "source_snapshot_sha256": "203dc0519fc0ae36018bff64a9d0288fa830463c52dc64eaea925a906758a2f7"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "e7e974bac23291130691ead7615830c2b23feff95d791eeb528bb6257c1c9a9a",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/14206b321b54c3ded5306c567baf5be32d966aba5149edb4bad168ce688f2a98/route_admission_snapshot.json",
+      "source_snapshot_sha256": "05164fd326922c471433f30532f85863304d1685a8a8d11534ede25685e33241"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "eecdf0e85597a0edfead9113b0f63542329f25a2641a0651019a9efa248267d0",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/03137b095310d8fb01f34870cb68b53c0cdac8035211245cf216666e6320aeeb/route_admission_snapshot.json",
+      "source_snapshot_sha256": "b37860940d8f319ad307b7bbc06b76e2f9bac438abd28ab8196d26a94d45525a"
+    },
+    {
+      "instance_content_hash": "1e78838da1b6a8c2",
+      "instance_split": "calibration",
+      "scale": 30,
+      "snapshot_hash": "f157619ba4f6b42e4f9c329cd3ec9e737af365227645d63056ad30780d9199df",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/1e78838da1b6a8c2/eae983c95e9bfbdfeb7c3c05395fb55c54368ccb5eebf2fcdeaf9dcac586c82b/route_admission_snapshot.json",
+      "source_snapshot_sha256": "ca6fb25282caa9fdd2a0b00f9262b3a565c37dcb3754dc8269ae74b4459ecd46"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "f2ea6dd4a70b3bfabcbf86cf3e30ba938c0423cb10764c752464889d4367eda5",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/57cc845d980def7c4a4486c4dc0077a6ed4905b28c72c963996539c01afb4869/route_admission_snapshot.json",
+      "source_snapshot_sha256": "6b951d09613432bb7eef001f64c018c8bb466c3de9a204f04ad0793219b129b1"
+    },
+    {
+      "instance_content_hash": "9eaaee08f3108eca",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "f7ac33321abe0533d0ae4037828631b78e261639fbc3a5b0debb8afdd5f1fec5",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows/9eaaee08f3108eca/4c764f796ee2a3e57f089164b8c0dbfcea7a8a3888bf659cbe05d118c38d9213/route_admission_snapshot.json",
+      "source_snapshot_sha256": "9920b3672398904910886f8aba1f88de9ef680e3cb8e543346dca0f8a8ad8faa"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "f7c3c4e5c949e387f45ebda9be594a98c802410b6aa4c1bb99758f8e7771d994",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/2ff8df2e63831fcfac8f5604b881ac6341e16265decd1c53fca58f69a82839f9/route_admission_snapshot.json",
+      "source_snapshot_sha256": "6d9dd5fed471446bef43ecc6d1a6a0dd9487078097926d0e60f7d6a6f3bea620"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "fc24a01a6954ee7ed6c946db227b5a1a35b6f7d02e9ea559132278de3aa908b7",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/ed2923f9cc8d7dca8f245140385abd398713f1c35fd6c057cbb1b2884dc74cd2/route_admission_snapshot.json",
+      "source_snapshot_sha256": "d82dd191800b03d59d20d3eeb632075ade8858fab0caa3ae1a9c3965dd4a8db3"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "fc41368c0e79ffcb07cb445424931686dbfa9e3120c4e6b00033465e855341e3",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/7e6afc0b7d68c2b2eb67ef86dba93ea062c3628829562c3995644baf6afa7755/route_admission_snapshot.json",
+      "source_snapshot_sha256": "c5b690aae976ea691c3fc03af54526a63092086105ced189ea8b4a4068dabb56"
+    },
+    {
+      "instance_content_hash": "62838a981ec8dd53",
+      "instance_split": "train",
+      "scale": 30,
+      "snapshot_hash": "fd07cee86412faeab1f91f8bba5e572e72f71a64427cb38b6acb015327bd2336",
+      "source_snapshot": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/62838a981ec8dd53/0a2556eab2e5b313cf52a6e834462ee2b0539a4587fc3432844edffcbae0df4a/route_admission_snapshot.json",
+      "source_snapshot_sha256": "264c24b5ff3343e64fa12aa39c5c83ec3e750a51ac049b4563e1554170342d68"
+    }
+  ],
+  "expensive_oracle_authorized": false,
+  "failure_policy": "stop_route_gat_and_report_insufficient_action_opportunity",
+  "fixed_k_selection": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/fixed_k_selection.json",
+  "fixed_k_selection_sha256": "cf476097eed17b02d8c60a1ac6566829ad00a4c327962cd16ba77b4d1e4b0552",
+  "instance_split_by_hash": {
+    "1e78838da1b6a8c2": "calibration",
+    "38c6df1260241992": "train",
+    "62838a981ec8dd53": "train",
+    "9eaaee08f3108eca": "train",
+    "ab18975e3fe870c5": "calibration",
+    "fc2fcb5cd8441d07": "train"
+  },
+  "instance_split_policy": "pre_outcome_scale_stratified_sorted_every_fifth_calibration_v1",
+  "rejected_snapshots": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows/38c6df1260241992/62ae5376d3da6bcff3a1e18df5f76699aab246bc2e02f4b065b3dc4656ff8d3d/route_admission_snapshot.json",
+      "reason": "ValueError('snapshot selection limit differs from E_K')"
+    }
+  ],
+  "scale50_selected_batch_size": 128,
+  "schema_version": "lunar_ice_bpc.p0v4_route_opportunity_census.v1",
+  "snapshot_roots": [
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/route_opportunity_rows",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr_pilot_20260731/route_opportunity_rows",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_dssr50_capped_20260731/route_opportunity_rows"
+  ],
+  "train_calibration_instance_disjoint": true,
+  "valid_snapshot_count": 127,
+  "valid_snapshot_path_count": 127
+}

@@ -8,6 +8,7 @@ import pytest
 
 from lunar_ice_bpc.domain.scheduling import generate_instance
 from lunar_ice_bpc.exact.bpc.cuts.live_sri import (
+    LIVE_SRI_GROUP_SCREEN_POLICY_VERSION,
     LIVE_SRI_SEPARATOR_VERSION,
     LiveSriPolicy,
     activate_separated_cuts,
@@ -19,6 +20,9 @@ from lunar_ice_bpc.exact.bpc.pricing.backends import (
 )
 from lunar_ice_bpc.exact.bpc.pricing.backends.native_rcspp import _native_request_payload
 from lunar_ice_bpc.exact.bpc.pricing.spprc_pricer import spprc_instance_hash
+from lunar_ice_bpc.exact.bpc.solver.live_sri_solver import (
+    _candidate_group_separations,
+)
 from lunar_ice_bpc.exact.core.branching import BranchContext
 from lunar_ice_bpc.exact.core.cuts import (
     CutContext,
@@ -65,6 +69,55 @@ def test_complete_sri3_sri5_enumeration_and_capacity_heap() -> None:
         top_three.violated_candidate_count - 3
     )
     assert top_three.to_payload()["separator_policy_version"] == LIVE_SRI_SEPARATOR_VERSION
+
+
+def test_group_screen_policy_preserves_frozen_p0_hash_and_uses_top16_window() -> None:
+    frozen = LiveSriPolicy.named("P0")
+    screened = LiveSriPolicy.named("P0_GROUP_SCREEN_V1")
+
+    assert frozen.policy_hash == (
+        "9f0e7c4f7e2cab50267e197d55a17950"
+        "aeee35aad388e47448f24873a7e92ba1"
+    )
+    assert "candidate_group_screening_enabled" not in frozen.to_payload()
+    assert screened.version == LIVE_SRI_GROUP_SCREEN_POLICY_VERSION
+    assert screened.candidate_group_screening_enabled
+    assert screened.candidate_group_count == 4
+    assert screened.global_cap == frozen.global_cap == 4
+    assert screened.active_cap == frozen.active_cap == 8
+    assert screened.policy_hash != frozen.policy_hash
+
+
+def test_candidate_group_screening_partitions_ranking_without_reordering() -> None:
+    tasks = tuple(f"t{index}" for index in range(7))
+    separated = separate_live_sri(
+        tasks,
+        _fractional_pair_rows(tasks),
+        subset_sizes=(3,),
+        selection_capacity=16,
+    )
+    groups = _candidate_group_separations(
+        separated,
+        group_size=4,
+        max_group_count=4,
+    )
+
+    assert len(groups) == 4
+    assert all(len(group.selected) == 4 for group in groups)
+    assert all(group.selection_capacity == 4 for group in groups)
+    assert tuple(
+        row.cut.cut_id
+        for group in groups
+        for row in group.selected
+    ) == tuple(row.cut.cut_id for row in separated.selected)
+    assert (
+        _candidate_group_separations(
+            separated,
+            group_size=0,
+            max_group_count=4,
+        )
+        == tuple()
+    )
 
 
 def test_sri_integer_validity_for_every_partition_of_five_tasks() -> None:

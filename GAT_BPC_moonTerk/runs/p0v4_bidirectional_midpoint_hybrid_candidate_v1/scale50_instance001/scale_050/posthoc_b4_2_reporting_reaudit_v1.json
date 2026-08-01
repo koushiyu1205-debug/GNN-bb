@@ -1,0 +1,106 @@
+{
+  "binding": {
+    "b4_2_config_hash": "afae68fd3e4dc897",
+    "engine_hash": "151764e644f3b4a3",
+    "instance_hash": "6f10a7c64933bf0b",
+    "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_001_logical_graph.json",
+    "solve_config_hash": "17be89f69459d0a004237b15a275a88b813904d2e326564eb0b49b19a82157bf"
+  },
+  "corrected_classification": {
+    "algorithm_status": "BPC_OPTIMAL",
+    "certificate_scope": "BPC_TREE_OPTIMAL",
+    "exact_certificate": true,
+    "posthoc_reaudit_pass": true,
+    "pricing_state": "CERTIFIED_NO_NEGATIVE"
+  },
+  "corrected_redline_total": 0,
+  "corrected_redlines": {
+    "b4_1_certificate_leak_count": 0,
+    "b4_1_manual_rc_fail_count": 0,
+    "b4_1_pricing_rc_fail_count": 0,
+    "b4_1_tail_dual_certificate_leak_count": 0,
+    "root_pool_tail_dual_certificate_leak_count": 0,
+    "root_pool_true_dual_rc_recompute_missing_count": 0,
+    "root_pool_worker_certificate_leak_count": 0,
+    "tree_tail_dual_certificate_leak_count": 0,
+    "tree_true_dual_rc_recompute_missing_count": 0,
+    "tree_worker_certificate_leak_count": 0
+  },
+  "diagnosis": "The original B4.2 reporter treated the flattened exact final-judge can_certify_no_negative field as a relaxed-worker certificate claim. Explicit worker and tail-dual certificate fields are false; the underlying tree result is unchanged.",
+  "generated_at_utc": "2026-07-30T08:58:53.273871+00:00",
+  "original_artifacts_mutated": false,
+  "original_b4_2_classification": {
+    "algorithm_status": "BPC_INCOMPLETE_PRICING",
+    "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER",
+    "exact_certificate": false,
+    "pricing_state": "INCOMPLETE_LIMIT",
+    "summary_redlines": {
+      "certificate_leak_count": 1,
+      "manual_rc_fail_count": 0,
+      "no_cheat_fail_count": 0,
+      "pricing_rc_fail_count": 0,
+      "root_partition_redline_count": 0,
+      "root_pool_large_task_direct_worker_certificate_leak_count": 0,
+      "root_pool_support_continuation_certificate_leak_count": 0,
+      "root_pool_tail_dual_certificate_leak_count": 0,
+      "root_pool_true_dual_rc_recompute_missing_count": 0,
+      "root_pool_worker_certificate_leak_count": 0,
+      "tail_dual_certificate_leak_count": 1,
+      "true_dual_rc_recompute_missing_count": 0,
+      "worker_certificate_leak_count": 1
+    },
+    "tail_dual_certificate_leak": 1,
+    "worker_certificate_leak": 1
+  },
+  "reaudit_policy": "source_scoped_worker_and_exact_final_judge_fields_v1",
+  "schema_version": "lunar_ice_bpc.b4_2_existing_tree_reaudit.v1",
+  "source_files": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_midpoint_hybrid_candidate_v1/scale50_instance001/scale_050/b4_2_cold_exact_state.json",
+      "sha256": "ef567711d5dc54703d5098cedbd2b7c21bde285e192f1f638c854a8d194341b1"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_midpoint_hybrid_candidate_v1/scale50_instance001/scale_050/b4_2_cold_exact_summary.json",
+      "sha256": "d2b1f8e969f3e151ea00fc018bbd0b8db9664c180d24f5be42bd30b7781b9d00"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_midpoint_hybrid_candidate_v1/scale50_instance001/scale_050/proofs/scale_050/instance_001/tree_closure_results/tree_closure_001.json",
+      "sha256": "3e35e3429b01e3475a33da620cfb0d02c6ab07b57c1a3112855f1da3e2a7f2b7"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_midpoint_hybrid_candidate_v1/scale50_instance001/scale_050/proofs/scale_050/instance_001/b4_1_summary.json",
+      "sha256": "d43ce533eae7801ae034eebfc2d067339889ee0ea7e8ca3077156034b657ae99"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_b4_2_cold_exact.py",
+      "sha256": "6db2a812c7fbcb14ce400a0abdfadd37d04555720d29fcf49a53eb144025cbdc"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/scripts/reaudit_b4_2_tree_artifact.py",
+      "sha256": "ba914da0e8e877d3dbd585346c286ed2aaf133cf3303d5714d08ee9863cb143a"
+    }
+  ],
+  "source_scoped_worker_safety": {
+    "official_dual_source": "current_true_rmp_dual",
+    "tail_dual_certificate_leak": false,
+    "tail_dual_no_column_can_certify": false,
+    "true_dual_rc_recompute_missing": false,
+    "true_dual_rc_recomputed": true,
+    "worker_can_certify_no_negative": false,
+    "worker_certificate_leak": false,
+    "worker_dual_only": true,
+    "worker_root_lp_bound_official": false,
+    "worker_uses_true_dual_bpc_certificate": false
+  },
+  "timing_sec": {
+    "cold_start_total": 1181.955075,
+    "root_cg": 815.650441,
+    "tree": 361.832495
+  },
+  "underlying_tree_classification": {
+    "algorithm_status": "BPC_OPTIMAL",
+    "certificate_scope": "BPC_TREE_OPTIMAL",
+    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+    "underlying_exact": true
+  }
+}

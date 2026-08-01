@@ -1,0 +1,69 @@
+{
+  "artifact_integrity_pass": true,
+  "baseline_mutated": false,
+  "certificate_or_bound_role": "none",
+  "data_summary": {
+    "beneficial_action_count": 3,
+    "beneficial_action_rate": 0.13636363636363635,
+    "beneficial_context_count": 2,
+    "calibration_beneficial_action_count": 0,
+    "context_count": 11,
+    "executable_partial_action_count": 3,
+    "instance_disjoint_split": true,
+    "label_semantics": "local_discovery_headroom_not_end_to_end",
+    "local_positive_gain_sec": [
+      201.8575314750962,
+      122.82063621502975,
+      122.83800633902801
+    ],
+    "observed_action_count": 22,
+    "runtime_eligible_row_count": 0,
+    "scales": [
+      30,
+      50
+    ],
+    "unique_instance_count": 9
+  },
+  "dataset_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_fixed_pilot_20260801/gat_dataset/dataset_manifest.json",
+  "dataset_manifest_sha256": "cf67af2b5c0efd08855b5cdb8e55fd433c79727cef8572567d3b557fc73cff55",
+  "decision": "do_not_run_actionful_end_to_end_GAT; keep the frozen Exact path and model in shadow NOOP mode",
+  "five_percent_solve_time_gate_evaluable": false,
+  "five_percent_solve_time_gate_pass": false,
+  "fixed_budget_contract": {
+    "additional_context_collection_authorized": false,
+    "completed_action_count": 22,
+    "evidence_collection_closed": true,
+    "expected_action_count": 22,
+    "failure_count": 0,
+    "natural_context_count": 11,
+    "requested_context_limit": 12
+  },
+  "gat_fixed_end_to_end_gate_pass": false,
+  "integrity_issues": [],
+  "interpretation": "the fixed suite proves sparse local discovery headroom in a few contexts, but does not provide an outcome-independent positive calibration sample or end-to-end solve-time labels",
+  "model_summary": {
+    "checkpoint_sha256": "233968cdb637d434e8a6213b80ac52d2b978052eedeb3a7a1f73c0668de4b204",
+    "deployment_authorized": false,
+    "evaluation_authorized": false,
+    "inference_p99_gate_pass": true,
+    "inference_p99_ms": 1.900451,
+    "runtime_fallback": "NOOP",
+    "trained_once": true,
+    "training_epochs": 100,
+    "training_run_binding_hash": "0305c60952f801c06590a4377acf7de762ba362406211b318bf5435051817c0a",
+    "training_seed": 629061
+  },
+  "reason_codes": [
+    "no_runtime_eligible_end_to_end_labels",
+    "zero_beneficial_actions_in_frozen_calibration_split",
+    "beneficial_action_is_too_sparse_for_safe_calibration",
+    "formal_context_quota_not_met",
+    "harm_gate_closed"
+  ],
+  "schema_version": "lunar_ice_bpc.sparse_tail_gat_fixed_pilot_audit.v1",
+  "status": "SHADOW_ONLY_STOP_FIXED_PILOT",
+  "suite_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_fixed_pilot_20260801/suite_manifest.json",
+  "suite_manifest_sha256": "bc4d53f2dfd8b1cf83acdc8737000ea2cfadfb454a3ff918e09ee6e491a27b63",
+  "training_manifest": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_sparse_tail_fixed_pilot_20260801/gat_training_once/training_manifest.json",
+  "training_manifest_sha256": "a0e1b0900e5ee7837123fac29bc04d3ff0c89c853278ba2d5bc25542a9d85d9a"
+}

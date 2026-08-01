@@ -11,8 +11,12 @@ from time import monotonic
 from lunar_ice_bpc.exact.bpc.pricing.backends import (
     NATIVE_DSSR_HOST_BACKEND_ID,
     NATIVE_DSSR_INPROCESS_BACKEND_ID,
+    NATIVE_DSSR_V2_HOST_BACKEND_ID,
+    NATIVE_DSSR_V2_INPROCESS_BACKEND_ID,
     NATIVE_HOST_BACKEND_ID,
     NATIVE_INPROCESS_BACKEND_ID,
+    NATIVE_NG_DSSR_V3_HOST_BACKEND_ID,
+    NATIVE_NG_DSSR_V3_INPROCESS_BACKEND_ID,
     BackendPricingRequest,
     BackendRegistry,
 )
@@ -44,7 +48,46 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--probe-json", type=Path, required=True)
     parser.add_argument("--time-limit-sec", type=float, default=3600.0)
+    parser.add_argument(
+        "--candidate-time-limit-sec",
+        type=float,
+        default=None,
+        help=(
+            "Optional candidate-only limit; useful for matched P0 runtime "
+            "diagnostics without spending the full candidate budget."
+        ),
+    )
     parser.add_argument("--memory-limit-gb", type=float, default=8.0)
+    parser.add_argument(
+        "--execution-mode",
+        choices=("auto", "inprocess", "host"),
+        default="auto",
+        help=(
+            "auto preserves the historical scale-based backend choice; "
+            "host provides isolated fresh-runtime/RSS measurements"
+        ),
+    )
+    parser.add_argument(
+        "--dssr-policy",
+        choices=("v1", "v2", "ng-v3"),
+        default="v2",
+    )
+    parser.add_argument("--dssr-negative-batch-target", type=int, default=16)
+    parser.add_argument(
+        "--dssr-pressure-max-bucket-size",
+        type=int,
+        default=8192,
+    )
+    parser.add_argument(
+        "--dssr-pressure-max-candidate-checks",
+        type=int,
+        default=200_000_000,
+    )
+    parser.add_argument(
+        "--ng-dssr-initial-neighborhood-size",
+        type=int,
+        default=10,
+    )
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -146,6 +189,20 @@ def _summarize(
                 "dssr_repeated_witness_count",
                 "dssr_elementary_witness_returned",
                 "dssr_relaxation_no_negative_certificate",
+                "dssr_elementary_batch_count",
+                "dssr_raw_solution_count",
+                "dssr_pressure_refinement_count",
+                "dssr_pressure_split_task_ids",
+                "dssr_pressure_abandoned_iteration_count",
+                "dssr_max_bucket_size",
+                "dssr_dominance_candidate_checks",
+                "ng_dssr_enabled",
+                "ng_dssr_initial_neighborhood_size",
+                "ng_dssr_initial_relation_count",
+                "ng_dssr_final_relation_count",
+                "ng_dssr_relation_add_count",
+                "ng_dssr_forbidden_cycle_count",
+                "ng_dssr_full_elementary_fallback_count",
                 "dssr_iteration_trace",
             )
         },
@@ -207,13 +264,30 @@ def main() -> int:
         )
         for column in active_columns
     }
-    if int(data.scale) <= 30:
+    use_host = (
+        args.execution_mode == "host"
+        or (
+            args.execution_mode == "auto"
+            and int(data.scale) > 30
+        )
+    )
+    if not use_host:
         p0_backend_id = NATIVE_INPROCESS_BACKEND_ID
-        dssr_backend_id = NATIVE_DSSR_INPROCESS_BACKEND_ID
+        if args.dssr_policy == "ng-v3":
+            dssr_backend_id = NATIVE_NG_DSSR_V3_INPROCESS_BACKEND_ID
+        elif args.dssr_policy == "v2":
+            dssr_backend_id = NATIVE_DSSR_V2_INPROCESS_BACKEND_ID
+        else:
+            dssr_backend_id = NATIVE_DSSR_INPROCESS_BACKEND_ID
         execution_mode = "matched_inprocess"
     else:
         p0_backend_id = NATIVE_HOST_BACKEND_ID
-        dssr_backend_id = NATIVE_DSSR_HOST_BACKEND_ID
+        if args.dssr_policy == "ng-v3":
+            dssr_backend_id = NATIVE_NG_DSSR_V3_HOST_BACKEND_ID
+        elif args.dssr_policy == "v2":
+            dssr_backend_id = NATIVE_DSSR_V2_HOST_BACKEND_ID
+        else:
+            dssr_backend_id = NATIVE_DSSR_HOST_BACKEND_ID
         execution_mode = "matched_host"
     rows = {}
     for backend_id in (
@@ -221,13 +295,40 @@ def main() -> int:
         dssr_backend_id,
     ):
         backend = BackendRegistry.create(backend_id)
+        effective_time_limit_sec = (
+            float(args.candidate_time_limit_sec)
+            if (
+                backend_id == dssr_backend_id
+                and args.candidate_time_limit_sec is not None
+            )
+            else float(args.time_limit_sec)
+        )
         request = BackendPricingRequest(
             data=data,
             true_duals=duals,
             branch_context=branch_context,
             cut_context=cut_context,
-            wall_time_limit_sec=float(args.time_limit_sec),
+            wall_time_limit_sec=effective_time_limit_sec,
             memory_limit_gb=float(args.memory_limit_gb),
+            dssr_negative_batch_target=max(
+                1,
+                min(64, int(args.dssr_negative_batch_target)),
+            ),
+            dssr_pressure_max_bucket_size=max(
+                1,
+                int(args.dssr_pressure_max_bucket_size),
+            ),
+            dssr_pressure_max_candidate_checks=max(
+                1,
+                int(args.dssr_pressure_max_candidate_checks),
+            ),
+            ng_dssr_initial_neighborhood_size=max(
+                1,
+                min(
+                    int(data.scale),
+                    int(args.ng_dssr_initial_neighborhood_size),
+                ),
+            ),
             instance_hash=spprc_instance_hash(data),
             config_hash=stable_payload_hash(
                 {
@@ -243,7 +344,23 @@ def main() -> int:
                     ),
                     "backend_id": backend_id,
                     "time_limit_sec": float(args.time_limit_sec),
+                    "effective_time_limit_sec": (
+                        effective_time_limit_sec
+                    ),
                     "memory_limit_gb": float(args.memory_limit_gb),
+                    "dssr_policy": str(args.dssr_policy),
+                    "dssr_negative_batch_target": int(
+                        args.dssr_negative_batch_target
+                    ),
+                    "dssr_pressure_max_bucket_size": int(
+                        args.dssr_pressure_max_bucket_size
+                    ),
+                    "dssr_pressure_max_candidate_checks": int(
+                        args.dssr_pressure_max_candidate_checks
+                    ),
+                    "ng_dssr_initial_neighborhood_size": int(
+                        args.ng_dssr_initial_neighborhood_size
+                    ),
                 }
             ),
             engine_hash=spprc_engine_build_hash(backend_id),
@@ -295,6 +412,7 @@ def main() -> int:
         ).get("host_peak_rss_bytes"),
         "instance_path": str(instance_path),
         "instance_id": data.instance_id,
+        "scale": int(data.scale),
         "instance_content_hash": data.instance_content_hash,
         "source_history_round": int(final_round.get("round") or 0),
         "source_dual_fingerprint": str(
@@ -306,6 +424,11 @@ def main() -> int:
         "branch_context": branch_context.to_payload(),
         "cut_context": cut_context.to_payload(),
         "time_limit_sec": float(args.time_limit_sec),
+        "candidate_time_limit_sec": (
+            None
+            if args.candidate_time_limit_sec is None
+            else float(args.candidate_time_limit_sec)
+        ),
         "memory_limit_gb": float(args.memory_limit_gb),
         "execution_mode": execution_mode,
         "p0_backend_id": p0_backend_id,

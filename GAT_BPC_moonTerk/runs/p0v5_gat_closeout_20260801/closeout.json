@@ -1,0 +1,64 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_gat_closeout.v1",
+  "date": "2026-08-01",
+  "scope": [
+    30,
+    50
+  ],
+  "scale100_excluded": true,
+  "exact_baseline": "P0V4_V5_BIDIRECTIONAL_EXACT_FINAL_CANDIDATE",
+  "production_default_changed": false,
+  "p0v4_changed": false,
+  "proof_queue_gat": {
+    "status": "REJECTED_UNCONDITIONAL_REGRESSION",
+    "safe_state_count": 15,
+    "redlines": 0,
+    "win_count": 4,
+    "five_percent_win_count": 3,
+    "paired_geometric_mean_ratio_qg1_over_q0": 1.0895072365823915,
+    "bootstrap_95_interval": [
+      1.012558589518751,
+      1.1657149548607684
+    ],
+    "evidence": "runs/p0v5_proof_queue_gat_20260801/oof_q0_vs_qg1_r1_summary.json",
+    "evidence_sha256": "6ce0e671c219e3e2d6f1ce43fcf68505c64817426c74c46949c2087f64fcc376"
+  },
+  "bidirectional_gate_gat": {
+    "status": "SHADOW_ONLY_CALIBRATION_FAILED",
+    "feature_policy": "precall_true_dual_graph_plus_previous_observed_midpoint_outcome",
+    "split": {
+      "train_instances": "001-015",
+      "calibration_instances": "016-018",
+      "heldout_instances": "019-020"
+    },
+    "train_context_count": 1117,
+    "calibration_context_count": 253,
+    "heldout_context_count": 162,
+    "heldout_failure_count": 26,
+    "heldout_roc_auc": 0.938631221719457,
+    "calibration_gate_pass": false,
+    "evaluation_authorized": false,
+    "deployment_authorized": false,
+    "runtime_failure_or_ood_action": "RUN_V5",
+    "skip_recovery_policy": "force_RUN_on_next_round",
+    "scale50_inference_latency_ms": {
+      "calls": 100,
+      "mean": 4.848475798498839,
+      "p50": 4.791257495526224,
+      "p99": 5.661624949425459,
+      "max": 5.930764018557966
+    },
+    "evidence": "runs/p0v5_bidirectional_gate_gat_v2_20260801/training_report.json",
+    "evidence_sha256": "7eac99571670e1ebe804959a2d7334dd53e7e1bd597a64b61fbe01a9a31c5b1b",
+    "manifest": "runs/p0v5_bidirectional_gate_gat_v2_20260801/evaluation_manifest.json",
+    "manifest_sha256": "e9882361a104e5c333aad369c80634b1442940fca063344fb5e61a898b353eb0"
+  },
+  "earlier_one_deviation_gat": {
+    "status": "TERMINAL_STOP",
+    "evidence": "runs/p0v4_v5_one_deviation_terminal_decision_20260801/terminal_decision.json",
+    "evidence_sha256": "c4630b43e5eb1e3ebe877156a935df5b357ed97a5dd7ff432f9d24cd0ce8e434"
+  },
+  "current_decision": "NO_GAT_DEPLOYMENT",
+  "five_percent_speedup_claim_authorized": false,
+  "reason": "Every implemented action is exact-safe, but no learned policy satisfies the predeclared non-regression calibration gate. P0V4+V5 remains the executable baseline and all GAT paths fail closed to it."
+}

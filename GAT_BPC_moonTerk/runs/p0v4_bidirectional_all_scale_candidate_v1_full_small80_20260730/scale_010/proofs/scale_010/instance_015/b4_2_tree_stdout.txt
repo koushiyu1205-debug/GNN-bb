@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_all_scale_candidate_v1_full_small80_20260730/scale_010/proofs/scale_010/instance_015/b4_1_report_zh.md

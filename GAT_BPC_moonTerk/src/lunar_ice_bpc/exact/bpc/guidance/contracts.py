@@ -67,6 +67,13 @@ class CanonicalSolveBindingV2:
     normalization_version: str = ""
     checkpoint_id: str = ""
     ood_policy_version: str = ""
+    dssr_enabled: bool = False
+    dssr_policy_version: str = ""
+    dssr_negative_batch_target: int = 0
+    dssr_pressure_refinement_enabled: bool = False
+    dssr_pressure_max_bucket_size: int = 0
+    dssr_pressure_max_candidate_checks: int = 0
+    ng_dssr_initial_neighborhood_size: int = 0
     schema_version: str = CANONICAL_SOLVE_BINDING_SCHEMA_V2
 
     @classmethod
@@ -145,6 +152,41 @@ class CanonicalSolveBindingV2:
                 ood_policy_version
                 or getattr(request, "guidance_ood_policy_version", "")
             ),
+            dssr_enabled=bool(getattr(request, "dssr_enabled", False)),
+            dssr_policy_version=str(
+                getattr(request, "dssr_policy_version", "")
+            ),
+            dssr_negative_batch_target=int(
+                getattr(request, "dssr_negative_batch_target", 0)
+            ),
+            dssr_pressure_refinement_enabled=bool(
+                getattr(
+                    request,
+                    "dssr_pressure_refinement_enabled",
+                    False,
+                )
+            ),
+            dssr_pressure_max_bucket_size=int(
+                getattr(
+                    request,
+                    "dssr_pressure_max_bucket_size",
+                    0,
+                )
+            ),
+            dssr_pressure_max_candidate_checks=int(
+                getattr(
+                    request,
+                    "dssr_pressure_max_candidate_checks",
+                    0,
+                )
+            ),
+            ng_dssr_initial_neighborhood_size=int(
+                getattr(
+                    request,
+                    "ng_dssr_initial_neighborhood_size",
+                    0,
+                )
+            ),
         )
 
     @property
@@ -176,6 +218,28 @@ class CanonicalSolveBindingV2:
             "checkpoint_id": self.checkpoint_id,
             "ood_policy_version": self.ood_policy_version,
         }
+        if self.dssr_enabled or self.dssr_policy_version:
+            payload.update(
+                {
+                    "dssr_enabled": self.dssr_enabled,
+                    "dssr_policy_version": self.dssr_policy_version,
+                    "dssr_negative_batch_target": (
+                        self.dssr_negative_batch_target
+                    ),
+                    "dssr_pressure_refinement_enabled": (
+                        self.dssr_pressure_refinement_enabled
+                    ),
+                    "dssr_pressure_max_bucket_size": (
+                        self.dssr_pressure_max_bucket_size
+                    ),
+                    "dssr_pressure_max_candidate_checks": (
+                        self.dssr_pressure_max_candidate_checks
+                    ),
+                    "ng_dssr_initial_neighborhood_size": (
+                        self.ng_dssr_initial_neighborhood_size
+                    ),
+                }
+            )
         if include_binding_hash:
             payload["binding_hash"] = self.binding_hash
         return payload

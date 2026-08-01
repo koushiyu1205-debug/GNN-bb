@@ -13860,6 +13860,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 "LUNAR_ICE_EXACT_FINAL_JUDGE_FIRST": "1",
                 "LUNAR_ICE_LABELING_FINAL_JUDGE_PASS_POLICY": "adaptive_sparse_harvest_v1",
                 "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_CAP_SEC": "2.0",
+                "LUNAR_ICE_LABELING_FINAL_JUDGE_ADAPTIVE_HARVEST_SCHEDULE": "disabled",
             },
             clear=False,
         ):
@@ -13874,6 +13875,9 @@ class LunarIceSmokeTests(unittest.TestCase):
             "adaptive_sparse_harvest_v1",
         )
         self.assertEqual(binding["adaptive_harvest_cap_sec"], 2.0)
+        self.assertEqual(
+            binding["adaptive_harvest_schedule"], "disabled"
+        )
         self.assertTrue(binding["engine_build_hash"])
         self.assertNotEqual(first_hash, module._config_hash(native_config))
         without_subset = dict(native_config)
@@ -13898,6 +13902,17 @@ class LunarIceSmokeTests(unittest.TestCase):
         self.assertNotEqual(
             module._config_hash(native_config),
             module._config_hash(without_adaptive_cap),
+        )
+        without_adaptive_schedule = dict(native_config)
+        without_adaptive_schedule["native_runtime_binding"] = dict(
+            binding
+        )
+        without_adaptive_schedule["native_runtime_binding"][
+            "adaptive_harvest_schedule"
+        ] = None
+        self.assertNotEqual(
+            module._config_hash(native_config),
+            module._config_hash(without_adaptive_schedule),
         )
         changed_partition_order = dict(config)
         changed_partition_order["partition_k_order"] = "ascending"
@@ -14166,7 +14181,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 captured["env"] = dict(kwargs.get("env") or {})
                 return SimpleNamespace(returncode=0, stdout="root-stage-ok", stderr="")
 
-            with patch.object(module.subprocess, "run", side_effect=fake_run):
+            with patch.object(module, "_run_process_tree", side_effect=fake_run):
                 module._run_stage(
                     args,
                     instance_path=instance_path,
@@ -14208,7 +14223,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                     stderr=b"partial stderr",
                 )
 
-            with patch.object(module.subprocess, "run", side_effect=fake_run):
+            with patch.object(module, "_run_process_tree", side_effect=fake_run):
                 completed = module._run_stage(
                     args,
                     instance_path=instance_path,
@@ -14782,7 +14797,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 )
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-            with patch.object(module.subprocess, "run", side_effect=fake_run):
+            with patch.object(module, "_run_process_tree", side_effect=fake_run):
                 row = module._run_tree_closure(
                     args,
                     instance_index=1,
@@ -14863,6 +14878,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                                             "final_judge_called": True,
                                             "worker_pricer_kind": "relaxed_labeling",
                                             "can_certify_no_negative": True,
+                                            "worker_can_certify_no_negative": True,
                                             "uses_true_dual_bpc_certificate": False,
                                             "root_lp_bound_official": False,
                                             "worker_dual_only": False,
@@ -14896,7 +14912,7 @@ class LunarIceSmokeTests(unittest.TestCase):
                 )
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-            with patch.object(module.subprocess, "run", side_effect=fake_run):
+            with patch.object(module, "_run_process_tree", side_effect=fake_run):
                 row = module._run_tree_closure(
                     args,
                     instance_index=1,
@@ -14912,6 +14928,109 @@ class LunarIceSmokeTests(unittest.TestCase):
             self.assertFalse(row["worker_dual_only"])
             self.assertFalse(row["true_dual_rc_recomputed"])
             self.assertEqual(row["official_dual_source"], "tail_dual_stabilized_worker_dual")
+
+    def test_b4_2_tree_closure_does_not_attribute_final_judge_certificate_to_skipped_worker(
+        self,
+    ) -> None:
+        project_root = Path(__file__).resolve().parents[1]
+        spec = importlib.util.spec_from_file_location(
+            "b4_2_cold_runner_tree_closure_final_judge_scope",
+            project_root / "scripts" / "run_lunar_ice_b4_2_cold_exact.py",
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        args = module._build_parser().parse_args([])
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_probe = tmp_path / "root_probe.json"
+            source_probe.write_text("{}", encoding="utf-8")
+            output_dir = tmp_path / "tree"
+
+            def fake_run(command, **kwargs):
+                del command, kwargs
+                result_dir = output_dir / "tree_closure_results"
+                result_dir.mkdir(parents=True, exist_ok=True)
+                (result_dir / "tree_closure_001.json").write_text(
+                    json.dumps(
+                        {
+                            "algorithm_status": "BPC_OPTIMAL",
+                            "certificate_scope": "BPC_TREE_OPTIMAL",
+                            "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                            "worker_pricer_kind": "relaxed_labeling",
+                            "tail_dual_stabilization_enabled": True,
+                            "nodes": [
+                                {
+                                    "algorithm_status": "BPC_OPTIMAL",
+                                    "certificate_scope": "BPC_TREE_OPTIMAL",
+                                    "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                                    "history": [
+                                        {
+                                            "final_judge_called": True,
+                                            "worker_pricer_kind": "relaxed_labeling",
+                                            "can_certify_no_negative": True,
+                                            "worker_exit_reason": (
+                                                "EXACT_FINAL_JUDGE_FIRST_WORKER_SKIPPED"
+                                            ),
+                                            "worker_status": "LOCAL_NO_COLUMN_UNCERTIFIED",
+                                            "worker_wall_time": 0.0,
+                                            "labeling_worker_enabled": False,
+                                            "worker_dual_only": True,
+                                            "true_dual_rc_recomputed": True,
+                                            "relaxed_candidate_search_can_certify_no_negative": False,
+                                            "resource_extension_label_columns_can_certify_no_negative": False,
+                                            "completion_bound_can_certify_no_negative": False,
+                                            "tail_dual_no_column_can_certify": False,
+                                            "official_dual_source": "current_true_rmp_dual",
+                                        }
+                                    ],
+                                    "final_judge": {
+                                        "pricing_state": "CERTIFIED_NO_NEGATIVE",
+                                        "pricing_rc_audit_pass": True,
+                                    },
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                (output_dir / "b4_1_summary.json").write_text(
+                    json.dumps(
+                        {
+                            "redlines": {
+                                "certificate_leak_count": 0,
+                                "manual_rc_fail_count": 0,
+                                "pricing_rc_fail_count": 0,
+                                "tail_dual_certificate_leak_count": 0,
+                            }
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with patch.object(module, "_run_process_tree", side_effect=fake_run):
+                row = module._run_tree_closure(
+                    args,
+                    instance_index=1,
+                    instance_path=tmp_path / "instance_001_logical_graph.json",
+                    source_probe=source_probe,
+                    output_dir=output_dir,
+                    time_limit_sec=10.0,
+                )
+
+            self.assertEqual(row["algorithm_status"], "BPC_OPTIMAL")
+            self.assertEqual(row["certificate_scope"], "BPC_TREE_OPTIMAL")
+            self.assertTrue(row["exact_certificate"])
+            self.assertEqual(row["worker_certificate_leak"], 0)
+            self.assertEqual(row["tail_dual_certificate_leak"], 0)
+            self.assertEqual(row["true_dual_rc_recompute_missing"], 0)
+            self.assertFalse(row["worker_can_certify_no_negative"])
+            self.assertTrue(row["worker_dual_only"])
+            self.assertTrue(row["true_dual_rc_recomputed"])
+            self.assertEqual(row["official_dual_source"], "current_true_rmp_dual")
 
     def test_b4_2_finish_timing_downgrades_safety_redline_certificate(self) -> None:
         project_root = Path(__file__).resolve().parents[1]

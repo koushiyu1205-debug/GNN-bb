@@ -1,0 +1,139 @@
+{
+  "calibration": {
+    "beneficial_action_precision_95_lower": 0.06483621249103803,
+    "criteria": {
+      "beneficial_action_precision_95_lower": 0.8,
+      "false_skip_count": 0
+    },
+    "expected_waste_threshold_sec": 7.814309775819224e-16,
+    "failure_probability_threshold": 4.379145046584654e-09,
+    "false_skip_count": 228,
+    "gate_pass": false,
+    "harmful_skip_rate_observed": 0.9047619047619048,
+    "selected_count": 252,
+    "true_failure_count": 24
+  },
+  "calibration_metrics": {
+    "count": 253,
+    "failure_count": 24,
+    "failure_recall": 1.0,
+    "false_skip_count": 228,
+    "mean_failure_probability_on_failure": 0.48427235226457316,
+    "mean_failure_probability_on_success": 0.120678079362566,
+    "precision": 0.09523809523809523,
+    "roc_auc": 0.8995633187772926,
+    "selected_count": 252,
+    "success_count": 229,
+    "true_failure_count_selected": 24
+  },
+  "deployment_decision": "NO_DEPLOYMENT_CALIBRATION_FAILED",
+  "exact_safety": {
+    "action_space": [
+      "RUN_V5",
+      "SKIP_TO_UNCHANGED_P0V4"
+    ],
+    "can_certify": false,
+    "can_change_bound": false,
+    "can_change_reduced_cost": false,
+    "can_prune": false,
+    "runtime_failure_action": "RUN_V5"
+  },
+  "heldout_metrics": {
+    "count": 162,
+    "failure_count": 26,
+    "failure_recall": 1.0,
+    "false_skip_count": 136,
+    "mean_failure_probability_on_failure": 0.5175449710625869,
+    "mean_failure_probability_on_success": 0.11007156067048769,
+    "precision": 0.16049382716049382,
+    "roc_auc": 0.938631221719457,
+    "selected_count": 162,
+    "success_count": 136,
+    "true_failure_count_selected": 26
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_bidirectional_gate_report.v1",
+  "split_counts": {
+    "calibration": {
+      "by_scale": {
+        "30": {
+          "contexts": 59,
+          "failures": 12
+        },
+        "50": {
+          "contexts": 194,
+          "failures": 12
+        }
+      },
+      "contexts": 253,
+      "failures": 24,
+      "instances": 6
+    },
+    "heldout": {
+      "by_scale": {
+        "30": {
+          "contexts": 57,
+          "failures": 16
+        },
+        "50": {
+          "contexts": 105,
+          "failures": 10
+        }
+      },
+      "contexts": 162,
+      "failures": 26,
+      "instances": 4
+    },
+    "train": {
+      "by_scale": {
+        "30": {
+          "contexts": 298,
+          "failures": 55
+        },
+        "50": {
+          "contexts": 819,
+          "failures": 126
+        }
+      },
+      "contexts": 1117,
+      "failures": 181,
+      "instances": 30
+    }
+  },
+  "split_policy": {
+    "calibration_instance_indices": [
+      16,
+      17,
+      18
+    ],
+    "heldout_instance_indices": [
+      19,
+      20
+    ],
+    "train_instance_indices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "train_metrics": {
+    "count": 1117,
+    "failure_count": 181,
+    "mean_failure_probability_on_failure": 0.5055019050651328,
+    "mean_failure_probability_on_success": 0.09120685071858407,
+    "roc_auc": 0.9144767908580064,
+    "success_count": 936
+  },
+  "training_data_hash": "75047fcf5198995a51782bff1d8d4a6a340ed1049d7f239d39d8aeb5669e21a0"
+}

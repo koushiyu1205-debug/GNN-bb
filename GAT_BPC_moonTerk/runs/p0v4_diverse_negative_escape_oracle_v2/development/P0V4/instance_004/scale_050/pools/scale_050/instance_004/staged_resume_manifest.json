@@ -1,0 +1,9 @@
+{
+  "stages": [],
+  "last_error": {
+    "stage_index": 1,
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_compact_pricing_batch_probe.py\", line 363, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/home/kai/work/GAT_BPC_moonTerk/scripts/run_lunar_ice_compact_pricing_batch_probe.py\", line 92, in main\n    result = solve_node_pricing_with_b2b_r3(\n        data,\n    ...<15 lines>...\n        ),\n    )\n  File \"/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/exact/bpc/solver/pricing_tail_solver.py\", line 1130, in solve_node_pricing_with_b2b_r3\n    remaining_after_candidate_generation = remaining_wall_time()\n                                           ^^^^^^^^^^^^^^^^^^^\nNameError: name 'remaining_wall_time' is not defined. Did you mean: '_remaining_wall_time_limit'?\n"
+  }
+}

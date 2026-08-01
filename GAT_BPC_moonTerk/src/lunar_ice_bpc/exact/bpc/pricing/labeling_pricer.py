@@ -27,6 +27,10 @@ from lunar_ice_bpc.exact.bpc.pricing.dual_stabilization import (
     build_tail_dual_center,
     build_worker_duals_with_tail_center,
 )
+from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
+    PRICING_LIFECYCLE_SCOPES,
+    PRICING_LIFECYCLE_SCOPE_UNSPECIFIED,
+)
 from lunar_ice_bpc.exact.bpc.pricing.resource_label_core import (
     CORE_EXACT_ELEMENTARY_FULL_SPACE,
     CORE_RELAXED_NG_ROUTE_WORKER,
@@ -71,7 +75,22 @@ NATIVE_MEMORY_LIMIT_GB_ENV = "LUNAR_ICE_SPPRC_MEMORY_LIMIT_GB"
 NATIVE_SHADOW_BACKEND_ENV = "LUNAR_ICE_SPPRC_SHADOW_BACKEND"
 NATIVE_COMPLETION_BOUND_ENV = "LUNAR_ICE_SPPRC_COMPLETION_BOUND"
 NATIVE_SUBSET_DOMINANCE_ENV = "LUNAR_ICE_SPPRC_SUBSET_DOMINANCE"
+EXACT_NEGATIVE_ESCAPE_POLICY_V1 = (
+    "diverse_raw_4x_then_p0v4_selector_v1"
+)
 NATIVE_CUT_STATE_ENV = "LUNAR_ICE_SPPRC_CUT_STATE"
+NATIVE_DSSR_BATCH_TARGET_ENV = (
+    "LUNAR_ICE_SPPRC_DSSR_NEGATIVE_BATCH_TARGET"
+)
+NATIVE_DSSR_PRESSURE_BUCKET_ENV = (
+    "LUNAR_ICE_SPPRC_DSSR_PRESSURE_MAX_BUCKET_SIZE"
+)
+NATIVE_DSSR_PRESSURE_CHECKS_ENV = (
+    "LUNAR_ICE_SPPRC_DSSR_PRESSURE_MAX_CANDIDATE_CHECKS"
+)
+NATIVE_NG_DSSR_NEIGHBORHOOD_SIZE_ENV = (
+    "LUNAR_ICE_SPPRC_NG_DSSR_INITIAL_NEIGHBORHOOD_SIZE"
+)
 
 
 @dataclass(frozen=True)
@@ -85,11 +104,20 @@ class LabelingPricingConfig:
     """
 
     mode: str = EXACT_ELEMENTARY_MODE
+    pricing_lifecycle_scope: str = (
+        PRICING_LIFECYCLE_SCOPE_UNSPECIFIED
+    )
     max_exact_tasks: int = 10
     max_label_task_count: int = 12
     max_candidate_sets: int | None = 160
     harvest_target: int = 16
     exact_negative_harvest_target: int = 1
+    exact_negative_escape_enabled: bool = False
+    exact_admission_batch_size: int = 16
+    exact_raw_negative_pool_size: int = 64
+    exact_negative_escape_policy_id: str = (
+        EXACT_NEGATIVE_ESCAPE_POLICY_V1
+    )
     harvest_max_processed_labels: int = 0
     completion_bound_enabled: bool = True
     ng_neighborhood_size: int = 8
@@ -122,6 +150,19 @@ class LabelingPricingConfig:
         if mode not in LABELING_PRICER_MODES:
             raise ValueError(f"unsupported labeling pricing mode {mode!r}")
         object.__setattr__(self, "mode", mode)
+        pricing_lifecycle_scope = str(
+            self.pricing_lifecycle_scope
+        ).strip().lower()
+        if pricing_lifecycle_scope not in PRICING_LIFECYCLE_SCOPES:
+            raise ValueError(
+                "unsupported pricing_lifecycle_scope "
+                f"{pricing_lifecycle_scope!r}"
+            )
+        object.__setattr__(
+            self,
+            "pricing_lifecycle_scope",
+            pricing_lifecycle_scope,
+        )
         object.__setattr__(self, "max_exact_tasks", int(self.max_exact_tasks))
         object.__setattr__(self, "max_label_task_count", int(self.max_label_task_count))
         object.__setattr__(self, "harvest_target", max(1, int(self.harvest_target)))
@@ -129,6 +170,48 @@ class LabelingPricingConfig:
             self,
             "exact_negative_harvest_target",
             max(1, int(self.exact_negative_harvest_target)),
+        )
+        admission_batch_size = int(self.exact_admission_batch_size)
+        raw_pool_size = int(self.exact_raw_negative_pool_size)
+        if admission_batch_size <= 0:
+            raise ValueError(
+                "exact_admission_batch_size must be positive"
+            )
+        if raw_pool_size < admission_batch_size:
+            raise ValueError(
+                "exact_raw_negative_pool_size must be at least "
+                "exact_admission_batch_size"
+            )
+        if raw_pool_size > 4096:
+            raise ValueError(
+                "exact_raw_negative_pool_size cannot exceed 4096"
+            )
+        escape_policy_id = str(self.exact_negative_escape_policy_id)
+        if (
+            bool(self.exact_negative_escape_enabled)
+            and escape_policy_id != EXACT_NEGATIVE_ESCAPE_POLICY_V1
+        ):
+            raise ValueError(
+                "unsupported exact_negative_escape_policy_id "
+                f"{escape_policy_id!r}"
+            )
+        if bool(self.exact_negative_escape_enabled) and mode != EXACT_ELEMENTARY_MODE:
+            raise ValueError(
+                "exact negative escape requires exact elementary mode"
+            )
+        object.__setattr__(
+            self,
+            "exact_negative_escape_enabled",
+            bool(self.exact_negative_escape_enabled),
+        )
+        object.__setattr__(
+            self, "exact_admission_batch_size", admission_batch_size
+        )
+        object.__setattr__(
+            self, "exact_raw_negative_pool_size", raw_pool_size
+        )
+        object.__setattr__(
+            self, "exact_negative_escape_policy_id", escape_policy_id
         )
         object.__setattr__(
             self,
@@ -220,7 +303,15 @@ def run_bpc_labeling_pricer(
     support_task_sets: Iterable[Iterable[str]] = tuple(),
     dual_history: Iterable[JourneyDuals] = tuple(),
     cache: DirectPricingCache | None = None,
-) -> tuple[dict, tuple[JourneyColumn, ...]]:
+    return_audited_candidate_order: bool = False,
+) -> (
+    tuple[dict, tuple[JourneyColumn, ...]]
+    | tuple[
+        dict,
+        tuple[JourneyColumn, ...],
+        tuple[JourneyColumn, ...],
+    ]
+):
     """Run the BPC resource-labeling pricer with fail-closed certificates."""
 
     cfg = config or LabelingPricingConfig()
@@ -233,6 +324,7 @@ def run_bpc_labeling_pricer(
         os.getenv(NATIVE_EXACT_BACKEND_ENV, DEFAULT_EXACT_BACKEND_ID)
     )
     native_result = None
+    audited_candidate_order: tuple[JourneyColumn, ...] = tuple()
     native_shadow_backend_id = str(os.getenv(NATIVE_SHADOW_BACKEND_ENV, "") or "")
     if (
         cfg.exact_mode
@@ -288,12 +380,18 @@ def run_bpc_labeling_pricer(
             }
             native_result = None
     if native_result is not None:
-        payload, columns = _native_exact_backend_payload(
-            native_result,
-            cfg,
-            backend_id=native_backend_id,
-            true_duals=true_duals,
-            cut_context=cuts,
+        payload, columns, audited_candidate_order = (
+            _native_exact_backend_payload(
+                native_result,
+                cfg,
+                backend_id=native_backend_id,
+                true_duals=true_duals,
+                branch_context=branch,
+                cut_context=cuts,
+                include_full_audited_candidate_order=bool(
+                    return_audited_candidate_order
+                ),
+            )
         )
     elif cfg.exact_mode:
         payload, columns = _run_exact_elementary_labeling(
@@ -304,6 +402,7 @@ def run_bpc_labeling_pricer(
             cut_context=cuts,
             cache=cache,
         )
+        audited_candidate_order = tuple(columns)
     else:
         payload, columns = _run_worker_labeling(
             data,
@@ -317,10 +416,14 @@ def run_bpc_labeling_pricer(
             support_task_sets=tuple(tuple(str(task_id) for task_id in row) for row in support_task_sets),
             dual_history=tuple(dual_history),
         )
+        audited_candidate_order = tuple(columns)
     payload = dict(payload)
     payload["schema_version"] = LABELING_PRICER_SCHEMA_VERSION
     payload["labeling_pricer_wall_time_sec"] = round(perf_counter() - started_at, 6)
     payload["mode"] = cfg.mode
+    payload["pricing_lifecycle_scope"] = (
+        cfg.pricing_lifecycle_scope
+    )
     payload["pricer_kind"] = "resource_constrained_shortest_path_labeling"
     payload["exact_elementary_mode"] = bool(cfg.exact_mode)
     payload["relaxed_ng_route_mode"] = bool(cfg.relaxed_mode)
@@ -332,6 +435,18 @@ def run_bpc_labeling_pricer(
     payload["max_label_task_count"] = int(cfg.max_label_task_count)
     payload["harvest_target"] = int(cfg.harvest_target)
     payload["exact_negative_harvest_target"] = int(cfg.exact_negative_harvest_target)
+    payload["exact_negative_escape_enabled"] = bool(
+        cfg.exact_negative_escape_enabled
+    )
+    payload["exact_admission_batch_size"] = int(
+        cfg.exact_admission_batch_size
+    )
+    payload["exact_raw_negative_pool_size"] = int(
+        cfg.exact_raw_negative_pool_size
+    )
+    payload["exact_negative_escape_policy_id"] = str(
+        cfg.exact_negative_escape_policy_id
+    )
     payload["harvest_max_processed_labels"] = int(
         cfg.harvest_max_processed_labels
     )
@@ -357,6 +472,8 @@ def run_bpc_labeling_pricer(
     payload.update(native_fallback_payload)
     payload.update(native_shadow_payload)
     payload.update(_status_semantics_contract(payload, exact_mode=cfg.exact_mode))
+    if return_audited_candidate_order:
+        return payload, columns, audited_candidate_order
     return payload, columns
 
 
@@ -384,6 +501,53 @@ def _run_native_exact_backend(
         memory_limit_gb = max(0.0, float(os.getenv(NATIVE_MEMORY_LIMIT_GB_ENV, "0") or 0.0))
     except ValueError:
         memory_limit_gb = 0.0
+    try:
+        dssr_batch_target = max(
+            1,
+            min(
+                64,
+                int(
+                    os.getenv(
+                        NATIVE_DSSR_BATCH_TARGET_ENV,
+                        str(cfg.harvest_target),
+                    )
+                ),
+            ),
+        )
+        dssr_pressure_bucket = max(
+            1,
+            int(
+                os.getenv(
+                    NATIVE_DSSR_PRESSURE_BUCKET_ENV,
+                    "8192",
+                )
+            ),
+        )
+        dssr_pressure_checks = max(
+            1,
+            int(
+                os.getenv(
+                    NATIVE_DSSR_PRESSURE_CHECKS_ENV,
+                    "200000000",
+                )
+            ),
+        )
+        ng_dssr_neighborhood_size = max(
+            1,
+            min(
+                int(data.scale),
+                int(
+                    os.getenv(
+                        NATIVE_NG_DSSR_NEIGHBORHOOD_SIZE_ENV,
+                        "10",
+                    )
+                ),
+            ),
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "invalid DSSR environment configuration"
+        ) from exc
     return BackendRegistry.create(backend_id).solve(
         BackendPricingRequest(
             data=data,
@@ -393,9 +557,21 @@ def _run_native_exact_backend(
                 if cfg.stop_at_first_negative
                 else BACKEND_MODE_EXACT_PROOF
             ),
+            pricing_lifecycle_scope=(
+                cfg.pricing_lifecycle_scope
+            ),
             branch_context=branch_context,
             cut_context=cut_context,
             harvest_target=cfg.exact_negative_harvest_target,
+            exact_negative_escape_enabled=bool(
+                cfg.exact_negative_escape_enabled
+                and not cfg.stop_at_first_negative
+            ),
+            exact_admission_batch_size=cfg.exact_admission_batch_size,
+            exact_raw_negative_pool_size=cfg.exact_raw_negative_pool_size,
+            exact_negative_escape_policy_id=(
+                cfg.exact_negative_escape_policy_id
+            ),
             harvest_max_processed_labels=(
                 cfg.harvest_max_processed_labels
                 if cfg.stop_at_first_negative
@@ -411,6 +587,12 @@ def _run_native_exact_backend(
                 os.getenv(NATIVE_SUBSET_DOMINANCE_ENV, "0")
             ).strip().lower()
             in {"1", "true", "yes", "on"},
+            dssr_negative_batch_target=dssr_batch_target,
+            dssr_pressure_max_bucket_size=dssr_pressure_bucket,
+            dssr_pressure_max_candidate_checks=dssr_pressure_checks,
+            ng_dssr_initial_neighborhood_size=(
+                ng_dssr_neighborhood_size
+            ),
             instance_hash=spprc_instance_hash(data),
             config_hash=stable_payload_hash(cfg.__dict__),
             engine_hash=spprc_engine_build_hash(backend_id),
@@ -435,15 +617,73 @@ def _native_exact_backend_payload(
     *,
     backend_id: str,
     true_duals: JourneyDuals,
+    branch_context: BranchContext,
     cut_context: CutContext,
-) -> tuple[dict, tuple[JourneyColumn, ...]]:
-    negative_columns = tuple(result.columns)
+    include_full_audited_candidate_order: bool = False,
+) -> tuple[
+    dict,
+    tuple[JourneyColumn, ...],
+    tuple[JourneyColumn, ...],
+]:
+    raw_negative_columns = tuple(result.columns)
+    audit = {}
+    if cfg.exact_negative_escape_enabled:
+        audit = _audit_columns_with_true_dual(
+            raw_negative_columns,
+            true_duals,
+            branch_context=branch_context,
+            cut_context=cut_context,
+            task_set_sources={},
+            candidate_search_duals=true_duals,
+            existing_task_sets=cfg.active_task_sets_for_exact_harvest,
+            support_task_sets=tuple(),
+            negative_eps=cfg.negative_eps,
+            harvest_target=cfg.exact_admission_batch_size,
+            support_aware_harvest_enabled=cfg.support_aware_harvest_enabled,
+            support_overlap_threshold=cfg.support_overlap_threshold,
+            max_selected_jaccard=cfg.max_selected_jaccard,
+            max_selected_containment=cfg.max_selected_containment,
+            weak_replacement_cap=cfg.weak_replacement_cap,
+            strong_replacement_threshold=cfg.strong_replacement_threshold,
+            unique_task_sets_only=True,
+            candidate_order_limit=(
+                min(
+                    len(raw_negative_columns),
+                    int(cfg.exact_admission_batch_size) + 32,
+                )
+                if include_full_audited_candidate_order
+                else cfg.exact_admission_batch_size
+            ),
+        )
+        selected_rows = tuple(audit.pop("_selected_internal", tuple()))
+        ordered_rows = tuple(
+            audit.pop("_ordered_negative_internal", selected_rows)
+        )
+        negative_columns = tuple(
+            row["column"] for row in selected_rows
+        )
+        audited_candidate_order = tuple(
+            row["column"] for row in ordered_rows
+        )
+    else:
+        negative_columns = raw_negative_columns
+        audited_candidate_order = raw_negative_columns
     dssr_enabled = bool(
         (result.telemetry or {}).get("dssr_enabled")
+    )
+    dssr_policy_version = str(
+        (result.telemetry or {}).get("dssr_policy_version") or ""
+    )
+    dssr_v2 = dssr_policy_version == (
+        "multi_sortie_counterexample_pressure_refinement_v2"
+    )
+    ng_dssr_v3 = dssr_policy_version == (
+        "multi_sortie_ng_memory_counterexample_refinement_v3"
     )
     proof_only_blockers = {
         "native_exact_search_incomplete",
         "native_frontier_not_empty",
+        "native_exact_negative_escape_partial",
     }
     column_audit_blockers = tuple(
         blocker
@@ -477,6 +717,30 @@ def _native_exact_backend_payload(
         else PROOF_KIND_EXHAUSTIVE_INCOMPLETE
     )
     payload = result.to_payload()
+    payload.update(audit)
+    audited_raw_unique_negative_count = int(
+        audit.get(
+            "true_negative_column_count",
+            len(raw_negative_columns),
+        )
+    )
+    native_raw_unique_negative_count = int(
+        (result.telemetry or {}).get(
+            "raw_unique_negative_count"
+        )
+        or audited_raw_unique_negative_count
+    )
+    audited_raw_distinct_task_set_count = int(
+        audit.get(
+            "raw_distinct_negative_task_set_count",
+            len(
+                {
+                    frozenset(column.task_set)
+                    for column in raw_negative_columns
+                }
+            ),
+        )
+    )
     payload.update(
         {
             "status": result.engine_status,
@@ -489,7 +753,11 @@ def _native_exact_backend_payload(
             ),
             "resource_label_algorithm": "lab_core_rcspp_project_local_journey_resource",
             "resource_label_core_mode": (
-                "native_exact_dssr_counterexample_refinement"
+                "native_exact_ng_dssr_local_memory_refinement_v3"
+                if ng_dssr_v3
+                else "native_exact_dssr_batch_pressure_refinement_v2"
+                if dssr_v2
+                else "native_exact_dssr_counterexample_refinement"
                 if dssr_enabled
                 else "native_exact_elementary_full_space"
             ),
@@ -505,12 +773,18 @@ def _native_exact_backend_payload(
                 "task_dual_reward",
             ],
             "dominance_policy": (
-                "dssr_critical_branch_mask_same_cut_state_resource_true_rc"
+                "ng_memory_branch_mask_same_cut_state_resource_true_rc"
+                if ng_dssr_v3
+                else "dssr_critical_branch_mask_same_cut_state_resource_true_rc"
                 if dssr_enabled
                 else "same_visited_conservative_resource_and_true_rc"
             ),
             "elementarity_policy": (
-                "dssr_global_critical_memory_counterexample_refinement"
+                "ng_dssr_nearest_memory_local_cycle_refinement_v3"
+                if ng_dssr_v3
+                else "dssr_v2_batch_counterexample_and_pressure_refinement"
+                if dssr_v2
+                else "dssr_global_critical_memory_counterexample_refinement"
                 if dssr_enabled
                 else "global_journey_visited_bitset_not_reset_between_sorties"
             ),
@@ -548,10 +822,28 @@ def _native_exact_backend_payload(
             "true_best_reduced_cost": result.best_found_rc,
             "best_reduced_cost": result.best_found_rc,
             "pricing_best_reduced_cost": result.best_found_rc,
-            "true_audited_column_count": len(negative_columns),
-            "true_negative_column_count": len(negative_columns),
+            "raw_negative_count": len(raw_negative_columns),
+            "raw_unique_negative_count": int(
+                native_raw_unique_negative_count
+            ),
+            "native_raw_unique_negative_count": int(
+                native_raw_unique_negative_count
+            ),
+            "audited_raw_unique_negative_count": int(
+                audited_raw_unique_negative_count
+            ),
+            "raw_distinct_negative_task_set_count": (
+                audited_raw_distinct_task_set_count
+            ),
+            "selected_diverse_negative_count": len(negative_columns),
+            "true_audited_column_count": len(raw_negative_columns),
+            "true_negative_column_count": len(raw_negative_columns),
             "returned_column_count": len(negative_columns),
-            "returned_column_policy": "audited_true_rc_negative_columns_only",
+            "returned_column_policy": (
+                "p0v4_diverse_audited_true_rc_negative_columns"
+                if cfg.exact_negative_escape_enabled
+                else "audited_true_rc_negative_columns_only"
+            ),
             "returned_columns_are_complete_universe": False,
             "true_dual_reaudit_pass": bool(result.partial_columns_valid or not negative_columns),
             "branch_context_audit_pass": True,
@@ -564,6 +856,21 @@ def _native_exact_backend_payload(
             "completion_bound_certificate_safe": True,
             "native_partial_negative_columns_retained": bool(
                 negative_columns and not result.search_exhaustive
+            ),
+            "negative_escape_triggered": bool(
+                result.telemetry.get("negative_escape_triggered")
+            ),
+            "negative_escape_termination_reason": str(
+                result.telemetry.get(
+                    "negative_escape_termination_reason"
+                )
+                or ""
+            ),
+            "negative_escape_raw_uniqueness_shortfall": bool(
+                cfg.exact_negative_escape_enabled
+                and result.telemetry.get("negative_escape_triggered")
+                and audited_raw_unique_negative_count
+                < int(cfg.exact_raw_negative_pool_size)
             ),
             "label_queue_push_count": int(result.telemetry.get("extended_labels") or 0),
             "dominance_pruned": int(result.telemetry.get("dominated_labels") or 0),
@@ -621,7 +928,7 @@ def _native_exact_backend_payload(
                 "note": "Native search exhausted, but the active cut certificate audit failed; fail closed.",
             }
         )
-    return payload, negative_columns
+    return payload, negative_columns, audited_candidate_order
 
 
 def _run_exact_elementary_labeling(
@@ -1114,7 +1421,10 @@ def _audit_columns_with_true_dual(
     max_selected_containment: float = 0.8,
     weak_replacement_cap: int = 8,
     strong_replacement_threshold: float = -1.0e-4,
+    unique_task_sets_only: bool = False,
+    candidate_order_limit: int | None = None,
 ) -> dict:
+    audit_started = perf_counter()
     rows = []
     seen = set()
     duplicate_signature_count = 0
@@ -1190,20 +1500,36 @@ def _audit_columns_with_true_dual(
         )
     rows.sort(key=lambda row: (float(row["true_reduced_cost"]), row["task_set"], row["objective"]))
     negative_rows = [row for row in rows if row["is_true_negative"]]
-    selected = _select_diverse_negative_rows(
+    selection_started = perf_counter()
+    ordered_negative_rows = _select_diverse_negative_rows(
         negative_rows,
-        harvest_target=max(1, int(harvest_target)),
+        harvest_target=max(
+            1,
+            int(
+                candidate_order_limit
+                if candidate_order_limit is not None
+                else harvest_target
+            ),
+        ),
         existing_task_sets=existing_task_set_keys,
         support_task_sets=support_task_set_keys,
         support_aware=bool(support_aware_harvest_enabled),
         max_selected_jaccard=max_selected_jaccard,
         max_selected_containment=max_selected_containment,
         weak_replacement_cap=weak_replacement_cap,
+        unique_task_sets_only=unique_task_sets_only,
+    )
+    selected = ordered_negative_rows[: max(1, int(harvest_target))]
+    diversity_selection_wall_time_sec = (
+        perf_counter() - selection_started
     )
     sample_rows = rows[: max(len(selected), min(16, len(rows)))]
     serial_rows = [_serialize_audit_row(row) for row in sample_rows]
     selected_serial_rows = [_serialize_audit_row(row) for row in selected]
     selected_task_sets = [row["task_set"] for row in selected]
+    selected_rc_values = [
+        float(row["true_reduced_cost"]) for row in selected
+    ]
     selected_unique_task_sets = set(selected_task_sets)
     selected_new_task_set_count = sum(
         1 for row in selected if row.get("task_set_relation_to_existing") == "new_task_set"
@@ -1253,11 +1579,26 @@ def _audit_columns_with_true_dual(
     ]
     return {
         "true_audited_column_count": len(rows),
+        "true_rc_audit_wall_time_sec": round(
+            max(
+                0.0,
+                perf_counter()
+                - audit_started
+                - diversity_selection_wall_time_sec,
+            ),
+            9,
+        ),
+        "diversity_selection_wall_time_sec": round(
+            diversity_selection_wall_time_sec, 9
+        ),
         "true_best_reduced_cost": rows[0]["true_reduced_cost"] if rows else None,
         "candidate_search_best_reduced_cost": (
             min(float(row["candidate_search_reduced_cost"]) for row in rows) if rows else None
         ),
         "true_negative_column_count": len(negative_rows),
+        "raw_distinct_negative_task_set_count": len(
+            {row["task_set"] for row in negative_rows}
+        ),
         "candidate_search_negative_column_count": len(candidate_search_negative_rows),
         "candidate_search_negative_true_negative_count": candidate_search_negative_true_negative_count,
         "candidate_search_negative_true_nonnegative_count": candidate_search_negative_true_nonnegative_count,
@@ -1324,9 +1665,34 @@ def _audit_columns_with_true_dual(
         "harvest_worst_selected_true_rc": selected[-1]["true_reduced_cost"] if selected else None,
         "harvest_avg_pairwise_jaccard": _avg_pairwise_task_set_jaccard(selected_task_sets),
         "harvest_max_pairwise_jaccard": _max_pairwise_task_set_jaccard(selected_task_sets),
+        "harvest_max_pairwise_containment": (
+            _max_pairwise_task_set_containment(selected_task_sets)
+        ),
+        "harvest_selected_true_rc_distribution": {
+            "count": len(selected_rc_values),
+            "min": (
+                None if not selected_rc_values else min(selected_rc_values)
+            ),
+            "median": (
+                None
+                if not selected_rc_values
+                else sorted(selected_rc_values)[
+                    (len(selected_rc_values) - 1) // 2
+                ]
+            ),
+            "mean": (
+                None
+                if not selected_rc_values
+                else sum(selected_rc_values) / len(selected_rc_values)
+            ),
+            "max": (
+                None if not selected_rc_values else max(selected_rc_values)
+            ),
+        },
         "selected_negative_rows": selected_serial_rows,
         "audit_sample_rows": serial_rows,
         "_selected_internal": selected,
+        "_ordered_negative_internal": ordered_negative_rows,
     }
 
 
@@ -1755,6 +2121,7 @@ def _select_diverse_negative_rows(
     max_selected_jaccard: float = 0.5,
     max_selected_containment: float = 0.8,
     weak_replacement_cap: int = 8,
+    unique_task_sets_only: bool = False,
 ) -> list[dict]:
     target = max(1, int(harvest_target))
     selected: list[dict] = []
@@ -1788,70 +2155,104 @@ def _select_diverse_negative_rows(
             return 3
         return 4
 
-    def weak_replacement_count() -> int:
-        return sum(1 for row in selected if row_bucket(row) == "weak_replacement")
+    selected_weak_replacement_count = 0
 
     def weak_cap_reached(row: dict) -> bool:
         return bool(
             support_aware
             and row_bucket(row) == "weak_replacement"
-            and weak_replacement_count() >= weak_limit
+            and selected_weak_replacement_count >= weak_limit
         )
 
-    def diverse_enough(row: dict) -> bool:
-        if not selected_task_sets:
-            return True
-        task_set = tuple(row["task_set"])
-        return bool(
-            _task_set_overlap_score(task_set, selected_task_sets) <= jaccard_limit
-            and _task_set_containment_score(task_set, selected_task_sets) <= containment_limit
-        )
-
-    distinct_rows = [
-        row
+    # The original implementation recomputed each candidate's maximum overlap
+    # against every selected task set several times per greedy step.  That is
+    # O(candidate_count * target^2) and dominates the lifecycle cost for large
+    # harvest batches.  The scores are maxima, so updating them once against
+    # only the newly selected task set is exactly equivalent.
+    distinct_states = [
+        {
+            "row": row,
+            "task_tuple": tuple(row["task_set"]),
+            "task_frozen": frozenset(row["task_set"]),
+            "max_jaccard": 0.0,
+            "max_containment": 0.0,
+        }
         for row in rows
-        if tuple(row["task_set"]) not in selected_task_sets
-        and row["signature"] not in selected_signatures
     ]
-    while distinct_rows and len(selected) < target:
+    while distinct_states and len(selected) < target:
         if not selected:
             best = min(
-                distinct_rows,
-                key=lambda row: (
-                    bucket_rank(row),
-                    float(row["true_reduced_cost"]),
-                    len(tuple(row["task_set"])),
-                    tuple(row["task_set"]),
-                    str(row["signature"]),
+                distinct_states,
+                key=lambda state: (
+                    bucket_rank(state["row"]),
+                    float(state["row"]["true_reduced_cost"]),
+                    len(state["task_tuple"]),
+                    state["task_tuple"],
+                    str(state["row"]["signature"]),
                 ),
             )
         else:
-            preferred_pool = [row for row in distinct_rows if not weak_cap_reached(row)]
-            diverse_pool = [row for row in preferred_pool if diverse_enough(row)]
-            candidate_pool = diverse_pool or preferred_pool or distinct_rows
+            preferred_pool = [
+                state
+                for state in distinct_states
+                if not weak_cap_reached(state["row"])
+            ]
+            diverse_pool = [
+                state
+                for state in preferred_pool
+                if state["max_jaccard"] <= jaccard_limit
+                and state["max_containment"] <= containment_limit
+            ]
+            candidate_pool = diverse_pool or preferred_pool or distinct_states
             best = min(
                 candidate_pool,
-                key=lambda row: (
-                    bucket_rank(row),
-                    _task_set_overlap_score(tuple(row["task_set"]), selected_task_sets),
-                    _task_set_containment_score(tuple(row["task_set"]), selected_task_sets),
-                    float(row["true_reduced_cost"]),
-                    len(tuple(row["task_set"])),
-                    tuple(row["task_set"]),
-                    str(row["signature"]),
+                key=lambda state: (
+                    bucket_rank(state["row"]),
+                    state["max_jaccard"],
+                    state["max_containment"],
+                    float(state["row"]["true_reduced_cost"]),
+                    len(state["task_tuple"]),
+                    state["task_tuple"],
+                    str(state["row"]["signature"]),
                 ),
             )
-        selected.append(best)
-        selected_task_sets.add(tuple(best["task_set"]))
-        selected_signatures.add(best["signature"])
-        distinct_rows = [
-            row
-            for row in distinct_rows
-            if tuple(row["task_set"]) not in selected_task_sets
-            and row["signature"] not in selected_signatures
-        ]
+        best_row = best["row"]
+        best_task_tuple = best["task_tuple"]
+        best_task_frozen = best["task_frozen"]
+        selected.append(best_row)
+        selected_task_sets.add(best_task_tuple)
+        selected_signatures.add(best_row["signature"])
+        if row_bucket(best_row) == "weak_replacement":
+            selected_weak_replacement_count += 1
+
+        next_states: list[dict] = []
+        for state in distinct_states:
+            row = state["row"]
+            if (
+                state["task_tuple"] in selected_task_sets
+                or row["signature"] in selected_signatures
+            ):
+                continue
+            candidate = state["task_frozen"]
+            intersection_size = len(candidate & best_task_frozen)
+            union_size = len(candidate | best_task_frozen)
+            if union_size:
+                state["max_jaccard"] = max(
+                    float(state["max_jaccard"]),
+                    intersection_size / union_size,
+                )
+            if best_task_frozen:
+                state["max_containment"] = max(
+                    float(state["max_containment"]),
+                    intersection_size
+                    / max(1, min(len(candidate), len(best_task_frozen))),
+                )
+            next_states.append(state)
+        distinct_states = next_states
         if len(selected) >= target:
             return selected
+    if unique_task_sets_only:
+        return selected
     for row in rows:
         signature = row["signature"]
         if signature in selected_signatures:
@@ -2167,6 +2568,25 @@ def _task_set_containment_score(
         ),
         default=0.0,
     )
+
+
+def _max_pairwise_task_set_containment(
+    task_sets: Iterable[Iterable[str]],
+) -> float:
+    normalized = [
+        set(str(task_id) for task_id in task_set)
+        for task_set in task_sets
+    ]
+    best = 0.0
+    for left_index, left in enumerate(normalized):
+        for right in normalized[left_index + 1 :]:
+            if not left or not right:
+                continue
+            best = max(
+                best,
+                len(left & right) / min(len(left), len(right)),
+            )
+    return round(best, 6)
 
 
 def _support_aware_harvest_bucket(

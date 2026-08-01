@@ -20,6 +20,10 @@ from lunar_ice_bpc.domain.scenario import PATH_TYPES
 from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
     BACKEND_MODE_EXACT_PROOF,
     BACKEND_OBJECTIVE_PHASE_ONE,
+    DSSR_POLICY_VERSION_V1,
+    DSSR_POLICY_VERSION_V2,
+    DSSR_POLICY_VERSION_NG_V3,
+    PROOF_QUEUE_POLICY_Q0,
     BackendPricingRequest,
     BackendResult,
 )
@@ -60,8 +64,20 @@ NATIVE_INPROCESS_BACKEND_ID = "native_rcspp_inprocess"
 NATIVE_HOST_BACKEND_ID = "native_rcspp_host"
 NATIVE_DSSR_INPROCESS_BACKEND_ID = "native_rcspp_dssr_inprocess"
 NATIVE_DSSR_HOST_BACKEND_ID = "native_rcspp_dssr_host"
+NATIVE_DSSR_V2_INPROCESS_BACKEND_ID = (
+    "native_rcspp_dssr_v2_inprocess"
+)
+NATIVE_DSSR_V2_HOST_BACKEND_ID = "native_rcspp_dssr_v2_host"
+NATIVE_NG_DSSR_V3_INPROCESS_BACKEND_ID = (
+    "native_rcspp_ng_dssr_v3_inprocess"
+)
+NATIVE_NG_DSSR_V3_HOST_BACKEND_ID = (
+    "native_rcspp_ng_dssr_v3_host"
+)
 NATIVE_HOST_PROTOCOL = "lunar_spprc_host.v3"
-DSSR_POLICY_VERSION = "multi_sortie_counterexample_refinement_v1"
+DSSR_POLICY_VERSION = DSSR_POLICY_VERSION_V1
+DSSR_V2_POLICY_VERSION = DSSR_POLICY_VERSION_V2
+NG_DSSR_V3_POLICY_VERSION = DSSR_POLICY_VERSION_NG_V3
 _GIB = 1024**3
 _MIB = 1024**2
 # The request limit is enforced cooperatively inside the native labeling loop,
@@ -72,6 +88,20 @@ _MIB = 1024**2
 _HOST_MEMORY_WATCHDOG_MIN_HEADROOM_BYTES = 128 * _MIB
 _HOST_MEMORY_WATCHDOG_MAX_HEADROOM_BYTES = 2 * _GIB
 _HOST_MEMORY_WATCHDOG_HEADROOM_FRACTION = 0.25
+_HOST_RUNTIME_MEMORY_POLICY_ID = (
+    "parent_aware_memavailable_hard_guard_v1"
+)
+_HOST_RUNTIME_AVAILABLE_RESERVE_BYTES = 2 * _GIB
+_HOST_RUNTIME_MIN_NATIVE_BUDGET_BYTES = 256 * _MIB
+# Large exact-pricing calls can leave several GiB of freed label arenas mapped
+# in a persistent host.  Reusing that high-RSS process makes the next call hit
+# the cooperative memory limit before it has built a meaningful frontier.
+# Recycle only large-scale hosts after a genuinely heavy call; scale <= 30
+# keeps the existing same-instance delta fast path unchanged.
+_HOST_RECYCLE_POLICY_ID = "large_scale_heavy_response_v1"
+_HOST_RECYCLE_MIN_TASK_COUNT = 50
+_HOST_RECYCLE_MIN_PEAK_BYTES = 1 * _GIB
+_HOST_RECYCLE_LIMIT_FRACTION = 0.25
 _NATIVE_CUT_STATE_BUILD_SCHEMA = (
     "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2"
 )
@@ -115,6 +145,16 @@ class NativeRcsppInprocessBackend:
                 telemetry={"error": repr(exc)},
             )
 
+        build_blockers = _native_build_capability_blockers(
+            request,
+            native,
+        )
+        if build_blockers:
+            return _empty_result(
+                self.backend_id,
+                "UNSUPPORTED_FEATURE",
+                blockers=build_blockers,
+            )
         try:
             raw = dict(native.solve(_native_request_payload(request)))
         except Exception as exc:
@@ -171,6 +211,10 @@ def _dssr_request(request: BackendPricingRequest) -> BackendPricingRequest:
     return replace(
         request,
         dssr_enabled=dssr_eligible,
+        exact_negative_escape_enabled=False,
+        dssr_policy_version=(
+            DSSR_POLICY_VERSION if dssr_eligible else ""
+        ),
         completion_bound_enabled=(
             False
             if request.exact_proof_mode
@@ -181,6 +225,109 @@ def _dssr_request(request: BackendPricingRequest) -> BackendPricingRequest:
             if request.exact_proof_mode
             else request.subset_dominance_enabled
         ),
+    )
+
+
+def _dssr_v2_request(
+    request: BackendPricingRequest,
+) -> BackendPricingRequest:
+    dssr_eligible = bool(request.exact_proof_mode)
+    if not dssr_eligible:
+        return replace(
+            request,
+            dssr_enabled=False,
+            dssr_policy_version="",
+        )
+    batch_target = max(
+        1,
+        min(int(request.dssr_negative_batch_target), 64),
+    )
+    pressure_bucket = int(request.dssr_pressure_max_bucket_size)
+    pressure_checks = int(
+        request.dssr_pressure_max_candidate_checks
+    )
+    source_config_hash = str(request.config_hash)
+    dssr_config_hash = stable_payload_hash(
+        {
+            "schema_version": (
+                "lunar_ice_bpc.dssr_v2_backend_config.v1"
+            ),
+            "source_config_hash": source_config_hash,
+            "dssr_policy_version": DSSR_V2_POLICY_VERSION,
+            "dssr_negative_batch_target": batch_target,
+            "dssr_pressure_refinement_enabled": True,
+            "dssr_pressure_max_bucket_size": pressure_bucket,
+            "dssr_pressure_max_candidate_checks": pressure_checks,
+        }
+    )
+    return replace(
+        request,
+        dssr_enabled=True,
+        exact_negative_escape_enabled=False,
+        dssr_policy_version=DSSR_V2_POLICY_VERSION,
+        dssr_negative_batch_target=batch_target,
+        dssr_pressure_refinement_enabled=True,
+        dssr_pressure_max_bucket_size=pressure_bucket,
+        dssr_pressure_max_candidate_checks=pressure_checks,
+        config_hash=dssr_config_hash,
+        completion_bound_enabled=False,
+        subset_dominance_enabled=False,
+    )
+
+
+def _ng_dssr_v3_request(
+    request: BackendPricingRequest,
+) -> BackendPricingRequest:
+    dssr_eligible = bool(request.exact_proof_mode)
+    if not dssr_eligible:
+        return replace(
+            request,
+            dssr_enabled=False,
+            dssr_policy_version="",
+        )
+    batch_target = max(
+        1,
+        min(int(request.dssr_negative_batch_target), 64),
+    )
+    neighborhood_size = max(
+        1,
+        min(
+            int(request.ng_dssr_initial_neighborhood_size),
+            int(request.data.scale),
+        ),
+    )
+    source_config_hash = str(request.config_hash)
+    ng_config_hash = stable_payload_hash(
+        {
+            "schema_version": (
+                "lunar_ice_bpc.ng_dssr_v3_backend_config.v1"
+            ),
+            "source_config_hash": source_config_hash,
+            "dssr_policy_version": NG_DSSR_V3_POLICY_VERSION,
+            "dssr_negative_batch_target": batch_target,
+            "ng_dssr_initial_neighborhood_size": neighborhood_size,
+            "ng_memory_update": (
+                "pi_intersect_gamma_target_union_target_v1"
+            ),
+            "elementarity_audit": (
+                "all_raw_negative_routes_all_adjacent_cycles_v1"
+            ),
+        }
+    )
+    return replace(
+        request,
+        dssr_enabled=True,
+        exact_negative_escape_enabled=False,
+        dssr_policy_version=NG_DSSR_V3_POLICY_VERSION,
+        dssr_negative_batch_target=batch_target,
+        dssr_pressure_refinement_enabled=False,
+        ng_dssr_initial_neighborhood_size=neighborhood_size,
+        config_hash=ng_config_hash,
+        completion_bound_enabled=False,
+        subset_dominance_enabled=False,
+        proof_queue_policy_id=PROOF_QUEUE_POLICY_Q0,
+        guidance_mode=GUIDANCE_MODE_OFF,
+        guidance_hints=None,
     )
 
 
@@ -305,6 +452,66 @@ class NativeDssrHostBackend(NativeRcsppHostBackend):
         )
 
 
+class NativeDssrV2InprocessBackend(NativeRcsppInprocessBackend):
+    """In-process deterministic DSSR V2 backend."""
+
+    backend_id = NATIVE_DSSR_V2_INPROCESS_BACKEND_ID
+
+    def solve(self, request: BackendPricingRequest) -> BackendResult:
+        exact_proof_mode = bool(request.exact_proof_mode)
+        result = super().solve(_dssr_v2_request(request))
+        return _with_dssr_policy_telemetry(
+            result,
+            exact_proof_mode=exact_proof_mode,
+        )
+
+
+class NativeDssrV2HostBackend(NativeRcsppHostBackend):
+    """Host-isolated deterministic DSSR V2 backend."""
+
+    backend_id = NATIVE_DSSR_V2_HOST_BACKEND_ID
+    _runtime: _PersistentHostRuntime | None = None
+    _lock = threading.RLock()
+
+    def solve(self, request: BackendPricingRequest) -> BackendResult:
+        exact_proof_mode = bool(request.exact_proof_mode)
+        result = super().solve(_dssr_v2_request(request))
+        return _with_dssr_policy_telemetry(
+            result,
+            exact_proof_mode=exact_proof_mode,
+        )
+
+
+class NativeNgDssrV3InprocessBackend(NativeRcsppInprocessBackend):
+    """In-process elementary-safe ng-memory DSSR V3 backend."""
+
+    backend_id = NATIVE_NG_DSSR_V3_INPROCESS_BACKEND_ID
+
+    def solve(self, request: BackendPricingRequest) -> BackendResult:
+        exact_proof_mode = bool(request.exact_proof_mode)
+        result = super().solve(_ng_dssr_v3_request(request))
+        return _with_dssr_policy_telemetry(
+            result,
+            exact_proof_mode=exact_proof_mode,
+        )
+
+
+class NativeNgDssrV3HostBackend(NativeRcsppHostBackend):
+    """Host-isolated elementary-safe ng-memory DSSR V3 backend."""
+
+    backend_id = NATIVE_NG_DSSR_V3_HOST_BACKEND_ID
+    _runtime: _PersistentHostRuntime | None = None
+    _lock = threading.RLock()
+
+    def solve(self, request: BackendPricingRequest) -> BackendResult:
+        exact_proof_mode = bool(request.exact_proof_mode)
+        result = super().solve(_ng_dssr_v3_request(request))
+        return _with_dssr_policy_telemetry(
+            result,
+            exact_proof_mode=exact_proof_mode,
+        )
+
+
 class _PersistentHostRuntime:
     def __init__(self, *, backend_id: str = NATIVE_HOST_BACKEND_ID) -> None:
         self.backend_id = str(backend_id)
@@ -342,13 +549,81 @@ class _PersistentHostRuntime:
         reused = self.request_count > 0
         same_instance = bool(self.loaded_instance_hash == instance_hash)
         request_kind = "solve_delta" if same_instance else "load_solve"
+        configured_native_memory_limit_bytes = int(
+            float(request.memory_limit_gb) * _GIB
+        )
+        host_rss_at_request_start_bytes = _process_rss_bytes(
+            self.process.pid
+        )
+        available_memory_at_request_start_bytes = (
+            _available_memory_bytes()
+        )
+        memory_budget = _dynamic_host_memory_budget(
+            configured_native_limit_bytes=(
+                configured_native_memory_limit_bytes
+            ),
+            host_rss_bytes=host_rss_at_request_start_bytes,
+            available_memory_bytes=(
+                available_memory_at_request_start_bytes
+            ),
+        )
+        native_memory_limit_bytes = int(
+            memory_budget["native_limit_bytes"]
+        )
+        rss_limit_bytes = int(
+            memory_budget["watchdog_limit_bytes"]
+        )
+        if bool(memory_budget["preflight_rejected"]):
+            self.close()
+            return _empty_result(
+                self.backend_id,
+                "MEMORY_LIMIT",
+                blockers=("host_runtime_memory_preflight",),
+                telemetry={
+                    "host_partial_result_received": False,
+                    "host_proof_state_discarded": True,
+                    "host_runtime_memory_policy_id": (
+                        _HOST_RUNTIME_MEMORY_POLICY_ID
+                    ),
+                    "configured_native_memory_limit_bytes": (
+                        configured_native_memory_limit_bytes
+                    ),
+                    "native_memory_limit_bytes": (
+                        native_memory_limit_bytes
+                    ),
+                    "host_memory_watchdog_limit_bytes": (
+                        rss_limit_bytes
+                    ),
+                    "host_rss_at_request_start_bytes": (
+                        host_rss_at_request_start_bytes
+                    ),
+                    "available_memory_at_request_start_bytes": (
+                        available_memory_at_request_start_bytes
+                    ),
+                    "host_runtime_available_reserve_bytes": (
+                        _HOST_RUNTIME_AVAILABLE_RESERVE_BYTES
+                    ),
+                    "host_runtime_memory_budget_clamped": bool(
+                        memory_budget["clamped"]
+                    ),
+                },
+            )
+        effective_request = replace(
+            request,
+            memory_limit_gb=(
+                float(native_memory_limit_bytes) / float(_GIB)
+            ),
+        )
         message = {
             "protocol": NATIVE_HOST_PROTOCOL,
             "kind": request_kind,
             "request_id": request_id,
             "expected_build_hash": expected_hash,
             "instance_hash": instance_hash,
-            "request": _request_ipc_payload(request, include_data=not same_instance),
+            "request": _request_ipc_payload(
+                effective_request,
+                include_data=not same_instance,
+            ),
         }
         try:
             self.connection.send(message)
@@ -363,27 +638,45 @@ class _PersistentHostRuntime:
             )
 
         deadline = (
-            monotonic() + float(request.wall_time_limit_sec) + 1.0
-            if request.wall_time_limit_sec is not None
+            monotonic() + float(effective_request.wall_time_limit_sec) + 1.0
+            if effective_request.wall_time_limit_sec is not None
             else None
         )
-        native_memory_limit_bytes = int(
-            float(request.memory_limit_gb) * _GIB
-        )
-        rss_limit_bytes = int(
-            host_memory_watchdog_limit_gb(request.memory_limit_gb) * _GIB
-        )
         peak_rss = 0
+        minimum_available_memory_bytes = (
+            available_memory_at_request_start_bytes
+        )
         stop_reason = ""
+        memory_guard_trigger = ""
         try:
             while self._ready() and not self.connection.poll(0.05):
                 rss = _process_rss_bytes(self.process.pid)
                 peak_rss = max(peak_rss, rss)
+                available_memory_bytes = _available_memory_bytes()
+                if available_memory_bytes is not None:
+                    if minimum_available_memory_bytes is None:
+                        minimum_available_memory_bytes = (
+                            available_memory_bytes
+                        )
+                    else:
+                        minimum_available_memory_bytes = min(
+                            minimum_available_memory_bytes,
+                            available_memory_bytes,
+                        )
                 if deadline is not None and monotonic() >= deadline:
                     stop_reason = "TIMEOUT"
                     break
                 if rss_limit_bytes > 0 and rss >= rss_limit_bytes:
                     stop_reason = "MEMORY_LIMIT"
+                    memory_guard_trigger = "host_rss_watchdog"
+                    break
+                if (
+                    available_memory_bytes is not None
+                    and available_memory_bytes
+                    < _HOST_RUNTIME_AVAILABLE_RESERVE_BYTES
+                ):
+                    stop_reason = "MEMORY_LIMIT"
+                    memory_guard_trigger = "host_memavailable_reserve"
                     break
                 sleep(0.01)
         except KeyboardInterrupt:
@@ -398,8 +691,32 @@ class _PersistentHostRuntime:
                 telemetry={
                     "host_exitcode": exitcode,
                     "host_peak_rss_bytes": peak_rss,
+                    "configured_native_memory_limit_bytes": (
+                        configured_native_memory_limit_bytes
+                    ),
                     "native_memory_limit_bytes": native_memory_limit_bytes,
                     "host_memory_watchdog_limit_bytes": rss_limit_bytes,
+                    "host_runtime_memory_policy_id": (
+                        _HOST_RUNTIME_MEMORY_POLICY_ID
+                    ),
+                    "host_runtime_memory_guard_trigger": (
+                        memory_guard_trigger
+                    ),
+                    "host_rss_at_request_start_bytes": (
+                        host_rss_at_request_start_bytes
+                    ),
+                    "available_memory_at_request_start_bytes": (
+                        available_memory_at_request_start_bytes
+                    ),
+                    "minimum_available_memory_bytes": (
+                        minimum_available_memory_bytes
+                    ),
+                    "host_runtime_available_reserve_bytes": (
+                        _HOST_RUNTIME_AVAILABLE_RESERVE_BYTES
+                    ),
+                    "host_runtime_memory_budget_clamped": bool(
+                        memory_budget["clamped"]
+                    ),
                     "host_partial_result_received": False,
                     "host_proof_state_discarded": True,
                 },
@@ -451,29 +768,67 @@ class _PersistentHostRuntime:
         self.loaded_instance_hash = instance_hash
         self.request_count += 1
         result = response["result"]
+        host_pid = self.process.pid
+        task_count = len(request.data.task_ids)
+        recycle_threshold_bytes = _host_recycle_threshold_bytes(
+            native_memory_limit_bytes
+        )
+        recycle_after_response = _should_recycle_host_after_response(
+            task_count=task_count,
+            peak_rss_bytes=peak_rss,
+            native_memory_limit_bytes=native_memory_limit_bytes,
+        )
         telemetry = dict(result.telemetry or {})
         telemetry.update(
             {
                 "host_protocol": NATIVE_HOST_PROTOCOL,
-                "host_pid": self.process.pid,
+                "host_pid": host_pid,
                 "host_reused": reused,
                 "host_same_instance_delta": same_instance,
                 "host_request_kind": request_kind,
                 "host_request_count": self.request_count,
                 "host_peak_rss_bytes": peak_rss,
+                "configured_native_memory_limit_bytes": (
+                    configured_native_memory_limit_bytes
+                ),
                 "native_memory_limit_bytes": native_memory_limit_bytes,
                 "host_memory_watchdog_limit_bytes": rss_limit_bytes,
+                "host_runtime_memory_policy_id": (
+                    _HOST_RUNTIME_MEMORY_POLICY_ID
+                ),
+                "host_runtime_memory_guard_trigger": "",
+                "host_rss_at_request_start_bytes": (
+                    host_rss_at_request_start_bytes
+                ),
+                "available_memory_at_request_start_bytes": (
+                    available_memory_at_request_start_bytes
+                ),
+                "minimum_available_memory_bytes": (
+                    minimum_available_memory_bytes
+                ),
+                "host_runtime_available_reserve_bytes": (
+                    _HOST_RUNTIME_AVAILABLE_RESERVE_BYTES
+                ),
+                "host_runtime_memory_budget_clamped": bool(
+                    memory_budget["clamped"]
+                ),
                 "host_build_hash": expected_hash,
                 "host_stale_restarted": stale_restarted,
                 "host_partial_result_received": bool(result.columns),
                 "host_proof_state_discarded": not result.search_exhaustive,
+                "host_recycle_policy_id": _HOST_RECYCLE_POLICY_ID,
+                "host_recycle_threshold_bytes": recycle_threshold_bytes,
+                "host_recycled_after_response": recycle_after_response,
             }
         )
-        return replace(
+        audited_result = replace(
             result,
             backend_id=self.backend_id,
             telemetry=telemetry,
         )
+        if recycle_after_response:
+            self.close()
+        return audited_result
 
     def _start(self, expected_hash: str) -> str:
         parent, child = self.context.Pipe(duplex=True)
@@ -546,6 +901,29 @@ class _PersistentHostRuntime:
         self.build_hash = ""
         self.loaded_instance_hash = ""
         self.request_count = 0
+
+
+def _host_recycle_threshold_bytes(native_memory_limit_bytes: int) -> int:
+    if native_memory_limit_bytes <= 0:
+        return 0
+    return max(
+        _HOST_RECYCLE_MIN_PEAK_BYTES,
+        int(native_memory_limit_bytes * _HOST_RECYCLE_LIMIT_FRACTION),
+    )
+
+
+def _should_recycle_host_after_response(
+    *,
+    task_count: int,
+    peak_rss_bytes: int,
+    native_memory_limit_bytes: int,
+) -> bool:
+    threshold = _host_recycle_threshold_bytes(native_memory_limit_bytes)
+    return bool(
+        int(task_count) >= _HOST_RECYCLE_MIN_TASK_COUNT
+        and threshold > 0
+        and int(peak_rss_bytes) >= threshold
+    )
 
 
 def _request_ipc_payload(
@@ -639,6 +1017,21 @@ def _host_build_hash(
     return spprc_engine_build_hash(backend_id)
 
 
+def _native_build_capability_blockers(
+    request: BackendPricingRequest,
+    native,
+) -> tuple[str, ...]:
+    if (
+        request.dssr_policy_version
+        != NG_DSSR_V3_POLICY_VERSION
+    ):
+        return tuple()
+    build_info = dict(native.build_info())
+    if str(build_info.get("ng_dssr_v3_compiled")) == "true":
+        return tuple()
+    return ("native_ng_dssr_v3_not_compiled",)
+
+
 def _persistent_host_main(
     connection,
     backend_id: str = NATIVE_HOST_BACKEND_ID,
@@ -703,14 +1096,29 @@ def _persistent_host_main(
                     )
                 else:
                     native = importlib.import_module("lunar_spprc_native")
-                    raw = dict(
-                        native.solve(_native_request_payload(base_request))
+                    build_blockers = (
+                        _native_build_capability_blockers(
+                            base_request,
+                            native,
+                        )
                     )
-                    result = _audit_native_result(
-                        base_request,
-                        raw,
-                        backend_id=backend_id,
-                    )
+                    if build_blockers:
+                        result = _empty_result(
+                            backend_id,
+                            "UNSUPPORTED_FEATURE",
+                            blockers=build_blockers,
+                        )
+                    else:
+                        raw = dict(
+                            native.solve(
+                                _native_request_payload(base_request)
+                            )
+                        )
+                        result = _audit_native_result(
+                            base_request,
+                            raw,
+                            backend_id=backend_id,
+                        )
             response.update({"kind": "ok", "result": result})
         except BaseException as exc:  # pragma: no cover - protects the parent process
             response.update({"kind": "error", "error": repr(exc)})
@@ -720,6 +1128,8 @@ def _persistent_host_main(
 
 atexit.register(NativeRcsppHostBackend.close)
 atexit.register(NativeDssrHostBackend.close)
+atexit.register(NativeDssrV2HostBackend.close)
+atexit.register(NativeNgDssrV3HostBackend.close)
 
 
 def _maybe_attach_environment_guidance(
@@ -728,7 +1138,49 @@ def _maybe_attach_environment_guidance(
     """Run the optional task/arc predictor before Native imports/IPC."""
 
     if request.exact_proof_mode:
-        return request
+        manifest_path = str(
+            os.getenv("LUNAR_ICE_PROOF_QUEUE_GAT_MANIFEST", "")
+        ).strip()
+        if not manifest_path:
+            return request
+        try:
+            from lunar_ice_bpc.guidance.proof_queue_gat_runtime import (
+                prepare_proof_queue_gat_request_from_environment,
+            )
+
+            prepared, _diagnostics = (
+                prepare_proof_queue_gat_request_from_environment(
+                    request
+                )
+            )
+            return prepared
+        except Exception as exc:
+            # Proof guidance is optional ordering only.  Any runtime,
+            # checkpoint, hash, OOD, or inference error restores the exact
+            # request without changing its queue, bounds, or certificate.
+            lifecycle = {
+                "guidance_import_sec": 0.0,
+                "guidance_checkpoint_load_sec": 0.0,
+                "guidance_tensorize_sec": 0.0,
+                "guidance_forward_total_sec": 0.0,
+                "guidance_call_count": 0,
+                "guidance_binding_validation_sec": 0.0,
+                "guidance_native_install_sec": 0.0,
+                "guidance_total_wall_sec": 0.0,
+                "guidance_total_wall_ratio": None,
+                "bypassed_before_import": True,
+                "bypass_reason": (
+                    "proof_queue_gat_fail_closed:" f"{exc!r}"
+                ),
+            }
+            return replace(
+                request,
+                guidance_mode=GUIDANCE_MODE_OFF,
+                guidance_hints=None,
+                guidance_lifecycle_telemetry=tuple(
+                    lifecycle.items()
+                ),
+            )
     if (
         request.guidance_mode != GUIDANCE_MODE_OFF
         or request.guidance_hints is not None
@@ -1185,6 +1637,18 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
         "mode": request.mode,
         "objective_mode": request.objective_mode,
         "harvest_target": request.harvest_target,
+        "exact_negative_escape_enabled": bool(
+            request.exact_negative_escape_enabled
+        ),
+        "exact_admission_batch_size": int(
+            request.exact_admission_batch_size
+        ),
+        "exact_raw_negative_pool_size": int(
+            request.exact_raw_negative_pool_size
+        ),
+        "exact_negative_escape_policy_id": str(
+            request.exact_negative_escape_policy_id
+        ),
         "harvest_max_processed_labels": (
             request.harvest_max_processed_labels
         ),
@@ -1227,7 +1691,22 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
         ),
         "proof_queue_policy_id": request.proof_queue_policy_id,
         "dssr_enabled": bool(request.dssr_enabled),
-        "dssr_policy_version": DSSR_POLICY_VERSION,
+        "dssr_policy_version": str(request.dssr_policy_version),
+        "dssr_negative_batch_target": int(
+            request.dssr_negative_batch_target
+        ),
+        "dssr_pressure_refinement_enabled": bool(
+            request.dssr_pressure_refinement_enabled
+        ),
+        "dssr_pressure_max_bucket_size": int(
+            request.dssr_pressure_max_bucket_size
+        ),
+        "dssr_pressure_max_candidate_checks": int(
+            request.dssr_pressure_max_candidate_checks
+        ),
+        "ng_dssr_initial_neighborhood_size": int(
+            request.ng_dssr_initial_neighborhood_size
+        ),
         "config_hash": request.config_hash,
         "engine_hash": request.engine_hash,
         "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
@@ -1376,6 +1855,18 @@ def _audit_native_result(
         "config_hash": request.config_hash,
         "engine_hash": request.engine_hash,
         "service_timing_policy_id": SERVICE_TIMING_POLICY_ID,
+        "exact_negative_escape_enabled": bool(
+            request.exact_negative_escape_enabled
+        ),
+        "exact_admission_batch_size": int(
+            request.exact_admission_batch_size
+        ),
+        "exact_raw_negative_pool_size": int(
+            request.exact_raw_negative_pool_size
+        ),
+        "exact_negative_escape_policy_id": str(
+            request.exact_negative_escape_policy_id
+        ),
         "canonical_solve_binding_v2": canonical_binding.to_payload(),
         "canonical_solve_binding_v2_schema": canonical_binding.schema_version,
         "canonical_solve_binding_v2_hash": canonical_binding.binding_hash,
@@ -1411,7 +1902,22 @@ def _audit_native_result(
         expected_bindings.update(
             {
                 "dssr_enabled": True,
-                "dssr_policy_version": DSSR_POLICY_VERSION,
+                "dssr_policy_version": request.dssr_policy_version,
+                "dssr_negative_batch_target": (
+                    request.dssr_negative_batch_target
+                ),
+                "dssr_pressure_refinement_enabled": (
+                    request.dssr_pressure_refinement_enabled
+                ),
+                "dssr_pressure_max_bucket_size": (
+                    request.dssr_pressure_max_bucket_size
+                ),
+                "dssr_pressure_max_candidate_checks": (
+                    request.dssr_pressure_max_candidate_checks
+                ),
+                "ng_dssr_initial_neighborhood_size": (
+                    request.ng_dssr_initial_neighborhood_size
+                ),
             }
         )
     binding_mismatches = []
@@ -1430,16 +1936,19 @@ def _audit_native_result(
         blockers.append("native_engine_build_hash_missing")
     raw_telemetry = dict(raw.get("telemetry") or {})
     if request.dssr_enabled:
-        if (
-            build_info.get("large_scale_exact_pricer")
-            != DSSR_POLICY_VERSION
-        ):
+        if request.dssr_policy_version == DSSR_V2_POLICY_VERSION:
+            build_policy = build_info.get("dssr_v2_policy")
+        elif request.dssr_policy_version == NG_DSSR_V3_POLICY_VERSION:
+            build_policy = build_info.get("ng_dssr_v3_policy")
+        else:
+            build_policy = build_info.get("large_scale_exact_pricer")
+        if build_policy != request.dssr_policy_version:
             blockers.append("native_dssr_engine_policy_mismatch")
         if not bool(raw_telemetry.get("dssr_enabled")):
             blockers.append("native_dssr_telemetry_disabled")
         if (
             str(raw_telemetry.get("dssr_policy_version") or "")
-            != DSSR_POLICY_VERSION
+            != request.dssr_policy_version
         ):
             blockers.append("native_dssr_telemetry_policy_mismatch")
         if int(
@@ -1450,6 +1959,11 @@ def _audit_native_result(
             raw_telemetry.get("subset_dominance_candidate_checks") or 0
         ) != 0:
             blockers.append("native_dssr_subset_dominance_was_active")
+        if (
+            request.dssr_policy_version == NG_DSSR_V3_POLICY_VERSION
+            and not bool(raw_telemetry.get("ng_dssr_enabled"))
+        ):
+            blockers.append("native_ng_dssr_telemetry_disabled")
     columns = []
     audited_rcs = []
     reconstruction_rows = []
@@ -1550,6 +2064,11 @@ def _audit_native_result(
         blockers.append("native_labels_dropped")
     if request.exact_proof_mode and not exhaustive:
         blockers.append("native_exact_search_incomplete")
+    if (
+        request.exact_proof_mode
+        and bool(raw_telemetry.get("negative_escape_triggered"))
+    ):
+        blockers.append("native_exact_negative_escape_partial")
     if request.exact_proof_mode and not frontier_empty:
         blockers.append("native_frontier_not_empty")
     if request.dssr_enabled:
@@ -1661,7 +2180,22 @@ def _audit_native_result(
             "rmp_iteration_id": request.rmp_iteration_id,
             "completion_bound_requested": request.completion_bound_enabled,
             "dssr_enabled": bool(request.dssr_enabled),
-            "dssr_policy_version": DSSR_POLICY_VERSION,
+            "dssr_policy_version": request.dssr_policy_version,
+            "dssr_negative_batch_target": (
+                request.dssr_negative_batch_target
+            ),
+            "dssr_pressure_refinement_enabled": (
+                request.dssr_pressure_refinement_enabled
+            ),
+            "dssr_pressure_max_bucket_size": (
+                request.dssr_pressure_max_bucket_size
+            ),
+            "dssr_pressure_max_candidate_checks": (
+                request.dssr_pressure_max_candidate_checks
+            ),
+            "ng_dssr_initial_neighborhood_size": (
+                request.ng_dssr_initial_neighborhood_size
+            ),
             "harvest_max_processed_labels": (
                 request.harvest_max_processed_labels
             ),
@@ -1996,10 +2530,19 @@ def _guidance_snapshot_candidates(
 def _maybe_record_pre_solve_exact_snapshot(
     request: BackendPricingRequest,
 ) -> None:
-    root_value = str(
+    exact_root_value = str(
         os.getenv("LUNAR_ICE_PRE_SOLVE_EXACT_SNAPSHOT_DIR", "")
     ).strip()
-    if not root_value or not request.exact_proof_mode:
+    pricing_root_value = str(
+        os.getenv("LUNAR_ICE_PRE_SOLVE_PRICING_SNAPSHOT_DIR", "")
+    ).strip()
+    roots = []
+    if pricing_root_value:
+        roots.append(pricing_root_value)
+    if exact_root_value and request.exact_proof_mode:
+        roots.append(exact_root_value)
+    roots = list(dict.fromkeys(roots))
+    if not roots:
         return
     try:
         from lunar_ice_bpc.exact.bpc.guidance.replay import (
@@ -2020,12 +2563,13 @@ def _maybe_record_pre_solve_exact_snapshot(
             checkpoint_id=request.guidance_checkpoint_id,
             ood_policy_version=request.guidance_ood_policy_version,
         )
-        target = (
-            Path(root_value)
-            / request.data.instance_content_hash
-            / f"{snapshot.snapshot_hash}.json"
-        )
-        save_pricing_snapshot(snapshot, target)
+        for root_value in roots:
+            target = (
+                Path(root_value)
+                / request.data.instance_content_hash
+                / f"{snapshot.snapshot_hash}.json"
+            )
+            save_pricing_snapshot(snapshot, target)
     except Exception:
         # Snapshot collection is diagnostic-only and must never change exact
         # pricing control flow or certificate semantics.
@@ -2164,6 +2708,106 @@ def _process_rss_bytes(pid: int | None) -> int:
     except (FileNotFoundError, PermissionError, ProcessLookupError, ValueError):
         return 0
     return 0
+
+
+def _available_memory_bytes() -> int | None:
+    try:
+        for line in Path("/proc/meminfo").read_text(
+            encoding="utf-8"
+        ).splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024
+    except (
+        FileNotFoundError,
+        PermissionError,
+        ValueError,
+    ):
+        return None
+    return None
+
+
+def _dynamic_host_memory_budget(
+    *,
+    configured_native_limit_bytes: int,
+    host_rss_bytes: int,
+    available_memory_bytes: int | None,
+) -> dict[str, int | bool]:
+    configured_native = max(
+        0,
+        int(configured_native_limit_bytes),
+    )
+    configured_watchdog = int(
+        host_memory_watchdog_limit_gb(
+            float(configured_native) / float(_GIB)
+        )
+        * _GIB
+    )
+    if configured_native == 0 or available_memory_bytes is None:
+        return {
+            "native_limit_bytes": configured_native,
+            "watchdog_limit_bytes": configured_watchdog,
+            "clamped": False,
+            "preflight_rejected": False,
+        }
+
+    host_rss = max(0, int(host_rss_bytes))
+    available = max(0, int(available_memory_bytes))
+    growth_budget = max(
+        0,
+        available - _HOST_RUNTIME_AVAILABLE_RESERVE_BYTES,
+    )
+    watchdog_cap = min(
+        configured_watchdog,
+        host_rss + growth_budget,
+    )
+    if (
+        configured_native >= _HOST_RUNTIME_MIN_NATIVE_BUDGET_BYTES
+        and watchdog_cap
+        < host_rss + _HOST_RUNTIME_MIN_NATIVE_BUDGET_BYTES
+    ):
+        return {
+            "native_limit_bytes": 0,
+            "watchdog_limit_bytes": max(0, watchdog_cap),
+            "clamped": True,
+            "preflight_rejected": True,
+        }
+
+    low = 0
+    high = configured_native
+    while low < high:
+        candidate = (low + high + 1) // 2
+        candidate_watchdog = int(
+            host_memory_watchdog_limit_gb(
+                float(candidate) / float(_GIB)
+            )
+            * _GIB
+        )
+        if candidate_watchdog <= watchdog_cap:
+            low = candidate
+        else:
+            high = candidate - 1
+    native_limit = int(low)
+    watchdog_limit = int(
+        host_memory_watchdog_limit_gb(
+            float(native_limit) / float(_GIB)
+        )
+        * _GIB
+    )
+    preflight_rejected = bool(
+        configured_native >= _HOST_RUNTIME_MIN_NATIVE_BUDGET_BYTES
+        and watchdog_limit <= host_rss
+    )
+    return {
+        "native_limit_bytes": (
+            0 if preflight_rejected else native_limit
+        ),
+        "watchdog_limit_bytes": watchdog_limit,
+        "clamped": bool(
+            native_limit < configured_native
+            or watchdog_limit < configured_watchdog
+        ),
+        "preflight_rejected": preflight_rejected,
+    }
 
 
 def host_memory_watchdog_limit_gb(native_limit_gb: float) -> float:

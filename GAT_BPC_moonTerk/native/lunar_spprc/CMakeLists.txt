@@ -12,6 +12,16 @@ set(LUNAR_SPPRC_RCSPP_COMMIT
     "2f1d53ba6806844e30ce43ee9c41041a5a1b4e79"
     CACHE STRING "Pinned lab-core/rcspp commit")
 set(LUNAR_SPPRC_PYTHON_INSTALL_DIR "" CACHE PATH "Python extension install directory")
+option(
+    LUNAR_SPPRC_ENABLE_NG_DSSR_V3
+    "Compile the isolated ng-DSSR V3 development candidate"
+    OFF
+)
+option(
+    LUNAR_SPPRC_ENABLE_BIDIRECTIONAL_FEASIBILITY
+    "Compile the isolated P0V4 bidirectional feasibility probe"
+    OFF
+)
 
 set(SKBUILD ON CACHE BOOL "Disable upstream developer-only clang-tidy configuration" FORCE)
 set(USE_TESTS OFF CACHE BOOL "Do not build upstream data-dependent tests" FORCE)
@@ -41,6 +51,12 @@ find_package(pybind11 CONFIG REQUIRED)
 add_library(lunar_spprc_core STATIC
     src/native_pricer.cpp
 )
+if(LUNAR_SPPRC_ENABLE_BIDIRECTIONAL_FEASIBILITY)
+    target_sources(
+        lunar_spprc_core
+        PRIVATE src/bidirectional_feasibility.cpp
+    )
+endif()
 set_target_properties(lunar_spprc_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(lunar_spprc_core PUBLIC include)
 target_include_directories(lunar_spprc_core SYSTEM PUBLIC "${rcspp_SOURCE_DIR}/cpp")
@@ -49,6 +65,8 @@ add_dependencies(lunar_spprc_core generate_umbrella_header)
 target_compile_definitions(lunar_spprc_core PUBLIC
     LUNAR_SPPRC_RCSPP_COMMIT="${LUNAR_SPPRC_RCSPP_COMMIT}"
     LUNAR_SPPRC_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    LUNAR_SPPRC_ENABLE_NG_DSSR_V3=$<BOOL:${LUNAR_SPPRC_ENABLE_NG_DSSR_V3}>
+    LUNAR_SPPRC_ENABLE_BIDIRECTIONAL_FEASIBILITY=$<BOOL:${LUNAR_SPPRC_ENABLE_BIDIRECTIONAL_FEASIBILITY}>
 )
 
 pybind11_add_module(lunar_spprc_native src/pybind_module.cpp)

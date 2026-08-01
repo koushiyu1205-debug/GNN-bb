@@ -1,0 +1,228 @@
+{
+  "actions": [
+    "S1",
+    "S4"
+  ],
+  "binding_hash": "d127acc1a7ee95ef4fd1fe047513c944819e50b344f3a7e55cbecab217e02ff5",
+  "certificate_authority": "none",
+  "context_count": 11,
+  "context_limit": 12,
+  "contexts": [
+    {
+      "context_id": "086f605e52986b8628ba81a274b54dc8bc5f1bf0b94a7686e42702f86062fd68",
+      "dual_fingerprint": "afafd1c41637f060a30eac2144a045a0d1676ffe7682cceb74a15de659b2a9e4",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_003_logical_graph.json",
+      "instance_content_hash": "lunar_ice_030_003_seed629300003",
+      "instance_sha256": "7187024058138b255465723d44cc31241b6ae7bd1b95e8fc79253b2f5cfbf120",
+      "round": 49,
+      "scale": 30,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_003/stage_001/probe.json",
+      "source_probe_sha256": "0705b5d0a83bc2a56082b7a82a921921d2a7fb026340b35bbf3153f2b5846e41",
+      "source_proof_wall_sec": 212.448192,
+      "source_raw_unique_negative_count": 7,
+      "source_selected_diverse_negative_count": 1,
+      "source_state": "FOUND_NEGATIVE"
+    },
+    {
+      "context_id": "160f1009bf91254478c8bf0d5f3cf5e7b138a60362712e6cf28a8e70b97f5d79",
+      "dual_fingerprint": "9d9a6529ae64d06ae3ad940ec53e40e0b902d1525662d5071c6f47258df97b97",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_005_logical_graph.json",
+      "instance_content_hash": "lunar_ice_sp50_050_005_seed1129005",
+      "instance_sha256": "c0e4c01cbee9345bdacfbabcb41701a880e8e06722a20059b572d77d075e371f",
+      "round": 30,
+      "scale": 50,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_005_probe_20260731/scale_050/pools/scale_050/instance_005/stage_001/probe.json",
+      "source_probe_sha256": "ca0d9b94a663dd05c330a57fe34781ddf7b8172c1a91a3055811a17204a9765a",
+      "source_proof_wall_sec": 123.528071,
+      "source_raw_unique_negative_count": 394,
+      "source_selected_diverse_negative_count": 128,
+      "source_state": "FOUND_NEGATIVE"
+    },
+    {
+      "context_id": "5ec466b9a4ceb2705fde0fbdae29c330e9167212c7582808fd4f501e356286a2",
+      "dual_fingerprint": "ad26b7752b3ce23b3d584e916146878d4f4fb27355856c4e39e68f316a59e63b",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_004_logical_graph.json",
+      "instance_content_hash": "lunar_ice_030_004_seed629300004",
+      "instance_sha256": "aa81cf9f1a54a59edfaa5c5a886fd8c5ea8e0ccefde8d35b033c11d84456065f",
+      "round": 18,
+      "scale": 30,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_004/stage_001/probe.json",
+      "source_probe_sha256": "fea292e02de6a99933e0cd35a10f761ebad097afef40839b6368a90c42fb2723",
+      "source_proof_wall_sec": 801.412854,
+      "source_raw_unique_negative_count": 0,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    },
+    {
+      "context_id": "d988bc1ebc5b25046bc7b474090699828282359a4caeb07970fa0fa6c1ade16a",
+      "dual_fingerprint": "e27f3f92a2d679766b75c9f16983806302dc06c308c5b4ebfce90f1b0dab3bf1",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_010_logical_graph.json",
+      "instance_content_hash": "lunar_ice_sp50_050_010_seed1129018",
+      "instance_sha256": "87043d2672df4a8a62637f6a9f6c5a3ad4cb970ca347bdf152e0361eb8257e00",
+      "round": 48,
+      "scale": 50,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_010_probe_20260731/scale_050/pools/scale_050/instance_010/stage_001/probe.json",
+      "source_probe_sha256": "e31cdc4a753db99467af5124dbd2bae2820de5129eac9a2bdf5010d3d9f875c0",
+      "source_proof_wall_sec": 747.187397,
+      "source_raw_unique_negative_count": 13,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    },
+    {
+      "context_id": "2e5293935c1a85a6ca1efad6c43a64ba7b06286c1a61e4e9bfd79a0b7e54437d",
+      "dual_fingerprint": "35faf0dbd19c69d79477407c3b7c8f675214cc377a4222532081770b3405132b",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_005_logical_graph.json",
+      "instance_content_hash": "lunar_ice_030_005_seed629300005",
+      "instance_sha256": "56bab31443872ac0cf0bf9d731465d41bf5d7b1ba891463e4155191c9b30a0c0",
+      "round": 62,
+      "scale": 30,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_005/stage_001/probe.json",
+      "source_probe_sha256": "ca7b4f24e1c82c86e1afc45b6a72bb0b1c9e86305b295624bb3ff1f4019b8e23",
+      "source_proof_wall_sec": 366.886622,
+      "source_raw_unique_negative_count": 0,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    },
+    {
+      "context_id": "b870cd9cb8ca7fc97006bb0aa766003854927bb7b421318375288da8ecd6a24f",
+      "dual_fingerprint": "92f81f2a810ef09be4bdae1f62c72ed65b918d67321375643f91ee4d6c21121a",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_003_logical_graph.json",
+      "instance_content_hash": "lunar_ice_030_003_seed629300003",
+      "instance_sha256": "7187024058138b255465723d44cc31241b6ae7bd1b95e8fc79253b2f5cfbf120",
+      "round": 50,
+      "scale": 30,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_003/stage_001/probe.json",
+      "source_probe_sha256": "0705b5d0a83bc2a56082b7a82a921921d2a7fb026340b35bbf3153f2b5846e41",
+      "source_proof_wall_sec": 251.016686,
+      "source_raw_unique_negative_count": 0,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    },
+    {
+      "context_id": "eb5ad1c210bc16b3fecc4404826f77fd3e3503aac4fcef607ca79c4ace441dc8",
+      "dual_fingerprint": "4434f4cc3bf0ec12c736870643afdadbda3b5430fcc431b3704af877c6e68eeb",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_006_logical_graph.json",
+      "instance_content_hash": "lunar_ice_030_006_seed629300006",
+      "instance_sha256": "8f63fa664f77f574f11737d0293c494eb915c56e6a8bad8b35b6af9aa1a7cfb2",
+      "round": 45,
+      "scale": 30,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_006/stage_001/probe.json",
+      "source_probe_sha256": "0051aa3b28589b53c0cc2005465b4f9054e4aff555a8e09fdf2f8b73f144482f",
+      "source_proof_wall_sec": 207.632622,
+      "source_raw_unique_negative_count": 0,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    },
+    {
+      "context_id": "5b0ec6494143705eff44aac75f4914f713a045baf1c38e08a47c79bde2806f42",
+      "dual_fingerprint": "4efaddbca467a2da564b4114b56eebb9b57d9a7e7648e6b803bf77723299a973",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_001_logical_graph.json",
+      "instance_content_hash": "lunar_ice_030_001_seed629300001",
+      "instance_sha256": "9ceb149b97edee135f761205e17c9952cf832bb65d10bff1334e9e47605fc3f4",
+      "round": 47,
+      "scale": 30,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_001/stage_001/probe.json",
+      "source_probe_sha256": "41e987e074cccfd40ec4e21899cce1bbe62a99bdcced3182068b6e3482125d15",
+      "source_proof_wall_sec": 144.787001,
+      "source_raw_unique_negative_count": 0,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    },
+    {
+      "context_id": "f26efc3c0a259654b5e93e52c0ec36431ddac7bc69d5b0e7dbb4b8ea64a7a25a",
+      "dual_fingerprint": "3c0073379ded5d0756e693f248667487454c0cbb95f5ebcb3b34ded98fe53fab",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_005_logical_graph.json",
+      "instance_content_hash": "lunar_ice_sp50_050_005_seed1129005",
+      "instance_sha256": "c0e4c01cbee9345bdacfbabcb41701a880e8e06722a20059b572d77d075e371f",
+      "round": 33,
+      "scale": 50,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_005_probe_20260731/scale_050/pools/scale_050/instance_005/stage_001/probe.json",
+      "source_probe_sha256": "ca0d9b94a663dd05c330a57fe34781ddf7b8172c1a91a3055811a17204a9765a",
+      "source_proof_wall_sec": 99.883267,
+      "source_raw_unique_negative_count": 14,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    },
+    {
+      "context_id": "9c8ded91c1c7a52ed70fd90e09f4108f7814e41b57cbcce33b50ec506a6c2d68",
+      "dual_fingerprint": "c85f2c79877d817b3e66621963f1233ad5c72248c948e0a210ab278ebcfd42a7",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/p0v4_fixed_k_gat_development_v1/scale_030/instance_002_logical_graph.json",
+      "instance_content_hash": "lunar_ice_030_002_seed629300002",
+      "instance_sha256": "2be35134f027a6e13d56bd80df37b7e9ae78c32805b76524bb250d68d9c66852",
+      "round": 36,
+      "scale": 30,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_002/stage_001/probe.json",
+      "source_probe_sha256": "d1d44bd810e62ab62fbb3e04e7153e4e3df08aea662d9ba215e6d0f4aa9be47f",
+      "source_proof_wall_sec": 26.336376,
+      "source_raw_unique_negative_count": 0,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    },
+    {
+      "context_id": "d554213dfc4f4a40ac0afda5a776b441ebc7727dc0a39bbc1391554574f724e3",
+      "dual_fingerprint": "131dbe5d75e250cb858754abc3344a6ddadb3517d633d427d962e68a8e341e76",
+      "instance": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_050/instance_006_logical_graph.json",
+      "instance_content_hash": "lunar_ice_sp50_050_006_seed1129006",
+      "instance_sha256": "d5ff10dd716d898c82a7d944c201ede303aa0afe2e7d454a06b201be53193499",
+      "round": 52,
+      "scale": 50,
+      "source_probe": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_006_probe_20260731/scale_050/pools/scale_050/instance_006/stage_001/probe.json",
+      "source_probe_sha256": "0b9c39b634a53914d905572622ef6b8d18273a9c1c245460ec92ed7e271636cc",
+      "source_proof_wall_sec": 15.909401,
+      "source_raw_unique_negative_count": 21,
+      "source_selected_diverse_negative_count": 0,
+      "source_state": "CERTIFIED_NO_NEGATIVE"
+    }
+  ],
+  "deployment_authorized": false,
+  "evaluation_authorized": false,
+  "formal_training_authorized": false,
+  "max_contexts_per_instance": 2,
+  "memory_limit_gb": 10.0,
+  "minimum_source_proof_sec": 10.0,
+  "per_action_cap_sec": 60.0,
+  "replay_script": "/home/kai/work/GAT_BPC_moonTerk/scripts/replay_p0v4_sparse_tail_deviation.py",
+  "replay_script_sha256": "b1cb83e227f22e4399bdb880498dd1f5fe787e7a1451637114432c539d737c05",
+  "runtime_eligible": false,
+  "schema_version": "lunar_ice_bpc.sparse_tail_replay_registry.v1",
+  "selection_policy": "state_balanced_instance_round_robin_then_source_proof_desc_v1",
+  "source_probes": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_005_probe_20260731/scale_050/pools/scale_050/instance_005/stage_001/probe.json",
+      "sha256": "ca0d9b94a663dd05c330a57fe34781ddf7b8172c1a91a3055811a17204a9765a"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_006_probe_20260731/scale_050/pools/scale_050/instance_006/stage_001/probe.json",
+      "sha256": "0b9c39b634a53914d905572622ef6b8d18273a9c1c245460ec92ed7e271636cc"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_sri_group_screen_candidate_v5_scale50_010_probe_20260731/scale_050/pools/scale_050/instance_010/stage_001/probe.json",
+      "sha256": "e31cdc4a753db99467af5124dbd2bae2820de5129eac9a2bdf5010d3d9f875c0"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_001/stage_001/probe.json",
+      "sha256": "41e987e074cccfd40ec4e21899cce1bbe62a99bdcced3182068b6e3482125d15"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_002/stage_001/probe.json",
+      "sha256": "d1d44bd810e62ab62fbb3e04e7153e4e3df08aea662d9ba215e6d0f4aa9be47f"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_003/stage_001/probe.json",
+      "sha256": "0705b5d0a83bc2a56082b7a82a921921d2a7fb026340b35bbf3153f2b5846e41"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_004/stage_001/probe.json",
+      "sha256": "fea292e02de6a99933e0cd35a10f761ebad097afef40839b6368a90c42fb2723"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_005/stage_001/probe.json",
+      "sha256": "ca7b4f24e1c82c86e1afc45b6a72bb0b1c9e86305b295624bb3ff1f4019b8e23"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_one_deviation_opportunities_20260731/exact_runs/scale_030/scale_030/pools/scale_030/instance_006/stage_001/probe.json",
+      "sha256": "0051aa3b28589b53c0cc2005465b4f9054e4aff555a8e09fdf2f8b73f144482f"
+    }
+  ],
+  "status": "FROZEN_BEFORE_ACTIONS"
+}

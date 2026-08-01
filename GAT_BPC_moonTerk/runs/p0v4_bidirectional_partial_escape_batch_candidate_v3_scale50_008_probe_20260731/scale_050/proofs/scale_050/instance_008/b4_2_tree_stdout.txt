@@ -1,0 +1,2 @@
+[33m[2026-07-31 10:22:30.677][WARN ] Memory limit (8947 MB) exceeded (current: 8947 MB). Stopping early.
+[0mB4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0v4_bidirectional_partial_escape_batch_candidate_v3_scale50_008_probe_20260731/scale_050/proofs/scale_050/instance_008/b4_1_report_zh.md

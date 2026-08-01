@@ -1,7 +1,7 @@
 {
   "schema_version": "lunar_ice_bpc.baseline_registry.v1",
-  "updated_at": "2026-07-27T13:29:28+08:00",
-  "active_experiment_baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+  "updated_at": "2026-07-29T17:21:36+08:00",
+  "active_experiment_baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_MEMORY_COMPACT_BASELINE_V4",
   "production_default_policy": "no_cut",
   "production_default_switch_authorized": false,
   "baselines": [
@@ -68,7 +68,7 @@
     },
     {
       "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
-      "status": "active_experiment_baseline",
+      "status": "preserved_historical_experiment_baseline",
       "algorithm": "Native exact Branch-Price-and-Cut with root-only P0 SRI-3 and no task waiting",
       "repository_head_at_freeze": "339304ca3f749ba2f6832ee4c5679255e30efdbd",
       "source_binding_mode": "content_addressed_source_bundle",
@@ -102,7 +102,49 @@
           "p50_sec": 77.280779,
           "max_sec": 716.426428
         }
-      }
+      },
+      "superseded_as_active_by": "FROZEN_NATIVE_LIVE_SRI_P0_MEMORY_COMPACT_BASELINE_V4"
+    },
+    {
+      "freeze_id": "FROZEN_NATIVE_LIVE_SRI_P0_MEMORY_COMPACT_BASELINE_V4",
+      "status": "active_experiment_baseline",
+      "algorithm": "Native exact Branch-Price-and-Cut with root-only P0 SRI-3, no task waiting, compact Native labels, and large-scale host recycling",
+      "predecessor_baseline_id": "FROZEN_NATIVE_LIVE_SRI_P0_NO_TASK_WAIT_BASELINE_V3",
+      "repository_head_at_freeze": "d05b9a4168ddcc5f5bb11070310d4c5d599153b3",
+      "source_binding_mode": "frozen_binary_config_and_content_addressed_source_archive",
+      "source_bundle_sha256": "416dfb71b03d85bc2cbed5e5d394d940feba16c0db5871ca6b07a0b99a2e28fb",
+      "source_bundle_archive_sha256": "5e84099146e68222b944ea44e457b196ad615095fe8d35fd3ff4fd1b01ac2446",
+      "engine_hash": "ab4496a8a8ef5cf4",
+      "engine_hashes": {
+        "native_rcspp_inprocess": "ab4496a8a8ef5cf4",
+        "native_rcspp_host": "08d49ee235c7c456"
+      },
+      "service_timing_policy_id": "no_task_wait_base_departure_shift_v1",
+      "manifest_path": "runs/frozen_native_live_sri_p0_memory_compact_baseline_v4_20260729/baseline_freeze_manifest.json",
+      "manifest_sha256": "d7063b403a6c2592c35009dfd6bbf3188e1100499766091a0a74e0d06f81a976",
+      "performance_evidence_role": "scale30_full20_exact_control_with_scale50_singleton_boundary",
+      "formal_scale30_full20_complete": true,
+      "formal_full120_complete": false,
+      "scale50_full_run_complete": false,
+      "production_default_switch_authorized": false,
+      "validation_scope": {
+        "scale5_v4_binary": "NOT_RERUN",
+        "scale10_v4_binary": "NOT_RERUN",
+        "scale20_v4_binary": "NOT_RERUN",
+        "scale30_full20": "EXACT_CLOSED",
+        "scale50_instance001_3600sec": "BPC_INCOMPLETE_PRICING",
+        "scale50_full": "NOT_RUN_BY_USER_DIRECTION",
+        "scale100": "NOT_RUN"
+      },
+      "performance": {
+        "30": {
+          "mean_sec": 151.2165995,
+          "p50_sec": 63.3728365,
+          "max_sec": 846.962641,
+          "paired_geometric_mean_ratio_vs_v3": 0.7631794932365457
+        }
+      },
+      "known_boundary": "Scale50 instance001 safely exhausted 3600 seconds at root after 111 pricing rounds and 13173 added columns; it did not exact-close and is not promotion evidence."
     }
   ],
   "runtime_capsules": [

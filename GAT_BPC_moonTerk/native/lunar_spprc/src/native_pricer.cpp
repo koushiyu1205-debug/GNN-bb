@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 
 #include "rcspp/rcspp.hpp"
 
@@ -29,8 +30,37 @@ namespace {
 // exact-search operation into an allocation/copy/deallocation cycle.
 using VisitedMask = std::array<std::uint64_t, 2>;
 constexpr std::size_t kMaxActiveCuts = 16;
-constexpr const char* kDssrPolicyVersion =
+constexpr const char* kDssrPolicyVersionV1 =
     "multi_sortie_counterexample_refinement_v1";
+constexpr const char* kDssrPolicyVersionV2 =
+    "multi_sortie_counterexample_pressure_refinement_v2";
+constexpr const char* kNgDssrPolicyVersionV3 =
+    "multi_sortie_ng_memory_counterexample_refinement_v3";
+constexpr bool kNgDssrV3Compiled =
+    LUNAR_SPPRC_ENABLE_NG_DSSR_V3 != 0;
+constexpr bool kBidirectionalFeasibilityCompiled =
+    LUNAR_SPPRC_ENABLE_BIDIRECTIONAL_FEASIBILITY != 0;
+
+bool ng_dssr_active(const Model& model) {
+    if constexpr (kNgDssrV3Compiled) {
+        return model.ng_dssr_memory_enabled;
+    }
+    return false;
+}
+
+bool is_dssr_v2(const SolveParams& params) {
+    return params.dssr_enabled &&
+           params.dssr_policy_version == kDssrPolicyVersionV2;
+}
+
+bool is_ng_dssr_v3(const SolveParams& params) {
+    return params.dssr_enabled &&
+           params.dssr_policy_version == kNgDssrPolicyVersionV3;
+}
+
+bool uses_dssr_batch(const SolveParams& params) {
+    return is_dssr_v2(params) || is_ng_dssr_v3(params);
+}
 
 struct CutState {
     // Exact overlap values: SRI-3 uses 2 bits (0..3), SRI-5 uses 3 bits
@@ -74,15 +104,31 @@ struct Action {
     double shadow = 0.0;
 };
 
+union AuxiliaryState {
+    struct Regular {
+        double positive_task_dual_reward = 0.0;
+        std::size_t last_model_arc_index =
+            std::numeric_limits<std::size_t>::max();
+    } regular;
+    VisitedMask ng_memory;
+
+    constexpr AuxiliaryState() : regular{} {}
+};
+
+static_assert(sizeof(AuxiliaryState) == sizeof(VisitedMask));
+
 struct State {
     bool valid = true;
     bool at_depot = true;
     VisitedMask visited{};
-    std::size_t visited_count = 0;
-    std::size_t task_visit_count = 0;
-    std::size_t sortie_task_count = 0;
-    std::size_t sortie_count = 0;
-    std::size_t visited_at_sortie_start = 0;
+    // Native accepts at most 100 tasks.  These counters therefore have a
+    // proven upper bound of 100 (every sortie is nonempty), so size_t wasted
+    // 30 bytes per label without representing any reachable state.
+    std::uint16_t visited_count = 0;
+    std::uint16_t task_visit_count = 0;
+    std::uint16_t sortie_task_count = 0;
+    std::uint16_t sortie_count = 0;
+    std::uint16_t visited_at_sortie_start = 0;
     double global_time = 0.0;
     double sortie_start_time = 0.0;
     double sortie_latest_start_time = std::numeric_limits<double>::infinity();
@@ -94,31 +140,83 @@ struct State {
     double raw_risk = 0.0;
     double raw_weighted_completion = 0.0;
     double task_dual_reward = 0.0;
-    double positive_task_dual_reward = 0.0;
+    AuxiliaryState auxiliary;
     double cut_dual_reward = 0.0;
     double guidance_score = 0.0;
     std::size_t last_task_index = std::numeric_limits<std::size_t>::max();
-    std::size_t last_model_arc_index = std::numeric_limits<std::size_t>::max();
     CutState cut_state;
 };
 
-struct JourneyValue {
-    bool is_action = false;
-    State state;
-    Action action;
+static_assert(
+    sizeof(State) == 176,
+    "Native label State size changed; compact P0 state requires 176 bytes"
+);
+
+const VisitedMask& ng_memory(const State& state) {
+    return state.auxiliary.ng_memory;
+}
+
+VisitedMask& ng_memory(State* state) {
+    return state->auxiliary.ng_memory;
+}
+
+class JourneyValue {
+  public:
+    JourneyValue() : payload_(State{}) {}
+
+    static JourneyValue from_state(State state) {
+        return JourneyValue(std::move(state));
+    }
+
+    static JourneyValue from_action(Action action) {
+        return JourneyValue(std::move(action));
+    }
+
+    [[nodiscard]] bool is_action() const {
+        return std::holds_alternative<Action>(payload_);
+    }
+
+    [[nodiscard]] const State& state() const {
+        return std::get<State>(payload_);
+    }
+
+    [[nodiscard]] const Action& action() const {
+        return std::get<Action>(payload_);
+    }
+
+    void reset_state() { payload_.template emplace<State>(); }
+
+  private:
+    explicit JourneyValue(State state) : payload_(std::move(state)) {}
+    explicit JourneyValue(Action action) : payload_(std::move(action)) {}
+
+    // Labels and arc extenders use disjoint payloads.  The historical struct
+    // stored both, forcing every live label to carry an unused Action and
+    // std::string.  A tagged union preserves the exact value domains while
+    // allocating space only for the active one.
+    std::variant<State, Action> payload_;
 };
+
+static_assert(
+    sizeof(JourneyValue) <= 184,
+    "Compact native label payload unexpectedly grew"
+);
 
 class JourneyResource {
   public:
     JourneyResource() = default;
     explicit JourneyResource(JourneyValue value) : value_(std::move(value)) {}
 
-    void reset() { value_ = JourneyValue{}; }
+    void reset() { value_.reset_state(); }
     [[nodiscard]] const JourneyValue& get_value() const { return value_; }
     void set_value(const JourneyValue& value) { value_ = value; }
     [[nodiscard]] std::string to_string() const {
+        if (value_.is_action()) {
+            return "action";
+        }
         std::ostringstream stream;
-        stream << "visited=" << value_.state.visited_count << ",time=" << value_.state.global_time;
+        stream << "visited=" << value_.state().visited_count
+               << ",time=" << value_.state().global_time;
         return stream.str();
     }
 
@@ -149,6 +247,17 @@ bool mask_contains(const std::vector<std::uint64_t>& mask,
 VisitedMask dominance_visited_key(const Model& model, const State& state) {
     if (!model.dssr_relaxation_enabled) {
         return state.visited;
+    }
+    if (ng_dssr_active(model)) {
+        auto key = ng_memory(state);
+        for (std::size_t word = 0; word < key.size(); ++word) {
+            const auto branch =
+                word < model.dssr_branch_task_mask.size()
+                    ? model.dssr_branch_task_mask[word]
+                    : std::uint64_t{0};
+            key[word] |= state.visited[word] & branch;
+        }
+        return key;
     }
     VisitedMask key{};
     for (std::size_t word = 0; word < key.size(); ++word) {
@@ -226,13 +335,19 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
                 JourneyResource* output) override {
         const auto& current_value = resource.get_value();
         const auto& action_value = extender.get_value();
-        State next = current_value.state;
-        if (!next.valid || !action_value.is_action) {
-            next.valid = false;
-            output->set_value(JourneyValue{.state = std::move(next)});
+        if (current_value.is_action()) {
+            State invalid;
+            invalid.valid = false;
+            output->set_value(JourneyValue::from_state(std::move(invalid)));
             return;
         }
-        const auto& action = action_value.action;
+        State next = current_value.state();
+        if (!next.valid || !action_value.is_action()) {
+            next.valid = false;
+            output->set_value(JourneyValue::from_state(std::move(next)));
+            return;
+        }
+        const auto& action = action_value.action();
         if (action.kind == ActionKind::VisitTask) {
             extend_visit(action, &next);
         } else if (action.kind == ActionKind::ReturnDepot) {
@@ -242,13 +357,13 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
                          next.sortie_task_count == 0 &&
                          branch_terminal_feasible(*model_, next);
         }
-        output->set_value(JourneyValue{.state = std::move(next)});
+        output->set_value(JourneyValue::from_state(std::move(next)));
     }
 
     void extend_back(const JourneyResource&, const JourneyResource&, JourneyResource* output) override {
         State invalid;
         invalid.valid = false;
-        output->set_value(JourneyValue{.state = std::move(invalid)});
+        output->set_value(JourneyValue::from_state(std::move(invalid)));
     }
 
     [[nodiscard]] std::unique_ptr<rcspp::ExtensionFunction<JourneyResource>> clone() const override {
@@ -265,10 +380,29 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
             return;
         }
         const bool already_visited = visited(*state, action.task_index);
-        if (already_visited &&
-            (!model_->dssr_relaxation_enabled ||
-             mask_contains(model_->dssr_critical_task_mask,
-                           action.task_index))) {
+        const bool forbidden_repeat =
+            already_visited &&
+            (
+                !model_->dssr_relaxation_enabled ||
+                (
+                    ng_dssr_active(*model_) &&
+                    (
+                        (
+                            ng_memory(*state)[action.task_index / 64U] >>
+                            (action.task_index % 64U)
+                        ) &
+                        1U
+                    ) != 0U
+                ) ||
+                (
+                    !ng_dssr_active(*model_) &&
+                    mask_contains(
+                        model_->dssr_critical_task_mask,
+                        action.task_index
+                    )
+                )
+            );
+        if (forbidden_repeat) {
             state->valid = false;
             return;
         }
@@ -319,7 +453,10 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         state->raw_weighted_completion += task.science_weight * completion;
         state->sortie_science_weight += task.science_weight;
         state->task_dual_reward += task.dual;
-        state->positive_task_dual_reward += std::max(0.0, task.dual);
+        if (!ng_dssr_active(*model_)) {
+            state->auxiliary.regular.positive_task_dual_reward +=
+                std::max(0.0, task.dual);
+        }
         if (model_->guidance_task_arc_enabled) {
             state->guidance_score += task.guidance_priority;
             if (action.model_arc_index < model_->arcs.size()) {
@@ -357,10 +494,34 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
         }
         state->at_depot = false;
         state->last_task_index = action.task_index;
-        state->last_model_arc_index = action.model_arc_index;
+        if (!ng_dssr_active(*model_)) {
+            state->auxiliary.regular.last_model_arc_index =
+                action.model_arc_index;
+        }
         ++state->sortie_task_count;
         ++state->task_visit_count;
         mark_visited(state, action.task_index);
+        if (ng_dssr_active(*model_)) {
+            if (
+                action.task_index >=
+                model_->ng_dssr_task_memory_masks.size()
+            ) {
+                state->valid = false;
+                return;
+            }
+            const auto& target_memory =
+                model_->ng_dssr_task_memory_masks[action.task_index];
+            auto next_memory = ng_memory(*state);
+            for (std::size_t word = 0; word < next_memory.size(); ++word) {
+                next_memory[word] &=
+                    word < target_memory.size()
+                        ? target_memory[word]
+                        : std::uint64_t{0};
+            }
+            next_memory[action.task_index / 64U] |=
+                std::uint64_t{1} << (action.task_index % 64U);
+            ng_memory(state) = next_memory;
+        }
         for (const auto& decision : model_->branch_decisions) {
             if (decision.sense != BranchSense::DifferentJourney) {
                 continue;
@@ -407,7 +568,10 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
                 model_->arcs[action.model_arc_index].guidance_priority;
         }
         state->at_depot = true;
-        state->last_model_arc_index = action.model_arc_index;
+        if (!ng_dssr_active(*model_)) {
+            state->auxiliary.regular.last_model_arc_index =
+                action.model_arc_index;
+        }
         state->sortie_demand = 0.0;
         state->sortie_energy = 0.0;
         state->sortie_shadow = 0.0;
@@ -433,7 +597,7 @@ class JourneyFeasibility final : public rcspp::FeasibilityFunction<JourneyResour
         : model_(std::move(model)), sink_id_(sink_id) {}
 
     [[nodiscard]] bool is_feasible(const JourneyResource& resource) override {
-        const auto& state = resource.get_value().state;
+        const auto& state = resource.get_value().state();
         if (!state.valid) {
             return false;
         }
@@ -441,7 +605,8 @@ class JourneyFeasibility final : public rcspp::FeasibilityFunction<JourneyResour
             ++model_->completion_bound_evaluated_labels;
             const double remaining_positive_dual = std::max(
                 0.0,
-                model_->positive_task_dual_sum - state.positive_task_dual_reward);
+                model_->positive_task_dual_sum -
+                    state.auxiliary.regular.positive_task_dual_reward);
             const double optimistic_reduced_cost =
                 reduced_cost(*model_, state) - remaining_positive_dual;
             // A journey is negative only for rc < threshold. Keep a numerical
@@ -482,7 +647,7 @@ class JourneyCost final : public rcspp::CostFunction<JourneyResource> {
     explicit JourneyCost(std::shared_ptr<const Model> model) : model_(std::move(model)) {}
 
     [[nodiscard]] double get_cost(const JourneyResource& resource) const override {
-        const auto& state = resource.get_value().state;
+        const auto& state = resource.get_value().state();
         return state.valid ? reduced_cost(*model_, state) : std::numeric_limits<double>::infinity();
     }
 
@@ -519,9 +684,15 @@ class JourneyDominance final : public rcspp::DominanceFunction<JourneyResource> 
   private:
     bool dominates(const JourneyResource& lhs_resource, const JourneyResource& rhs_resource,
                    double cost_epsilon) const {
-        const auto& lhs = lhs_resource.get_value().state;
-        const auto& rhs = rhs_resource.get_value().state;
+        const auto& lhs = lhs_resource.get_value().state();
+        const auto& rhs = rhs_resource.get_value().state();
         if (!lhs.valid || !rhs.valid || lhs.at_depot != rhs.at_depot) {
+            return false;
+        }
+        if (
+            ng_dssr_active(*model_) &&
+            !same_active_cut_state(lhs.cut_state, rhs.cut_state)
+        ) {
             return false;
         }
         // During a sortie, a later task may require a retroactive depot
@@ -556,7 +727,10 @@ class JourneyDominance final : public rcspp::DominanceFunction<JourneyResource> 
     double resource_epsilon_;
 };
 
-using Composition = rcspp::ResourceTypeComposition<JourneyResource, rcspp::RealResource>;
+// The auxiliary RealResource carried exactly 0.0 on every arc.  Removing it
+// leaves cost, feasibility, dominance and path reconstruction unchanged while
+// eliminating one heap-allocated sub-resource from every label.
+using Composition = rcspp::ResourceTypeComposition<JourneyResource>;
 
 struct VisitedKeyHash {
     std::size_t operator()(const VisitedMask& value) const noexcept {
@@ -587,6 +761,116 @@ struct ProofQueuePotentialTrace {
     std::vector<TaskDominanceTraceRow> arc_rows;
 };
 
+struct DssrPressureMonitor {
+    explicit DssrPressureMonitor(
+        std::shared_ptr<const Model> source_model,
+        std::size_t bucket_limit,
+        std::size_t candidate_check_limit
+    )
+        : model(std::move(source_model)),
+          max_bucket_limit(bucket_limit),
+          max_candidate_check_limit(candidate_check_limit) {}
+
+    void observe_bucket(
+        std::size_t bucket_size,
+        const std::vector<std::size_t>& visited_counts
+    ) {
+        if (bucket_size <= max_bucket_size) {
+            return;
+        }
+        max_bucket_size = bucket_size;
+        hottest_bucket_size = bucket_size;
+        hottest_bucket_visited_counts = visited_counts;
+        select_split_task();
+        if (
+            max_bucket_limit > 0U &&
+            max_bucket_size >= max_bucket_limit
+        ) {
+            if (!split_task_id.empty()) {
+                triggered = true;
+                trigger_reason = "max_bucket_size";
+            } else {
+                refinement_exhausted = true;
+            }
+        }
+    }
+
+    void record_candidate_check() {
+        ++dominance_candidate_checks;
+        if (
+            !triggered &&
+            !refinement_exhausted &&
+            max_candidate_check_limit > 0U &&
+            dominance_candidate_checks >= max_candidate_check_limit
+        ) {
+            select_split_task();
+            if (!split_task_id.empty()) {
+                triggered = true;
+                trigger_reason = "dominance_candidate_checks";
+            } else {
+                refinement_exhausted = true;
+            }
+        }
+    }
+
+    void select_split_task() {
+        split_task_index = std::numeric_limits<std::size_t>::max();
+        split_task_id.clear();
+        split_balance = 0U;
+        if (
+            model == nullptr ||
+            hottest_bucket_visited_counts.size() != model->tasks.size()
+        ) {
+            return;
+        }
+        bool selected = false;
+        for (const auto& task : model->tasks) {
+            const auto task_index = task.index;
+            if (
+                task_index >= hottest_bucket_visited_counts.size() ||
+                mask_contains(model->dssr_critical_task_mask, task_index) ||
+                mask_contains(model->dssr_branch_task_mask, task_index)
+            ) {
+                continue;
+            }
+            const auto visited_count =
+                hottest_bucket_visited_counts[task_index];
+            const auto balance = std::min(
+                visited_count,
+                hottest_bucket_size - visited_count
+            );
+            if (
+                !selected ||
+                balance > split_balance ||
+                (
+                    balance == split_balance &&
+                    task.id < split_task_id
+                )
+            ) {
+                selected = true;
+                split_balance = balance;
+                split_task_index = task_index;
+                split_task_id = task.id;
+            }
+        }
+    }
+
+    std::shared_ptr<const Model> model;
+    std::size_t max_bucket_limit = 0;
+    std::size_t max_candidate_check_limit = 0;
+    std::size_t dominance_candidate_checks = 0;
+    std::size_t max_bucket_size = 0;
+    std::size_t hottest_bucket_size = 0;
+    std::vector<std::size_t> hottest_bucket_visited_counts;
+    bool triggered = false;
+    bool refinement_exhausted = false;
+    std::string trigger_reason;
+    std::size_t split_task_index =
+        std::numeric_limits<std::size_t>::max();
+    std::string split_task_id;
+    std::size_t split_balance = 0;
+};
+
 class VisitedLabelList {
   public:
     using Label = rcspp::Label<Composition>;
@@ -597,12 +881,14 @@ class VisitedLabelList {
                               std::size_t subset_enumeration_limit = 10,
                               double dominance_epsilon = 1.0e-12,
                               double resource_epsilon = 1.0e-9,
-                              std::shared_ptr<ProofQueuePotentialTrace> trace = nullptr)
+                              std::shared_ptr<ProofQueuePotentialTrace> trace = nullptr,
+                              std::shared_ptr<DssrPressureMonitor> dssr_pressure = nullptr)
         : model_(std::move(model)),
           subset_enumeration_limit_(subset_enumeration_limit),
           dominance_epsilon_(dominance_epsilon),
           resource_epsilon_(resource_epsilon),
-          trace_(std::move(trace)) {}
+          trace_(std::move(trace)),
+          dssr_pressure_(std::move(dssr_pressure)) {}
     // AlgorithmParams only copies the empty prototype container. Runtime
     // containers are created through copy(), so iterator-bearing state is
     // never copied.
@@ -611,12 +897,13 @@ class VisitedLabelList {
           subset_enumeration_limit_(other.subset_enumeration_limit_),
           dominance_epsilon_(other.dominance_epsilon_),
           resource_epsilon_(other.resource_epsilon_),
-          trace_(other.trace_) {}
+          trace_(other.trace_),
+          dssr_pressure_(other.dssr_pressure_) {}
     VisitedLabelList& operator=(const VisitedLabelList&) = delete;
 
     [[nodiscard]] VisitedLabelList copy() const {
         return VisitedLabelList{model_, subset_enumeration_limit_, dominance_epsilon_,
-                                resource_epsilon_, trace_};
+                                resource_epsilon_, trace_, dssr_pressure_};
     }
 
     [[nodiscard]] const std::list<Label*>& get_labels() const { return labels_; }
@@ -625,20 +912,62 @@ class VisitedLabelList {
         auto position = labels_.insert(labels_.end(), label);
         auto key = visited_key(*label);
         auto& bucket = buckets_[key];
-        const auto bucket_index = bucket.labels.size();
-        bucket.labels.push_back(label);
-        update_summary(&bucket, *label);
-        locations_.emplace(label,
-                           Location{.key = std::move(key),
-                                    .bucket_index = bucket_index,
-                                    .position = position});
+        if (
+            dssr_pressure_ != nullptr &&
+            bucket.visited_counts == nullptr &&
+            model_ != nullptr
+        ) {
+            bucket.visited_counts =
+                std::make_unique<std::vector<std::size_t>>(
+                    model_->tasks.size(),
+                    0U
+                );
+        }
+        bucket.labels.push_back(
+            BucketEntry{.label = label, .position = position}
+        );
+        const auto& label_state = state(*label);
+        if (bucket.visited_counts != nullptr) {
+            for (
+                std::size_t task_index = 0;
+                task_index < bucket.visited_counts->size();
+                ++task_index
+            ) {
+                if (visited(label_state, task_index)) {
+                    ++bucket.visited_counts->at(task_index);
+                }
+            }
+        }
+        update_summary(&bucket, key, *label);
         max_bucket_size_ = std::max(max_bucket_size_, bucket.labels.size());
+        if (dssr_pressure_ != nullptr) {
+            assert(bucket.visited_counts != nullptr);
+            dssr_pressure_->observe_bucket(
+                bucket.labels.size(),
+                *bucket.visited_counts
+            );
+        }
         return position;
     }
 
     void erase_label(const LabelPosition& position) {
         Label* label = *position;
-        remove_location(label, true);
+        const auto key = visited_key(*label);
+        auto bucket_it = buckets_.find(key);
+        assert(bucket_it != buckets_.end());
+        const auto entry_it = std::ranges::find(
+            bucket_it->second.labels,
+            label,
+            &BucketEntry::label
+        );
+        assert(entry_it != bucket_it->second.labels.end());
+        remove_bucket_entry(
+            bucket_it,
+            static_cast<std::size_t>(
+                std::distance(bucket_it->second.labels.begin(), entry_it)
+            ),
+            true
+        );
     }
 
     std::size_t remove_dominated_labels(const Label& label) {
@@ -650,20 +979,26 @@ class VisitedLabelList {
         std::size_t removed = 0;
         std::size_t index = 0;
         while (bucket_it != buckets_.end() && index < bucket_it->second.labels.size()) {
-            Label* candidate = bucket_it->second.labels[index];
+            Label* candidate = bucket_it->second.labels[index].label;
             if (&label == candidate) {
                 ++index;
                 continue;
             }
-            ++dominance_candidate_checks_;
+            record_dominance_candidate_check();
             if (label <= *candidate) {
                 record_removal(label, *candidate);
                 candidate->dominated = true;
-                remove_location(candidate, true);
+                remove_bucket_entry(bucket_it, index, true);
                 ++removed;
                 bucket_it = buckets_.find(key);
             } else {
                 ++index;
+            }
+            if (
+                dssr_pressure_ != nullptr &&
+                dssr_pressure_->triggered
+            ) {
+                break;
             }
         }
         return removed;
@@ -673,14 +1008,21 @@ class VisitedLabelList {
         record_exposure(label);
         const auto bucket_it = buckets_.find(visited_key(label));
         if (bucket_it != buckets_.end()) {
-            for (const auto* candidate : bucket_it->second.labels) {
+            for (const auto& entry : bucket_it->second.labels) {
+                const auto* candidate = entry.label;
                 if (&label == candidate) {
                     continue;
                 }
-                ++dominance_candidate_checks_;
+                record_dominance_candidate_check();
                 if (*candidate <= label) {
                     record_dominance(candidate, label);
                     return true;
+                }
+                if (
+                    dssr_pressure_ != nullptr &&
+                    dssr_pressure_->triggered
+                ) {
+                    return false;
                 }
             }
         }
@@ -732,16 +1074,27 @@ class VisitedLabelList {
             // The bucket key already proves the proper-subset relation.  Same-journey
             // compatibility depends only on the two visited masks, so audit it once per
             // bucket instead of once per candidate label.
-            if (!branch_subset_dominance_compatible(*model_, state(*bucket.labels.front()), rhs)) {
+            if (!branch_subset_dominance_compatible(
+                    *model_,
+                    state(*bucket.labels.front().label),
+                    rhs
+                )) {
                 continue;
             }
-            for (const auto* candidate : bucket.labels) {
-                ++dominance_candidate_checks_;
+            for (const auto& entry : bucket.labels) {
+                const auto* candidate = entry.label;
+                record_dominance_candidate_check();
                 ++subset_dominance_candidate_checks_;
                 if (known_subset_candidate_dominates(*candidate, label)) {
                     record_dominance(candidate, label);
                     ++subset_dominance_rejected_labels_;
                     return true;
+                }
+                if (
+                    dssr_pressure_ != nullptr &&
+                    dssr_pressure_->triggered
+                ) {
+                    return false;
                 }
             }
         }
@@ -786,8 +1139,16 @@ class VisitedLabelList {
         if (value.last_task_index < trace_->task_rows.size()) {
             ++trace_->task_rows[value.last_task_index].incoming_evaluated;
         }
-        if (value.last_model_arc_index < trace_->arc_rows.size()) {
-            ++trace_->arc_rows[value.last_model_arc_index].incoming_evaluated;
+        if (
+            !ng_dssr_active(*model_) &&
+            value.auxiliary.regular.last_model_arc_index <
+                trace_->arc_rows.size()
+        ) {
+            ++trace_
+                  ->arc_rows[
+                      value.auxiliary.regular.last_model_arc_index
+                  ]
+                  .incoming_evaluated;
         }
     }
 
@@ -808,12 +1169,26 @@ class VisitedLabelList {
             ++trace_->task_rows[removed_state.last_task_index]
                   .removed_as_existing;
         }
-        if (winner_state.last_model_arc_index < trace_->arc_rows.size()) {
-            ++trace_->arc_rows[winner_state.last_model_arc_index]
+        if (
+            !ng_dssr_active(*model_) &&
+            winner_state.auxiliary.regular.last_model_arc_index <
+                trace_->arc_rows.size()
+        ) {
+            ++trace_
+                  ->arc_rows[
+                      winner_state.auxiliary.regular.last_model_arc_index
+                  ]
                   .accepted_removed_existing;
         }
-        if (removed_state.last_model_arc_index < trace_->arc_rows.size()) {
-            ++trace_->arc_rows[removed_state.last_model_arc_index]
+        if (
+            !ng_dssr_active(*model_) &&
+            removed_state.auxiliary.regular.last_model_arc_index <
+                trace_->arc_rows.size()
+        ) {
+            ++trace_
+                  ->arc_rows[
+                      removed_state.auxiliary.regular.last_model_arc_index
+                  ]
                   .removed_as_existing;
         }
     }
@@ -835,18 +1210,36 @@ class VisitedLabelList {
             ++trace_->task_rows[rejected_state.last_task_index]
                   .incoming_rejected;
         }
-        if (winner_state.last_model_arc_index < trace_->arc_rows.size()) {
-            ++trace_->arc_rows[winner_state.last_model_arc_index]
+        if (
+            !ng_dssr_active(*model_) &&
+            winner_state.auxiliary.regular.last_model_arc_index <
+                trace_->arc_rows.size()
+        ) {
+            ++trace_
+                  ->arc_rows[
+                      winner_state.auxiliary.regular.last_model_arc_index
+                  ]
                   .existing_dominator_wins;
         }
-        if (rejected_state.last_model_arc_index < trace_->arc_rows.size()) {
-            ++trace_->arc_rows[rejected_state.last_model_arc_index]
+        if (
+            !ng_dssr_active(*model_) &&
+            rejected_state.auxiliary.regular.last_model_arc_index <
+                trace_->arc_rows.size()
+        ) {
+            ++trace_
+                  ->arc_rows[
+                      rejected_state.auxiliary.regular.last_model_arc_index
+                  ]
                   .incoming_rejected;
         }
     }
 
-    struct Bucket {
-        std::vector<Label*> labels;
+    struct BucketEntry {
+        Label* label = nullptr;
+        LabelPosition position;
+    };
+
+    struct BucketSummary {
         double min_global_time = std::numeric_limits<double>::infinity();
         double min_sortie_demand = std::numeric_limits<double>::infinity();
         double min_sortie_energy = std::numeric_limits<double>::infinity();
@@ -855,10 +1248,16 @@ class VisitedLabelList {
         double min_reduced_cost = std::numeric_limits<double>::infinity();
     };
 
-    struct Location {
-        VisitedKey key;
-        std::size_t bucket_index = 0;
-        LabelPosition position;
+    struct Bucket {
+        std::vector<BucketEntry> labels;
+        // Only DSSR pressure refinement needs per-task visit counts.  Keeping
+        // an empty vector object in every elementary P0 bucket cost 24 bytes
+        // per visited-set key even though the data was never read.
+        std::unique_ptr<std::vector<std::size_t>> visited_counts;
+        // Subset dominance only enumerates keys up to the configured small
+        // visited-set limit.  Allocate its optimistic summary only for those
+        // keys instead of charging six scalars to every large exact bucket.
+        std::unique_ptr<BucketSummary> summary;
     };
 
     static const State& state(const Label& label) {
@@ -866,36 +1265,75 @@ class VisitedLabelList {
             .template get_component<JourneyResource>(0)
             .get_value()
             .get_value()
-            .state;
+            .state();
+    }
+
+    void record_dominance_candidate_check() const {
+        ++dominance_candidate_checks_;
+        if (dssr_pressure_ != nullptr) {
+            dssr_pressure_->record_candidate_check();
+        }
     }
 
     [[nodiscard]] VisitedKey visited_key(const Label& label) const {
         return dominance_visited_key(*model_, state(label));
     }
 
-    void update_summary(Bucket* bucket, const Label& label) const {
+    void update_summary(
+        Bucket* bucket,
+        const VisitedKey& key,
+        const Label& label
+    ) const {
+        if (
+            model_ == nullptr ||
+            !model_->subset_dominance_enabled
+        ) {
+            return;
+        }
+        std::size_t key_size = 0;
+        for (const auto word : key) {
+            key_size += std::popcount(word);
+        }
+        if (key_size > subset_enumeration_limit_) {
+            return;
+        }
+        if (bucket->summary == nullptr) {
+            bucket->summary = std::make_unique<BucketSummary>();
+        }
         const auto& value = state(label);
-        bucket->min_global_time = std::min(bucket->min_global_time, value.global_time);
-        bucket->min_sortie_demand = std::min(bucket->min_sortie_demand, value.sortie_demand);
-        bucket->min_sortie_energy = std::min(bucket->min_sortie_energy, value.sortie_energy);
-        bucket->min_sortie_shadow = std::min(bucket->min_sortie_shadow, value.sortie_shadow);
-        bucket->min_sortie_task_count =
-            std::min(bucket->min_sortie_task_count, value.sortie_task_count);
-        bucket->min_reduced_cost =
-            std::min(bucket->min_reduced_cost, reduced_cost(*model_, value));
+        auto& summary = *bucket->summary;
+        summary.min_global_time =
+            std::min(summary.min_global_time, value.global_time);
+        summary.min_sortie_demand =
+            std::min(summary.min_sortie_demand, value.sortie_demand);
+        summary.min_sortie_energy =
+            std::min(summary.min_sortie_energy, value.sortie_energy);
+        summary.min_sortie_shadow =
+            std::min(summary.min_sortie_shadow, value.sortie_shadow);
+        summary.min_sortie_task_count =
+            std::min(
+                summary.min_sortie_task_count,
+                static_cast<std::size_t>(value.sortie_task_count)
+            );
+        summary.min_reduced_cost =
+            std::min(summary.min_reduced_cost, reduced_cost(*model_, value));
     }
 
     [[nodiscard]] bool summary_can_contain_dominator(const Bucket& bucket,
                                                      const State& rhs) const {
+        if (bucket.summary == nullptr) {
+            return true;
+        }
+        const auto& summary = *bucket.summary;
         // These are independent optimistic minima.  A stale minimum after a label
         // deletion can only admit an unnecessary bucket scan; it can never suppress
         // a real dominator, so no exactness or certificate assumption is introduced.
-        return bucket.min_global_time <= rhs.global_time + resource_epsilon_ &&
-               bucket.min_sortie_demand <= rhs.sortie_demand + resource_epsilon_ &&
-               bucket.min_sortie_energy <= rhs.sortie_energy + resource_epsilon_ &&
-               bucket.min_sortie_shadow <= rhs.sortie_shadow + resource_epsilon_ &&
-               bucket.min_sortie_task_count <= rhs.sortie_task_count &&
-               bucket.min_reduced_cost <=
+        return summary.min_global_time <= rhs.global_time + resource_epsilon_ &&
+               summary.min_sortie_demand <= rhs.sortie_demand + resource_epsilon_ &&
+               summary.min_sortie_energy <= rhs.sortie_energy + resource_epsilon_ &&
+               summary.min_sortie_shadow <= rhs.sortie_shadow + resource_epsilon_ &&
+               summary.min_sortie_task_count <= rhs.sortie_task_count &&
+               summary.min_reduced_cost <=
                    reduced_cost(*model_, rhs) + dominance_epsilon_;
     }
 
@@ -920,48 +1358,48 @@ class VisitedLabelList {
                 reduced_cost(*model_, rhs) + dominance_epsilon_) {
             return false;
         }
-        // The composed graph currently carries one auxiliary RealResource.  Mirror
-        // its component-wise dominance check explicitly so this hot-path shortcut
-        // remains equivalent to Label::operator<= if that resource becomes nonzero.
-        const auto& lhs_aux = lhs_label.get_resource()
-                                  .template get_component<rcspp::RealResource>(0)
-                                  .get_value();
-        const auto& rhs_aux = rhs_label.get_resource()
-                                  .template get_component<rcspp::RealResource>(0)
-                                  .get_value();
-        return lhs_aux.leq(rhs_aux);
+        // JourneyResource is now the only component, and the checks above are
+        // exactly its component-wise dominance predicate.
+        return true;
     }
 
-    void remove_location(Label* label, bool erase_from_master) {
-        const auto location_it = locations_.find(label);
-        if (location_it == locations_.end()) {
-            return;
-        }
-        const auto key = location_it->second.key;
-        const auto index = location_it->second.bucket_index;
-        const auto position = location_it->second.position;
-        auto bucket_it = buckets_.find(key);
-        assert(bucket_it != buckets_.end());
+    using BucketMap =
+        std::unordered_map<VisitedKey, Bucket, VisitedKeyHash>;
+
+    void remove_bucket_entry(
+        const BucketMap::iterator& bucket_it,
+        std::size_t index,
+        bool erase_from_master
+    ) {
         auto& bucket = bucket_it->second;
-        assert(index < bucket.labels.size() && bucket.labels[index] == label);
-        Label* moved = bucket.labels.back();
-        bucket.labels[index] = moved;
-        bucket.labels.pop_back();
-        if (moved != label) {
-            locations_.at(moved).bucket_index = index;
+        assert(index < bucket.labels.size());
+        const auto removed = bucket.labels[index];
+        assert(removed.label != nullptr);
+        const auto& label_state = state(*removed.label);
+        if (bucket.visited_counts != nullptr) {
+            for (
+                std::size_t task_index = 0;
+                task_index < bucket.visited_counts->size();
+                ++task_index
+            ) {
+                if (visited(label_state, task_index)) {
+                    assert(bucket.visited_counts->at(task_index) > 0U);
+                    --bucket.visited_counts->at(task_index);
+                }
+            }
         }
-        locations_.erase(location_it);
+        bucket.labels[index] = bucket.labels.back();
+        bucket.labels.pop_back();
         if (bucket.labels.empty()) {
             buckets_.erase(bucket_it);
         }
         if (erase_from_master) {
-            labels_.erase(position);
+            labels_.erase(removed.position);
         }
     }
 
     std::list<Label*> labels_;
-    std::unordered_map<VisitedKey, Bucket, VisitedKeyHash> buckets_;
-    std::unordered_map<Label*, Location> locations_;
+    BucketMap buckets_;
     mutable std::size_t dominance_candidate_checks_ = 0;
     mutable std::size_t subset_dominance_key_lookups_ = 0;
     mutable std::size_t subset_dominance_nonempty_buckets_ = 0;
@@ -974,6 +1412,7 @@ class VisitedLabelList {
     double dominance_epsilon_ = 1.0e-12;
     double resource_epsilon_ = 1.0e-9;
     std::shared_ptr<ProofQueuePotentialTrace> trace_;
+    std::shared_ptr<DssrPressureMonitor> dssr_pressure_;
 };
 
 using LabelList = VisitedLabelList;
@@ -1110,12 +1549,12 @@ class AuditedBestFirstDominance final
                                         .template get_component<JourneyResource>(0)
                                         .get_value()
                                         .get_value()
-                                        .state;
+                                        .state();
             const auto& rhs_state = rhs.first->get_resource()
                                         .template get_component<JourneyResource>(0)
                                         .get_value()
                                         .get_value()
-                                        .state;
+                                        .state();
             const bool lhs_can_terminate =
                 lhs_state.at_depot && lhs_state.task_visit_count > 0;
             const bool rhs_can_terminate =
@@ -1230,7 +1669,7 @@ class AuditedBestFirstDominance final
                                 .template get_component<JourneyResource>(0)
                                 .get_value()
                                 .get_value()
-                                .state;
+                                .state();
         const double partial_cost = value.first->get_cost();
         double primary_key = 0.0;
         double secondary_key = 0.0;
@@ -1246,7 +1685,7 @@ class AuditedBestFirstDominance final
             const double remaining_positive_dual = std::max(
                 0.0,
                 model_->positive_task_dual_sum -
-                    state.positive_task_dual_reward);
+                    state.auxiliary.regular.positive_task_dual_reward);
             primary_key = partial_cost - remaining_positive_dual;
         } else if (
             proof_queue_policy_ ==
@@ -1312,7 +1751,7 @@ class AuditedBestFirstDominance final
 };
 
 struct BuiltGraph {
-    std::unique_ptr<rcspp::ResourceGraph<JourneyResource, rcspp::RealResource>> graph;
+    std::unique_ptr<rcspp::ResourceGraph<JourneyResource>> graph;
     std::vector<Action> actions_by_arc_id;
 };
 
@@ -1349,7 +1788,7 @@ std::string graph_cache_key(const Model& model, const SolveParams& params) {
     return model.structure_hash + ":d=" + std::to_string(params.dominance_epsilon) +
            ":r=" + std::to_string(params.resource_epsilon) +
            ":tw=no_task_wait_base_departure_shift_v1" +
-           ":dssr=" + (params.dssr_enabled ? std::string{kDssrPolicyVersion}
+           ":dssr=" + (params.dssr_enabled ? params.dssr_policy_version
                                             : std::string{"off"});
 }
 
@@ -1388,13 +1827,20 @@ void refresh_dynamic_model(const Model& source, Model* target) {
     target->dssr_relaxation_enabled = source.dssr_relaxation_enabled;
     target->dssr_critical_task_mask = source.dssr_critical_task_mask;
     target->dssr_branch_task_mask = source.dssr_branch_task_mask;
+    target->ng_dssr_memory_enabled = source.ng_dssr_memory_enabled;
+    target->ng_dssr_task_memory_masks =
+        source.ng_dssr_task_memory_masks;
 }
 
 BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& params) {
     const std::size_t task_count = model->tasks.size();
     const std::size_t sink_id = task_count + 1;
-    auto graph = std::make_unique<rcspp::ResourceGraph<JourneyResource, rcspp::RealResource>>();
-    JourneyValue initial;
+    auto graph = std::make_unique<rcspp::ResourceGraph<JourneyResource>>();
+    State initial_state;
+    if (ng_dssr_active(*model)) {
+        initial_state.auxiliary.ng_memory = VisitedMask{};
+    }
+    auto initial = JourneyValue::from_state(std::move(initial_state));
     graph->add_resource<JourneyResource>(
         std::make_unique<JourneyExtension>(model),
         std::make_unique<JourneyFeasibility>(model, sink_id),
@@ -1402,11 +1848,6 @@ BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& pa
         std::make_unique<JourneyDominance>(model, params.dominance_epsilon,
                                            params.resource_epsilon),
         std::make_tuple(initial));
-    graph->add_resource<rcspp::RealResource>(
-        std::make_unique<rcspp::AdditionExtensionFunction<rcspp::RealResource>>(),
-        std::make_unique<rcspp::TrivialFeasibilityFunction<rcspp::RealResource>>(),
-        std::make_unique<rcspp::TrivialCostFunction<rcspp::RealResource>>(),
-        std::make_unique<rcspp::ValueDominanceFunction<rcspp::RealResource>>());
 
     graph->add_node(0, true, false);
     for (std::size_t index = 0; index < task_count; ++index) {
@@ -1423,11 +1864,9 @@ BuiltGraph build_graph(std::shared_ptr<const Model> model, const SolveParams& pa
 
     std::vector<Action> actions;
     auto add_action = [&](const Action& action, std::size_t origin, std::size_t destination) {
-        JourneyValue action_value;
-        action_value.is_action = true;
-        action_value.action = action;
-        auto& arc = graph->add_arc<JourneyResource, rcspp::RealResource>(
-            std::make_tuple(std::make_tuple(action_value), std::make_tuple(0.0)),
+        auto action_value = JourneyValue::from_action(action);
+        auto& arc = graph->add_arc<JourneyResource>(
+            std::make_tuple(std::make_tuple(action_value)),
             origin, destination, 0.0);
         if (actions.size() <= arc.id) {
             actions.resize(arc.id + 1);
@@ -1539,6 +1978,36 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
         throw std::invalid_argument(
             "proof queue guidance bucket width must be finite and positive");
     }
+    if (params.exact_admission_batch_size == 0U) {
+        throw std::invalid_argument(
+            "exact admission batch size must be positive");
+    }
+    if (
+        params.exact_raw_negative_pool_size <
+        params.exact_admission_batch_size
+    ) {
+        throw std::invalid_argument(
+            "exact raw negative pool must cover the admission batch");
+    }
+    if (params.exact_raw_negative_pool_size > 4096U) {
+        throw std::invalid_argument(
+            "exact raw negative pool exceeds the bounded interface");
+    }
+    if (
+        params.exact_negative_escape_enabled &&
+        (!params.exact_proof || params.dssr_enabled)
+    ) {
+        throw std::invalid_argument(
+            "negative escape is elementary exact-proof only");
+    }
+    if (
+        params.exact_negative_escape_enabled &&
+        params.exact_negative_escape_policy_id !=
+            "diverse_raw_4x_then_p0v4_selector_v1"
+    ) {
+        throw std::invalid_argument(
+            "unsupported exact negative escape policy");
+    }
     if (input_model.cost_coefficient < 0.0 || input_model.risk_coefficient < 0.0 ||
         input_model.completion_coefficient < 0.0 || input_model.recharge_power <= 0.0) {
         throw std::invalid_argument(
@@ -1555,6 +2024,43 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     for (const auto& arc : input_model.arcs) {
         if (!std::isfinite(arc.guidance_priority)) {
             throw std::invalid_argument("native arc guidance priority must be finite");
+        }
+    }
+    if (ng_dssr_active(input_model)) {
+        const auto mask_words =
+            (input_model.tasks.size() + 63U) / 64U;
+        if (
+            input_model.ng_dssr_task_memory_masks.size() !=
+            input_model.tasks.size()
+        ) {
+            throw std::invalid_argument(
+                "ng-DSSR requires one memory mask per task");
+        }
+        for (const auto& task : input_model.tasks) {
+            if (
+                task.index >=
+                    input_model.ng_dssr_task_memory_masks.size() ||
+                input_model.ng_dssr_task_memory_masks[task.index].size() !=
+                    mask_words ||
+                !mask_contains(
+                    input_model.ng_dssr_task_memory_masks[task.index],
+                    task.index
+                )
+            ) {
+                throw std::invalid_argument(
+                    "ng-DSSR task memory mask is invalid");
+            }
+        }
+        if (
+            input_model.guidance_task_arc_enabled ||
+            params.completion_bound_enabled ||
+            params.proof_queue_potential_trace_enabled ||
+            params.proof_queue_policy !=
+                ProofQueuePolicy::Q0PartialCost
+        ) {
+            throw std::invalid_argument(
+                "ng-DSSR auxiliary memory requires Q0 with guidance, "
+                "completion bounds, and proof trace disabled");
         }
     }
     std::size_t expected_state_bit_offset = 0;
@@ -1653,15 +2159,37 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     // Collect a wider raw pool in harvest mode. The Python audit keeps the
     // objective-best representative of each task set and caps the public
     // result at harvest_target, avoiding dozens of same-cover replacements.
+    const auto dssr_raw_solution_target = std::min<std::size_t>(
+        256U,
+        std::clamp<std::size_t>(
+            params.dssr_negative_batch_target,
+            1U,
+            64U
+        ) * 4U
+    );
+    const bool exact_negative_escape_active =
+        params.exact_proof &&
+        params.exact_negative_escape_enabled &&
+        !params.dssr_enabled;
     base.stop_after_X_solutions =
         params.dssr_enabled
-            ? 1U
+            ? (
+                  uses_dssr_batch(params)
+                      ? dssr_raw_solution_target
+                      : 1U
+              )
             : (params.exact_proof
-                   ? rcspp::MAX_INT
+                   ? (
+                         exact_negative_escape_active
+                             ? params.exact_raw_negative_pool_size
+                             : rcspp::MAX_INT
+                     )
                    : std::min<std::size_t>(
                          rcspp::MAX_INT, params.harvest_target * 8U));
     base.return_dominated_solutions =
-        params.dssr_enabled || !params.exact_proof;
+        params.dssr_enabled ||
+        !params.exact_proof ||
+        exact_negative_escape_active;
     base.num_labels_to_extend_by_node = rcspp::MAX_INT;
     base.num_max_phases = 1;
     base.max_iterations =
@@ -1699,6 +2227,19 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
                   model->tasks.size(),
                   model->arcs.size())
             : nullptr;
+    auto dssr_pressure =
+        is_dssr_v2(params) &&
+                params.dssr_pressure_refinement_enabled
+            ? std::make_shared<DssrPressureMonitor>(
+                  model,
+                  params.dssr_pressure_max_bucket_size,
+                  params.dssr_pressure_max_candidate_checks)
+            : nullptr;
+    if (dssr_pressure != nullptr) {
+        base.should_stop = [dssr_pressure]() {
+            return dssr_pressure->triggered;
+        };
+    }
     rcspp::AlgorithmParams<LabelList> algorithm_params(
         base,
         LabelList{
@@ -1707,6 +2248,7 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
             params.dominance_epsilon,
             params.resource_epsilon,
             proof_queue_potential_trace,
+            dssr_pressure
         });
     AuditedBestFirstDominance algorithm(&built.graph->get_resource_factory(),
                                         std::move(algorithm_params),
@@ -1730,6 +2272,33 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     output.telemetry.dominance_candidate_checks = algorithm.dominance_candidate_checks();
     output.telemetry.max_visited_bucket_size = algorithm.max_visited_bucket_size();
     output.telemetry.solution_count = result.solutions.size();
+    output.telemetry.negative_escape_enabled =
+        exact_negative_escape_active;
+    output.telemetry.negative_escape_triggered = bool(
+        exact_negative_escape_active &&
+        result.status == rcspp::AlgorithmStatus::MAX_SOLUTIONS &&
+        result.solutions.size() >=
+            params.exact_raw_negative_pool_size
+    );
+    output.telemetry.exact_admission_batch_size =
+        params.exact_admission_batch_size;
+    output.telemetry.exact_raw_negative_pool_size =
+        params.exact_raw_negative_pool_size;
+    output.telemetry.raw_unique_negative_count =
+        result.solutions.size();
+    output.telemetry.negative_escape_policy_id =
+        params.exact_negative_escape_policy_id;
+    output.telemetry.negative_escape_termination_reason =
+        output.telemetry.negative_escape_triggered
+            ? "RAW_TRUE_NEGATIVE_POOL_REACHED"
+            : (
+                  output.search_exhaustive
+                      ? "EXHAUSTIVE_FRONTIER_COMPLETE"
+                      : output.status
+              );
+    if (output.telemetry.negative_escape_triggered) {
+        output.status = "FOUND_NEGATIVE_PARTIAL";
+    }
     output.telemetry.memory_pressure_triggered = algorithm.memory_pressure_triggered();
     output.telemetry.graph_cache_hit = cache_hit;
     output.telemetry.graph_cache_size = cache.size();
@@ -1752,6 +2321,16 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     output.telemetry.extension_wall_time_seconds = algorithm.extension_wall_time_seconds();
     output.telemetry.dominance_wall_time_seconds = algorithm.dominance_wall_time_seconds();
     output.telemetry.wall_time_seconds = elapsed.count();
+    if (dssr_pressure != nullptr) {
+        output.telemetry.dssr_pressure_triggered =
+            dssr_pressure->triggered;
+        output.telemetry.dssr_pressure_split_task_id =
+            dssr_pressure->split_task_id;
+        output.telemetry.dssr_max_bucket_size =
+            dssr_pressure->max_bucket_size;
+        output.telemetry.dssr_dominance_candidate_checks =
+            dssr_pressure->dominance_candidate_checks;
+    }
     output.telemetry.best_reduced_cost_events = algorithm.best_reduced_cost_events();
     output.telemetry.best_reduced_cost_event_count_total =
         algorithm.best_reduced_cost_event_count_total();
@@ -1773,7 +2352,10 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     return output;
 }
 
-SolveOutput solve(const Model& input_model, const SolveParams& params) {
+SolveOutput solve_dssr_v1(
+    const Model& input_model,
+    const SolveParams& params
+) {
     if (!params.dssr_enabled) {
         return solve_once(input_model, params);
     }
@@ -1842,7 +2424,7 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
                 std::chrono::steady_clock::now() - overall_started)
                 .count();
         output.telemetry.dssr_enabled = true;
-        output.telemetry.dssr_policy_version = kDssrPolicyVersion;
+        output.telemetry.dssr_policy_version = kDssrPolicyVersionV1;
         output.telemetry.dssr_iteration_count = iteration_trace.size();
         output.telemetry.dssr_refinement_count = refinement_count;
         output.telemetry.dssr_initial_critical_task_count = 0;
@@ -1966,6 +2548,831 @@ SolveOutput solve(const Model& input_model, const SolveParams& params) {
     return finalize(std::move(exhausted), false, false);
 }
 
+struct DssrRouteBatchAudit {
+    std::vector<Route> elementary_routes;
+    std::unordered_set<std::size_t> repeated_tasks;
+    std::size_t raw_solution_count = 0;
+    std::size_t non_elementary_solution_count = 0;
+};
+
+std::string dssr_route_signature(const Route& route) {
+    std::ostringstream stream;
+    for (const auto& sortie : route.sorties) {
+        stream << "S" << sortie.tasks.size() << ":";
+        for (const auto& task_id : sortie.tasks) {
+            stream << task_id.size() << ":" << task_id << ";";
+        }
+        stream << "P" << sortie.path_types.size() << ":";
+        for (const auto& path_type : sortie.path_types) {
+            stream << path_type.size() << ":" << path_type << ";";
+        }
+    }
+    return stream.str();
+}
+
+DssrRouteBatchAudit audit_dssr_v2_routes(
+    const std::vector<Route>& routes,
+    const std::unordered_map<std::string, std::size_t>& task_index_by_id,
+    std::size_t public_batch_target
+) {
+    DssrRouteBatchAudit audit;
+    audit.raw_solution_count = routes.size();
+    std::unordered_set<std::string> elementary_signatures;
+    for (const auto& route : routes) {
+        std::unordered_set<std::size_t> seen_tasks;
+        std::unordered_set<std::size_t> route_repeated_tasks;
+        for (const auto& sortie : route.sorties) {
+            for (const auto& task_id : sortie.tasks) {
+                const auto found = task_index_by_id.find(task_id);
+                if (found == task_index_by_id.end()) {
+                    throw std::runtime_error(
+                        "DSSR V2 route references an unknown task");
+                }
+                if (!seen_tasks.insert(found->second).second) {
+                    route_repeated_tasks.insert(found->second);
+                }
+            }
+        }
+        if (!route_repeated_tasks.empty()) {
+            ++audit.non_elementary_solution_count;
+            audit.repeated_tasks.insert(
+                route_repeated_tasks.begin(),
+                route_repeated_tasks.end());
+            continue;
+        }
+        if (audit.elementary_routes.size() >= public_batch_target) {
+            continue;
+        }
+        const auto signature = dssr_route_signature(route);
+        if (elementary_signatures.insert(signature).second) {
+            audit.elementary_routes.push_back(route);
+        }
+    }
+    return audit;
+}
+
+std::size_t ng_relation_count(
+    const std::vector<std::vector<std::uint64_t>>& masks
+) {
+    std::size_t count = 0;
+    for (const auto& mask : masks) {
+        for (const auto word : mask) {
+            count += std::popcount(word);
+        }
+    }
+    return count;
+}
+
+bool add_ng_relation(
+    std::vector<std::vector<std::uint64_t>>* masks,
+    std::size_t host_task_index,
+    std::size_t remembered_task_index
+) {
+    if (
+        masks == nullptr ||
+        host_task_index >= masks->size() ||
+        remembered_task_index >= masks->size()
+    ) {
+        return false;
+    }
+    auto& mask = masks->at(host_task_index);
+    const auto word = remembered_task_index / 64U;
+    const auto bit = remembered_task_index % 64U;
+    if (word >= mask.size()) {
+        return false;
+    }
+    const auto bit_mask = std::uint64_t{1} << bit;
+    if ((mask[word] & bit_mask) != 0U) {
+        return false;
+    }
+    mask[word] |= bit_mask;
+    return true;
+}
+
+std::vector<std::vector<std::uint64_t>>
+initial_ng_memory_masks(
+    const Model& model,
+    std::size_t requested_neighborhood_size
+) {
+    const auto task_count = model.tasks.size();
+    const auto mask_words = (task_count + 63U) / 64U;
+    const auto neighborhood_size = std::clamp<std::size_t>(
+        requested_neighborhood_size,
+        1U,
+        task_count
+    );
+    std::unordered_map<std::string, std::size_t> task_index_by_id;
+    for (const auto& task : model.tasks) {
+        task_index_by_id.emplace(task.id, task.index);
+    }
+    std::vector<std::vector<double>> directed(
+        task_count,
+        std::vector<double>(
+            task_count,
+            std::numeric_limits<double>::infinity()
+        )
+    );
+    for (std::size_t task_index = 0; task_index < task_count; ++task_index) {
+        directed[task_index][task_index] = 0.0;
+    }
+    for (const auto& arc : model.arcs) {
+        const auto source = task_index_by_id.find(arc.source);
+        const auto target = task_index_by_id.find(arc.target);
+        if (
+            source == task_index_by_id.end() ||
+            target == task_index_by_id.end()
+        ) {
+            continue;
+        }
+        directed[source->second][target->second] = std::min(
+            directed[source->second][target->second],
+            arc.travel_time
+        );
+    }
+    std::vector<std::vector<std::uint64_t>> masks(
+        task_count,
+        std::vector<std::uint64_t>(mask_words, 0U)
+    );
+    for (const auto& host : model.tasks) {
+        add_ng_relation(&masks, host.index, host.index);
+        std::vector<std::tuple<double, std::string, std::size_t>>
+            candidates;
+        candidates.reserve(task_count - 1U);
+        for (const auto& remembered : model.tasks) {
+            if (remembered.index == host.index) {
+                continue;
+            }
+            const auto score = std::min(
+                directed[host.index][remembered.index],
+                directed[remembered.index][host.index]
+            );
+            candidates.emplace_back(
+                score,
+                remembered.id,
+                remembered.index
+            );
+        }
+        std::ranges::sort(candidates);
+        for (
+            std::size_t rank = 0;
+            rank + 1U < neighborhood_size;
+            ++rank
+        ) {
+            const auto remembered_index =
+                std::get<2>(candidates[rank]);
+            add_ng_relation(
+                &masks,
+                host.index,
+                remembered_index
+            );
+        }
+    }
+    return masks;
+}
+
+struct NgDssrRouteBatchAudit {
+    std::vector<Route> elementary_routes;
+    std::unordered_set<std::size_t> cycle_relations;
+    std::size_t raw_solution_count = 0;
+    std::size_t non_elementary_solution_count = 0;
+    std::size_t forbidden_cycle_count = 0;
+};
+
+NgDssrRouteBatchAudit audit_ng_dssr_routes(
+    const std::vector<Route>& routes,
+    const std::unordered_map<std::string, std::size_t>& task_index_by_id,
+    std::size_t task_count,
+    std::size_t public_batch_target
+) {
+    NgDssrRouteBatchAudit audit;
+    audit.raw_solution_count = routes.size();
+    std::unordered_set<std::string> elementary_signatures;
+    for (const auto& route : routes) {
+        std::vector<std::size_t> sequence;
+        for (const auto& sortie : route.sorties) {
+            for (const auto& task_id : sortie.tasks) {
+                const auto found = task_index_by_id.find(task_id);
+                if (found == task_index_by_id.end()) {
+                    throw std::runtime_error(
+                        "ng-DSSR route references an unknown task");
+                }
+                sequence.push_back(found->second);
+            }
+        }
+        std::unordered_map<std::size_t, std::size_t> last_position;
+        bool elementary = true;
+        for (std::size_t position = 0; position < sequence.size(); ++position) {
+            const auto remembered_task = sequence[position];
+            const auto previous = last_position.find(remembered_task);
+            if (previous != last_position.end()) {
+                elementary = false;
+                ++audit.forbidden_cycle_count;
+                for (
+                    std::size_t cycle_position = previous->second;
+                    cycle_position < position;
+                    ++cycle_position
+                ) {
+                    const auto host_task = sequence[cycle_position];
+                    audit.cycle_relations.insert(
+                        host_task * task_count + remembered_task
+                    );
+                }
+            }
+            last_position[remembered_task] = position;
+        }
+        if (!elementary) {
+            ++audit.non_elementary_solution_count;
+            continue;
+        }
+        if (audit.elementary_routes.size() >= public_batch_target) {
+            continue;
+        }
+        const auto signature = dssr_route_signature(route);
+        if (elementary_signatures.insert(signature).second) {
+            audit.elementary_routes.push_back(route);
+        }
+    }
+    return audit;
+}
+
+SolveOutput solve_dssr_v2(
+    const Model& input_model,
+    const SolveParams& params
+) {
+    if (!params.exact_proof) {
+        throw std::invalid_argument(
+            "DSSR V2 relaxation is available only for exact-proof pricing");
+    }
+
+    Model model = input_model;
+    model.dssr_relaxation_enabled = true;
+    const auto mask_words = (model.tasks.size() + 63U) / 64U;
+    model.dssr_critical_task_mask.assign(mask_words, 0U);
+    model.dssr_branch_task_mask.assign(mask_words, 0U);
+    for (const auto& decision : model.branch_decisions) {
+        const auto mark_branch_task = [&](std::size_t task_index,
+                                          bool exists) {
+            if (!exists || task_index >= model.tasks.size()) {
+                return;
+            }
+            model.dssr_branch_task_mask[task_index / 64U] |=
+                std::uint64_t{1} << (task_index % 64U);
+        };
+        mark_branch_task(decision.task_a, decision.task_a_exists);
+        mark_branch_task(decision.task_b, decision.task_b_exists);
+    }
+
+    SolveParams iteration_params = params;
+    iteration_params.completion_bound_enabled = false;
+    iteration_params.subset_dominance_enabled = false;
+    iteration_params.proof_queue_potential_trace_enabled = false;
+    iteration_params.dssr_negative_batch_target =
+        std::clamp<std::size_t>(
+            params.dssr_negative_batch_target,
+            1U,
+            64U);
+
+    const auto overall_started = std::chrono::steady_clock::now();
+    std::size_t total_processed_labels = 0;
+    std::size_t total_extended_labels = 0;
+    std::size_t total_dominated_labels = 0;
+    std::size_t total_dominance_checks = 0;
+    std::size_t max_bucket_size = 0;
+    double total_extension_seconds = 0.0;
+    double total_dominance_seconds = 0.0;
+    std::size_t refinement_count = 0;
+    std::size_t repeated_witness_count = 0;
+    std::size_t raw_solution_count = 0;
+    std::size_t elementary_batch_count = 0;
+    std::size_t pressure_refinement_count = 0;
+    std::size_t pressure_abandoned_iteration_count = 0;
+    std::vector<std::string> pressure_split_task_ids;
+    std::vector<DssrIterationTraceRow> iteration_trace;
+
+    const auto critical_count = [&]() {
+        std::size_t count = 0;
+        for (const auto word : model.dssr_critical_task_mask) {
+            count += std::popcount(word);
+        }
+        return count;
+    };
+    const auto mark_critical = [&](std::size_t task_index) {
+        if (task_index >= model.tasks.size()) {
+            return false;
+        }
+        const auto word = task_index / 64U;
+        const auto bit_mask =
+            std::uint64_t{1} << (task_index % 64U);
+        if ((model.dssr_critical_task_mask[word] & bit_mask) != 0U) {
+            return false;
+        }
+        model.dssr_critical_task_mask[word] |= bit_mask;
+        return true;
+    };
+    const auto finalize = [&](SolveOutput output,
+                              bool elementary_witness,
+                              bool relaxation_certificate) {
+        output.telemetry.processed_labels = total_processed_labels;
+        output.telemetry.extended_labels = total_extended_labels;
+        output.telemetry.dominated_labels = total_dominated_labels;
+        output.telemetry.dominance_candidate_checks =
+            total_dominance_checks;
+        output.telemetry.max_visited_bucket_size = max_bucket_size;
+        output.telemetry.solution_count = output.routes.size();
+        output.telemetry.extension_wall_time_seconds =
+            total_extension_seconds;
+        output.telemetry.dominance_wall_time_seconds =
+            total_dominance_seconds;
+        output.telemetry.wall_time_seconds =
+            std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - overall_started)
+                .count();
+        output.telemetry.dssr_enabled = true;
+        output.telemetry.dssr_policy_version = kDssrPolicyVersionV2;
+        output.telemetry.dssr_iteration_count = iteration_trace.size();
+        output.telemetry.dssr_refinement_count = refinement_count;
+        output.telemetry.dssr_initial_critical_task_count = 0;
+        output.telemetry.dssr_final_critical_task_count =
+            critical_count();
+        output.telemetry.dssr_repeated_witness_count =
+            repeated_witness_count;
+        output.telemetry.dssr_elementary_witness_returned =
+            elementary_witness;
+        output.telemetry.dssr_relaxation_no_negative_certificate =
+            relaxation_certificate;
+        output.telemetry.dssr_elementary_batch_count =
+            elementary_batch_count;
+        output.telemetry.dssr_raw_solution_count =
+            raw_solution_count;
+        output.telemetry.dssr_pressure_refinement_count =
+            pressure_refinement_count;
+        output.telemetry.dssr_pressure_split_task_ids =
+            pressure_split_task_ids;
+        output.telemetry.dssr_pressure_abandoned_iteration_count =
+            pressure_abandoned_iteration_count;
+        output.telemetry.dssr_max_bucket_size = max_bucket_size;
+        output.telemetry.dssr_dominance_candidate_checks =
+            total_dominance_checks;
+        output.telemetry.dssr_pressure_triggered = false;
+        output.telemetry.dssr_pressure_split_task_id.clear();
+        output.telemetry.dssr_iteration_trace = iteration_trace;
+        return output;
+    };
+
+    std::unordered_map<std::string, std::size_t> task_index_by_id;
+    for (const auto& task : model.tasks) {
+        task_index_by_id.emplace(task.id, task.index);
+    }
+
+    for (std::size_t iteration = 0;
+         iteration <= model.tasks.size();
+         ++iteration) {
+        if (std::isfinite(params.timeout_seconds)) {
+            const auto elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - overall_started);
+            const double remaining =
+                params.timeout_seconds - elapsed.count();
+            if (remaining <= 0.0) {
+                SolveOutput timeout;
+                timeout.status = "timeout";
+                return finalize(std::move(timeout), false, false);
+            }
+            iteration_params.timeout_seconds = remaining;
+        }
+
+        const auto critical_before = critical_count();
+        auto output = solve_once(model, iteration_params);
+        total_processed_labels += output.telemetry.processed_labels;
+        total_extended_labels += output.telemetry.extended_labels;
+        total_dominated_labels += output.telemetry.dominated_labels;
+        total_dominance_checks +=
+            output.telemetry.dominance_candidate_checks;
+        max_bucket_size = std::max(
+            max_bucket_size,
+            output.telemetry.max_visited_bucket_size);
+        total_extension_seconds +=
+            output.telemetry.extension_wall_time_seconds;
+        total_dominance_seconds +=
+            output.telemetry.dominance_wall_time_seconds;
+
+        if (output.telemetry.dssr_pressure_triggered) {
+            const auto split_task_id =
+                output.telemetry.dssr_pressure_split_task_id;
+            output.routes.clear();
+            output.search_exhaustive = false;
+            output.frontier_empty = false;
+            output.status = "dssr_pressure_refinement";
+            iteration_trace.push_back(DssrIterationTraceRow{
+                .iteration = iteration,
+                .critical_task_count_before = critical_before,
+                .processed_labels = output.telemetry.processed_labels,
+                .extended_labels = output.telemetry.extended_labels,
+                .dominated_labels = output.telemetry.dominated_labels,
+                .max_visited_bucket_size =
+                    output.telemetry.max_visited_bucket_size,
+                .wall_time_seconds = output.telemetry.wall_time_seconds,
+                .status = output.status,
+                .search_exhaustive = false,
+                .frontier_empty = false,
+                .labels_dropped = output.labels_dropped,
+                .pressure_refinement_triggered = true,
+                .pressure_split_task_id = split_task_id,
+            });
+            ++pressure_abandoned_iteration_count;
+            const auto split_found =
+                task_index_by_id.find(split_task_id);
+            if (
+                split_found == task_index_by_id.end() ||
+                !mark_critical(split_found->second)
+            ) {
+                output.status = "dssr_pressure_refinement_stalled";
+                return finalize(std::move(output), false, false);
+            }
+            ++refinement_count;
+            ++pressure_refinement_count;
+            pressure_split_task_ids.push_back(split_task_id);
+            continue;
+        }
+
+        auto audit = audit_dssr_v2_routes(
+            output.routes,
+            task_index_by_id,
+            iteration_params.dssr_negative_batch_target);
+        raw_solution_count += audit.raw_solution_count;
+        repeated_witness_count +=
+            audit.non_elementary_solution_count;
+        const auto elementary_count =
+            audit.elementary_routes.size();
+
+        std::size_t newly_critical = 0;
+        for (const auto task_index : audit.repeated_tasks) {
+            if (mark_critical(task_index)) {
+                ++newly_critical;
+            }
+        }
+        if (newly_critical > 0U) {
+            ++refinement_count;
+        }
+
+        iteration_trace.push_back(DssrIterationTraceRow{
+            .iteration = iteration,
+            .critical_task_count_before = critical_before,
+            .repeated_task_count = audit.repeated_tasks.size(),
+            .processed_labels = output.telemetry.processed_labels,
+            .extended_labels = output.telemetry.extended_labels,
+            .dominated_labels = output.telemetry.dominated_labels,
+            .max_visited_bucket_size =
+                output.telemetry.max_visited_bucket_size,
+            .wall_time_seconds = output.telemetry.wall_time_seconds,
+            .status = output.status,
+            .search_exhaustive = output.search_exhaustive,
+            .frontier_empty = output.frontier_empty,
+            .labels_dropped = output.labels_dropped,
+            .negative_witness_found =
+                audit.raw_solution_count > 0U,
+            .witness_elementary = elementary_count > 0U,
+            .raw_solution_count = audit.raw_solution_count,
+            .elementary_solution_count = elementary_count,
+            .non_elementary_solution_count =
+                audit.non_elementary_solution_count,
+        });
+
+        if (elementary_count > 0U) {
+            output.routes = std::move(audit.elementary_routes);
+            elementary_batch_count += output.routes.size();
+            output.search_exhaustive =
+                output.search_exhaustive &&
+                audit.non_elementary_solution_count == 0U;
+            output.frontier_empty =
+                output.frontier_empty && output.search_exhaustive;
+            return finalize(std::move(output), true, false);
+        }
+
+        output.routes.clear();
+        if (audit.raw_solution_count == 0U) {
+            const bool certificate =
+                output.search_exhaustive && output.frontier_empty &&
+                !output.labels_dropped;
+            return finalize(std::move(output), false, certificate);
+        }
+        if (newly_critical == 0U) {
+            output.status = "dssr_refinement_stalled";
+            output.search_exhaustive = false;
+            output.frontier_empty = false;
+            return finalize(std::move(output), false, false);
+        }
+    }
+
+    SolveOutput exhausted;
+    exhausted.status = "dssr_refinement_limit";
+    return finalize(std::move(exhausted), false, false);
+}
+
+SolveOutput solve_ng_dssr_v3(
+    const Model& input_model,
+    const SolveParams& params
+) {
+    if (!params.exact_proof) {
+        throw std::invalid_argument(
+            "ng-DSSR V3 is available only for exact-proof pricing");
+    }
+
+    Model model = input_model;
+    model.dssr_relaxation_enabled = true;
+    model.ng_dssr_memory_enabled = true;
+    model.guidance_task_arc_enabled = false;
+    const auto mask_words = (model.tasks.size() + 63U) / 64U;
+    model.dssr_critical_task_mask.assign(mask_words, 0U);
+    model.dssr_branch_task_mask.assign(mask_words, 0U);
+    for (const auto& decision : model.branch_decisions) {
+        const auto mark_branch_task = [&](std::size_t task_index,
+                                          bool exists) {
+            if (!exists || task_index >= model.tasks.size()) {
+                return;
+            }
+            model.dssr_branch_task_mask[task_index / 64U] |=
+                std::uint64_t{1} << (task_index % 64U);
+        };
+        mark_branch_task(decision.task_a, decision.task_a_exists);
+        mark_branch_task(decision.task_b, decision.task_b_exists);
+    }
+    const auto initial_neighborhood_size =
+        std::clamp<std::size_t>(
+            params.ng_dssr_initial_neighborhood_size,
+            1U,
+            model.tasks.size()
+        );
+    model.ng_dssr_task_memory_masks = initial_ng_memory_masks(
+        model,
+        initial_neighborhood_size
+    );
+    const auto initial_relation_count =
+        ng_relation_count(model.ng_dssr_task_memory_masks);
+
+    SolveParams iteration_params = params;
+    iteration_params.completion_bound_enabled = false;
+    iteration_params.subset_dominance_enabled = false;
+    iteration_params.proof_queue_potential_trace_enabled = false;
+    iteration_params.dssr_pressure_refinement_enabled = false;
+    iteration_params.proof_queue_policy =
+        ProofQueuePolicy::Q0PartialCost;
+    iteration_params.dssr_negative_batch_target =
+        std::clamp<std::size_t>(
+            params.dssr_negative_batch_target,
+            1U,
+            64U
+        );
+
+    const auto overall_started = std::chrono::steady_clock::now();
+    std::size_t total_processed_labels = 0;
+    std::size_t total_extended_labels = 0;
+    std::size_t total_dominated_labels = 0;
+    std::size_t total_dominance_checks = 0;
+    std::size_t max_bucket_size = 0;
+    double total_extension_seconds = 0.0;
+    double total_dominance_seconds = 0.0;
+    std::size_t refinement_count = 0;
+    std::size_t repeated_witness_count = 0;
+    std::size_t raw_solution_count = 0;
+    std::size_t elementary_batch_count = 0;
+    std::size_t relation_add_count = 0;
+    std::size_t forbidden_cycle_count = 0;
+    std::size_t full_elementary_fallback_count = 0;
+    std::vector<DssrIterationTraceRow> iteration_trace;
+
+    const auto finalize = [&](SolveOutput output,
+                              bool elementary_witness,
+                              bool relaxation_certificate) {
+        output.telemetry.processed_labels = total_processed_labels;
+        output.telemetry.extended_labels = total_extended_labels;
+        output.telemetry.dominated_labels = total_dominated_labels;
+        output.telemetry.dominance_candidate_checks =
+            total_dominance_checks;
+        output.telemetry.max_visited_bucket_size = max_bucket_size;
+        output.telemetry.solution_count = output.routes.size();
+        output.telemetry.extension_wall_time_seconds =
+            total_extension_seconds;
+        output.telemetry.dominance_wall_time_seconds =
+            total_dominance_seconds;
+        output.telemetry.wall_time_seconds =
+            std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - overall_started
+            ).count();
+        output.telemetry.dssr_enabled = true;
+        output.telemetry.dssr_policy_version =
+            kNgDssrPolicyVersionV3;
+        output.telemetry.dssr_iteration_count =
+            iteration_trace.size();
+        output.telemetry.dssr_refinement_count = refinement_count;
+        output.telemetry.dssr_initial_critical_task_count = 0;
+        output.telemetry.dssr_final_critical_task_count = 0;
+        output.telemetry.dssr_repeated_witness_count =
+            repeated_witness_count;
+        output.telemetry.dssr_elementary_witness_returned =
+            elementary_witness;
+        output.telemetry.dssr_relaxation_no_negative_certificate =
+            relaxation_certificate;
+        output.telemetry.dssr_elementary_batch_count =
+            elementary_batch_count;
+        output.telemetry.dssr_raw_solution_count =
+            raw_solution_count;
+        output.telemetry.dssr_max_bucket_size = max_bucket_size;
+        output.telemetry.dssr_dominance_candidate_checks =
+            total_dominance_checks;
+        output.telemetry.ng_dssr_enabled = true;
+        output.telemetry.ng_dssr_initial_neighborhood_size =
+            initial_neighborhood_size;
+        output.telemetry.ng_dssr_initial_relation_count =
+            initial_relation_count;
+        output.telemetry.ng_dssr_final_relation_count =
+            ng_relation_count(model.ng_dssr_task_memory_masks);
+        output.telemetry.ng_dssr_relation_add_count =
+            relation_add_count;
+        output.telemetry.ng_dssr_forbidden_cycle_count =
+            forbidden_cycle_count;
+        output.telemetry.ng_dssr_full_elementary_fallback_count =
+            full_elementary_fallback_count;
+        output.telemetry.dssr_iteration_trace = iteration_trace;
+        return output;
+    };
+
+    std::unordered_map<std::string, std::size_t> task_index_by_id;
+    for (const auto& task : model.tasks) {
+        task_index_by_id.emplace(task.id, task.index);
+    }
+    const auto max_relation_count =
+        model.tasks.size() * model.tasks.size();
+    for (
+        std::size_t iteration = 0;
+        iteration <= max_relation_count;
+        ++iteration
+    ) {
+        if (std::isfinite(params.timeout_seconds)) {
+            const auto elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - overall_started
+            );
+            const auto remaining =
+                params.timeout_seconds - elapsed.count();
+            if (remaining <= 0.0) {
+                SolveOutput timeout;
+                timeout.status = "timeout";
+                return finalize(std::move(timeout), false, false);
+            }
+            iteration_params.timeout_seconds = remaining;
+        }
+
+        const auto relations_before =
+            ng_relation_count(model.ng_dssr_task_memory_masks);
+        auto output = solve_once(model, iteration_params);
+        total_processed_labels += output.telemetry.processed_labels;
+        total_extended_labels += output.telemetry.extended_labels;
+        total_dominated_labels += output.telemetry.dominated_labels;
+        total_dominance_checks +=
+            output.telemetry.dominance_candidate_checks;
+        max_bucket_size = std::max(
+            max_bucket_size,
+            output.telemetry.max_visited_bucket_size
+        );
+        total_extension_seconds +=
+            output.telemetry.extension_wall_time_seconds;
+        total_dominance_seconds +=
+            output.telemetry.dominance_wall_time_seconds;
+
+        auto audit = audit_ng_dssr_routes(
+            output.routes,
+            task_index_by_id,
+            model.tasks.size(),
+            iteration_params.dssr_negative_batch_target
+        );
+        raw_solution_count += audit.raw_solution_count;
+        repeated_witness_count +=
+            audit.non_elementary_solution_count;
+        forbidden_cycle_count += audit.forbidden_cycle_count;
+        const auto elementary_count =
+            audit.elementary_routes.size();
+
+        std::size_t newly_added = 0;
+        for (const auto encoded : audit.cycle_relations) {
+            const auto host_task = encoded / model.tasks.size();
+            const auto remembered_task = encoded % model.tasks.size();
+            if (add_ng_relation(
+                    &model.ng_dssr_task_memory_masks,
+                    host_task,
+                    remembered_task
+                )) {
+                ++newly_added;
+            }
+        }
+        relation_add_count += newly_added;
+        if (newly_added > 0U) {
+            ++refinement_count;
+        }
+        iteration_trace.push_back(DssrIterationTraceRow{
+            .iteration = iteration,
+            .processed_labels = output.telemetry.processed_labels,
+            .extended_labels = output.telemetry.extended_labels,
+            .dominated_labels = output.telemetry.dominated_labels,
+            .max_visited_bucket_size =
+                output.telemetry.max_visited_bucket_size,
+            .wall_time_seconds = output.telemetry.wall_time_seconds,
+            .status = output.status,
+            .search_exhaustive = output.search_exhaustive,
+            .frontier_empty = output.frontier_empty,
+            .labels_dropped = output.labels_dropped,
+            .negative_witness_found =
+                audit.raw_solution_count > 0U,
+            .witness_elementary = elementary_count > 0U,
+            .raw_solution_count = audit.raw_solution_count,
+            .elementary_solution_count = elementary_count,
+            .non_elementary_solution_count =
+                audit.non_elementary_solution_count,
+            .ng_relation_count_before = relations_before,
+            .ng_relation_add_count = newly_added,
+            .ng_forbidden_cycle_count =
+                audit.forbidden_cycle_count,
+        });
+
+        if (elementary_count > 0U) {
+            output.routes = std::move(audit.elementary_routes);
+            elementary_batch_count += output.routes.size();
+            output.search_exhaustive =
+                output.search_exhaustive &&
+                audit.non_elementary_solution_count == 0U;
+            output.frontier_empty =
+                output.frontier_empty && output.search_exhaustive;
+            return finalize(std::move(output), true, false);
+        }
+
+        output.routes.clear();
+        if (audit.raw_solution_count == 0U) {
+            const bool certificate =
+                output.search_exhaustive &&
+                output.frontier_empty &&
+                !output.labels_dropped;
+            return finalize(std::move(output), false, certificate);
+        }
+        if (newly_added == 0U) {
+            // A permitted repeated cycle must be missing at least one local
+            // memory relation.  If an unforeseen reconstruction edge case
+            // violates that invariant, fail over deterministically to full
+            // elementarity instead of accepting a route or certificate.
+            std::size_t fallback_add_count = 0;
+            for (
+                std::size_t host_task = 0;
+                host_task < model.tasks.size();
+                ++host_task
+            ) {
+                for (
+                    std::size_t remembered_task = 0;
+                    remembered_task < model.tasks.size();
+                    ++remembered_task
+                ) {
+                    fallback_add_count += add_ng_relation(
+                        &model.ng_dssr_task_memory_masks,
+                        host_task,
+                        remembered_task
+                    );
+                }
+            }
+            if (fallback_add_count == 0U) {
+                output.status = "ng_dssr_refinement_stalled";
+                output.search_exhaustive = false;
+                output.frontier_empty = false;
+                return finalize(std::move(output), false, false);
+            }
+            relation_add_count += fallback_add_count;
+            ++refinement_count;
+            ++full_elementary_fallback_count;
+        }
+    }
+
+    SolveOutput exhausted;
+    exhausted.status = "ng_dssr_refinement_limit";
+    return finalize(std::move(exhausted), false, false);
+}
+
+SolveOutput solve(const Model& input_model, const SolveParams& params) {
+    if (!params.dssr_enabled) {
+        return solve_once(input_model, params);
+    }
+    if (params.dssr_policy_version == kDssrPolicyVersionV1) {
+        return solve_dssr_v1(input_model, params);
+    }
+    if (params.dssr_policy_version == kDssrPolicyVersionV2) {
+        return solve_dssr_v2(input_model, params);
+    }
+    if (params.dssr_policy_version == kNgDssrPolicyVersionV3) {
+        if constexpr (kNgDssrV3Compiled) {
+            return solve_ng_dssr_v3(input_model, params);
+        }
+        throw std::invalid_argument(
+            "ng-DSSR V3 is disabled in this Native build");
+    }
+    throw std::invalid_argument(
+        "unsupported DSSR policy version: " +
+        params.dssr_policy_version);
+}
+
 std::unordered_map<std::string, std::string> build_info() {
     return {
         {"rcspp_commit", LUNAR_SPPRC_RCSPP_COMMIT},
@@ -1978,14 +3385,80 @@ std::unordered_map<std::string, std::string> build_info() {
         {"cut_state_schema", "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2"},
         {"cut_state_bytes", std::to_string(sizeof(CutState))},
         {"label_state_bytes", std::to_string(sizeof(State))},
+        {"journey_value_bytes", std::to_string(sizeof(JourneyValue))},
+        {"journey_resource_bytes", std::to_string(sizeof(JourneyResource))},
+        {
+            "rcspp_label_object_bytes",
+            std::to_string(sizeof(rcspp::Label<Composition>))
+        },
+        {
+            "rcspp_outer_resource_object_bytes",
+            std::to_string(sizeof(rcspp::Resource<Composition>))
+        },
+        {
+            "rcspp_journey_component_object_bytes",
+            std::to_string(sizeof(rcspp::Resource<JourneyResource>))
+        },
+        {
+            "label_memory_representation",
+            "u16_counts_single_component_variant_compact_bucket_v2"
+        },
         {"cut_state_max_bits", "48"},
         {"max_active_cuts", "16"},
         {"completion_bound", "positive_cover_dual_threshold_pruning_v1"},
         {"guidance_ordering", "negative_harvest_task_arc_priority_v1"},
         {"best_reduced_cost_event_trace", "harvest_improvements_v1"},
         {"harvest_work_budget", "deterministic_processed_labels_v1"},
+        {
+            "exact_negative_escape_policy",
+            "diverse_raw_4x_then_p0v4_selector_v1"
+        },
+        {"exact_negative_escape_certificate_semantics", "partial_fail_closed_v1"},
         {"service_timing_policy_id", "no_task_wait_base_departure_shift_v1"},
-        {"large_scale_exact_pricer", kDssrPolicyVersion},
+        {"large_scale_exact_pricer", kDssrPolicyVersionV1},
+        {"dssr_v2_policy", kDssrPolicyVersionV2},
+        {
+            "ng_dssr_v3_policy",
+            kNgDssrV3Compiled
+                ? kNgDssrPolicyVersionV3
+                : "disabled"
+        },
+        {
+            "ng_dssr_v3_compiled",
+            kNgDssrV3Compiled ? "true" : "false"
+        },
+        {
+            "bidirectional_feasibility_compiled",
+            kBidirectionalFeasibilityCompiled ? "true" : "false"
+        },
+        {
+            "bidirectional_feasibility_policy",
+            kBidirectionalFeasibilityCompiled
+                ? "p0v4_frozen_dual_depot_meet_max_plus_v1"
+                : "disabled"
+        },
+        {
+            "bidirectional_task_meet_policy",
+            kBidirectionalFeasibilityCompiled
+                ? "p0v4_frozen_dual_task_meet_max_plus_v1"
+                : "disabled"
+        },
+        {
+            "bidirectional_journey_probe_policy",
+            kBidirectionalFeasibilityCompiled
+                ? "p0v4_frozen_dual_task_meet_journey_label_v1"
+                : "disabled"
+        },
+        {
+            "bidirectional_midpoint_meet_policy",
+            kBidirectionalFeasibilityCompiled
+                ? "p0v4_frozen_dual_depot_midpoint_meet_v1"
+                : "disabled"
+        },
+        {
+            "bidirectional_feasibility_certificate_authority",
+            "none"
+        },
         {"dssr_certificate_kind", "DSSR_RELAXATION_LOWER_BOUND"},
     };
 }

@@ -1,0 +1,43 @@
+{
+  "added_column_count": 2795,
+  "development_gat_veto_prototype_authorized": true,
+  "evidence_scope": "one_fixed_fully_cold_scale30_noop_s1_pair_only",
+  "exact_and_redlines_zero": true,
+  "final_active_column_sha256": "d1336d6d22debe849aaa7a81b6aa775b779046f0c2f085ad43b5070d8bfe3380",
+  "fixed_s1_deployment_authorized": false,
+  "formal_gat_training_authorized": false,
+  "issues": [],
+  "next_step": "stop_fixed_action_rollouts; train a conservative NOOP_S1_S4 context gate from existing positive and harmful action rows",
+  "noop": {
+    "final_judge_wall_sec": 253.27551,
+    "official_proof_wall_sec": 241.881375,
+    "root_sec": 561.77111,
+    "total_sec": 818.185909,
+    "tree_sec": 255.691409
+  },
+  "pair_valid": true,
+  "paired_effect": {
+    "root_gain_sec": -237.82988799999998,
+    "total_gain_fraction": -0.2902460668019155,
+    "total_gain_sec": -237.47524199999998,
+    "tree_gain_sec": 0.3189339999999845
+  },
+  "pricing_round_count": 54,
+  "required_model_veto": "no_negative_after_harvest_or_closure_likely_context",
+  "required_runtime_guard": "fail_closed_sparse_action_time_cap_then_official_proof",
+  "s1": {
+    "final_judge_wall_sec": 492.535497,
+    "official_proof_wall_sec": 240.482411,
+    "root_sec": 799.600998,
+    "sparse_action_executed": false,
+    "sparse_action_fallback_reason": "no_official_true_negative_from_sparse_pass",
+    "sparse_action_round": 54,
+    "sparse_action_wall_sec": 240.61182,
+    "sparse_attempt_count": 1,
+    "total_sec": 1055.661151,
+    "tree_sec": 255.372475
+  },
+  "same_final_active_column_order": true,
+  "schema_version": "lunar_ice_bpc.sparse_tail_e2e_pair_gate.v1",
+  "status": "FIXED_S1_E2E_GATE_FAILED_HARMFUL_CLOSURE_ACTION"
+}
