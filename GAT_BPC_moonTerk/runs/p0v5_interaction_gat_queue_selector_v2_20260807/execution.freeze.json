@@ -1,0 +1,85 @@
+{
+  "action_universe": [
+    "Q0",
+    "QGR1",
+    "QD1",
+    "QB1"
+  ],
+  "candidate_generation": {
+    "batch_size": 5,
+    "eligible_minimum_root_contexts": 2,
+    "maximum_new_instances_per_scale": 30,
+    "maximum_saved_root_contexts": 3,
+    "outcome_blind": true,
+    "seed_base": 260807000,
+    "target_eligible_instances_per_scale": 23,
+    "tree_supplement_forbidden": true
+  },
+  "execution": {
+    "arm_order": "rotate_by_state_hash",
+    "blocked_fresh_process_repeats": 3,
+    "formal_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "q0_repeated_in_every_block": true,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "same_prefrozen_milestone_required": true,
+    "single_native_process": true
+  },
+  "formal_outcomes_may_not_reenter_training": true,
+  "lifecycle_authority": [
+    "root_cg"
+  ],
+  "qgr1_training": {
+    "hard_zero_quantile": 0.75,
+    "inner_train_validation_instances_per_scale": [
+      10,
+      2
+    ],
+    "maximum_epochs": 40,
+    "maximum_pairs_per_context": 50000,
+    "neutral_huber_weight": 0.1,
+    "neutral_no_reorder_accuracy_min": 0.7,
+    "neutral_pair_fraction": 0.25,
+    "outer_train_instances_per_scale": 12,
+    "overall_actionable_pair_accuracy_min": 0.7,
+    "patience": 8,
+    "per_family_accuracy_strictly_above": 0.55,
+    "potential_l1_weight": 1e-05,
+    "pressure_weight": "sqrt(1+action_surface_group_size)_clipped_at_8",
+    "supervised_pair_fraction": 0.75
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_execution_freeze.v2",
+  "selector_seeds": [
+    61635,
+    91267,
+    170141
+  ],
+  "single_native_process": true,
+  "status": "FROZEN_BEFORE_ANY_V2_ARM_OUTCOME",
+  "threshold_grid": {
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "risk_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ]
+  }
+}

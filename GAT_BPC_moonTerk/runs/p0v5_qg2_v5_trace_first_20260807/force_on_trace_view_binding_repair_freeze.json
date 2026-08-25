@@ -1,0 +1,23 @@
+{
+  "artifact_sha256": {
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_instance_split.json": "578c049ae1fbb3d6addd1350a88da8dfac0d9c5575483727a51e7c0c6303d53d",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat/qg2_v3_gat.pt": "c283fa1fcecc70f67cd9540ff92b24253d692b9e9e8fdb0bdf53e98dea1c4836",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat/training_report.json": "8634234b7fb8411eaf5e9b1fe4688943c089e7164fcdfa9d782c2fcc45336d88",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat_training_freeze.json": "666e948fb52aa8634081f364fae67d01a6816390e94de571837747b223b026f9",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/trace_training_view.json": "2bb8ab76ce25fc16fcb8596d0fa80f82afac0c19f10ba7f4ae7ae3ab45c13dd1"
+  },
+  "deployable": false,
+  "development_only": true,
+  "identity_checks_relaxed": false,
+  "production_switch_authorized": false,
+  "repair_scope": "context_row_identity_restored_from_bound_snapshot_only",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_force_on_binding_repair_freeze.v1",
+  "source_sha256": {
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/calibrate_p0v5_qg2_v3_gat_force_on.py": "0c900cca37828427e7061b3de713101d3ef3f289c770ab2ae51839ac49ec8c90",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/calibrate_p0v5_qg2_v4_instance_balanced_gat_force_on.py": "e01f81a44ea512fb63a0cb79e89f8b0e504b810397c0bc005e5d66b8993c4970",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/calibrate_p0v5_qg2_v5_trace_gat_force_on.py": "a67b8100c4bef2788d33cdd73e4ed1ebdadf34248dc993936aed0603f18afdfd",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/predict_p0v5_qg2_v3_potential.py": "1f37fb9dc5837e5c120a6754634b396ac17db4b25c47d64cac0eea6dab347d53",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/replay_p0v5_qg2_label_state_snapshot.py": "35e62543cfc30814605086e7c2cad2a0ea62864fc9d629430369a93888ffc3b6",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/run_p0v5_qg2_v5_force_on_after_binding_repair.py": "07e2e886bfc49a34850fd4dcf8cc050f68d9183f04361571b2ae0295da9a1776"
+  }
+}

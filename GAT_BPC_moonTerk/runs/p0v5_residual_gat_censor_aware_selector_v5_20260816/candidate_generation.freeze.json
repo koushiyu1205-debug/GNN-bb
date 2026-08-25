@@ -1,0 +1,29 @@
+{
+  "arm_outcomes_read": 0,
+  "generator": {
+    "allow_incomplete": true,
+    "continue_after_timeout": true,
+    "draw_figures": false,
+    "max_attempts_per_instance": 80,
+    "max_workers": 1,
+    "min_free_mem_gb": 2.0,
+    "path_preview": "none",
+    "script": "scripts/generate_lunar_real_map_benchmark.py",
+    "skip_bpc_future_check": true,
+    "skip_preflight": true,
+    "worker_rss_budget_mb": 900
+  },
+  "manifest": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/manifest.json",
+  "maximum_new_candidates": 26,
+  "outcome_blind": true,
+  "output_root": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates",
+  "required_new_eligible": 3,
+  "root_collection_cap_sec": 300,
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_candidate_generation.v5",
+  "seed_base": 260816000,
+  "single_generator_process": true,
+  "single_native_process": true,
+  "snapshot_cap": 3,
+  "status": "FROZEN_BEFORE_NEW_CANDIDATE_GENERATION"
+}

@@ -1,0 +1,7 @@
+{
+  "experiment_id": "p0v5_temporal_gat_production_v1_round3_20260821",
+  "generated_rows": 160,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_generation_state.v1",
+  "status": "FROZEN",
+  "target_rows": 160
+}

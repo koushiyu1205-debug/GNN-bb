@@ -1,0 +1,2985 @@
+{
+  "aggregate": {
+    "admission": {
+      "captured_savings_fraction": 0.16590764179817535,
+      "context_count": 84,
+      "portfolio_gm": 0.17694911655452658,
+      "portfolio_instance_bootstrap_95_upper": 0.23876190653353468,
+      "portfolio_total_wall_sec": 2329.079585528,
+      "portfolio_winner_counts": {
+        "Q0": 1,
+        "QB1": 65,
+        "QO2-1e-3": 13,
+        "QO2-1e-4": 1,
+        "QO2-3e-4": 4
+      },
+      "q0_total_wall_sec": 9676.60064337,
+      "qg2_action_surface_gap_sec": 6128.511166073,
+      "qg2_gm": 0.8397040359248417,
+      "qg2_instance_bootstrap_95_upper": 0.9043834241489296,
+      "qg2_reachable_winner_counts": {
+        "Q0": 9,
+        "QO2-1e-3": 41,
+        "QO2-1e-4": 14,
+        "QO2-3e-4": 20
+      },
+      "qg2_total_wall_sec": 8457.590751601
+    },
+    "all": {
+      "captured_savings_fraction": 0.1947727065287492,
+      "context_count": 110,
+      "portfolio_gm": 0.23592157092220897,
+      "portfolio_instance_bootstrap_95_upper": 0.30398993643060307,
+      "portfolio_total_wall_sec": 3601.552846207,
+      "portfolio_winner_counts": {
+        "Q0": 1,
+        "QB1": 65,
+        "QD1": 24,
+        "QO2-1e-3": 15,
+        "QO2-1e-4": 1,
+        "QO2-3e-4": 4
+      },
+      "q0_total_wall_sec": 11711.374902296,
+      "qg2_action_surface_gap_sec": 6530.250064758,
+      "qg2_gm": 0.832155658205729,
+      "qg2_instance_bootstrap_95_upper": 0.8826317558430761,
+      "qg2_reachable_winner_counts": {
+        "Q0": 10,
+        "QO2-1e-3": 61,
+        "QO2-1e-4": 15,
+        "QO2-3e-4": 24
+      },
+      "qg2_total_wall_sec": 10131.802910965
+    },
+    "proof": {
+      "captured_savings_fraction": 0.47299177148023497,
+      "context_count": 26,
+      "portfolio_gm": 0.5975206642851968,
+      "portfolio_instance_bootstrap_95_upper": 0.6601589732753989,
+      "portfolio_total_wall_sec": 1272.473260679,
+      "portfolio_winner_counts": {
+        "QD1": 24,
+        "QO2-1e-3": 2
+      },
+      "q0_total_wall_sec": 2034.774258926,
+      "qg2_action_surface_gap_sec": 401.73889868499987,
+      "qg2_gm": 0.8082292423215017,
+      "qg2_instance_bootstrap_95_upper": 0.8491141791178598,
+      "qg2_reachable_winner_counts": {
+        "Q0": 1,
+        "QO2-1e-3": 20,
+        "QO2-1e-4": 1,
+        "QO2-3e-4": 4
+      },
+      "qg2_total_wall_sec": 1674.212159364
+    },
+    "scale30": {
+      "captured_savings_fraction": 0.4188611191992642,
+      "context_count": 48,
+      "portfolio_gm": 0.5671997945894733,
+      "portfolio_instance_bootstrap_95_upper": 0.662220535905185,
+      "portfolio_total_wall_sec": 2045.658941169,
+      "portfolio_winner_counts": {
+        "Q0": 1,
+        "QB1": 10,
+        "QD1": 24,
+        "QO2-1e-3": 11,
+        "QO2-3e-4": 2
+      },
+      "q0_total_wall_sec": 3356.149525395,
+      "qg2_action_surface_gap_sec": 761.5770314170002,
+      "qg2_gm": 0.8400143173442991,
+      "qg2_instance_bootstrap_95_upper": 0.8788434208605701,
+      "qg2_reachable_winner_counts": {
+        "Q0": 4,
+        "QO2-1e-3": 33,
+        "QO2-1e-4": 2,
+        "QO2-3e-4": 9
+      },
+      "qg2_total_wall_sec": 2807.235972586
+    },
+    "scale50": {
+      "captured_savings_fraction": 0.15158231993646315,
+      "context_count": 62,
+      "portfolio_gm": 0.11962566457247066,
+      "portfolio_instance_bootstrap_95_upper": 0.16833099280468444,
+      "portfolio_total_wall_sec": 1555.893905038,
+      "portfolio_winner_counts": {
+        "QB1": 55,
+        "QO2-1e-3": 4,
+        "QO2-1e-4": 1,
+        "QO2-3e-4": 2
+      },
+      "q0_total_wall_sec": 8355.225376901,
+      "qg2_action_surface_gap_sec": 5768.673033341,
+      "qg2_gm": 0.8261220636118265,
+      "qg2_instance_bootstrap_95_upper": 0.9058992569437558,
+      "qg2_reachable_winner_counts": {
+        "Q0": 6,
+        "QO2-1e-3": 28,
+        "QO2-1e-4": 13,
+        "QO2-3e-4": 15
+      },
+      "qg2_total_wall_sec": 7324.566938379
+    }
+  },
+  "context_budget": {
+    "maximum": 200,
+    "per_scale": 100
+  },
+  "context_count": 110,
+  "contexts": [
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 104.099275584,
+        "QD1": 81.909143667,
+        "QO2-1e-3": 110.961699996,
+        "QO2-1e-4": 100.538843526,
+        "QO2-3e-4": 99.527856548
+      },
+      "instance_hash": "18f9a1652f36d18f",
+      "instance_id": "lunar_ice_030_009_seed110732001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 81.909143667,
+      "portfolio_ratio": 0.7868368267453091,
+      "q0_wall_sec": 104.099275584,
+      "qg2_captured_portfolio_savings_fraction": 0.20601135013973493,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 99.527856548,
+      "qg2_reachable_ratio": 0.956085966877731,
+      "qg2_vs_portfolio_wall_gap_sec": 17.618712881000008,
+      "scale": 30,
+      "state": "0be5b600a1b0375b"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 41.662377375,
+        "QB1": 104.378514721,
+        "QD1": 26.663706991,
+        "QO2-1e-3": 35.19663339,
+        "QO2-1e-4": 39.062665047,
+        "QO2-3e-4": 37.093528026
+      },
+      "instance_hash": "680bfe8ceba5c9c4",
+      "instance_id": "lunar_ice_030_099_seed632300099",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 26.663706991,
+      "portfolio_ratio": 0.6399948507739233,
+      "q0_wall_sec": 41.662377375,
+      "qg2_captured_portfolio_savings_fraction": 0.4310878110834013,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 35.19663339,
+      "qg2_reachable_ratio": 0.8448061682413773,
+      "qg2_vs_portfolio_wall_gap_sec": 8.532926399,
+      "scale": 30,
+      "state": "0bf5b10b8941671e"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 76.781402292,
+        "QB1": 126.384495039,
+        "QD1": 33.903452097,
+        "QO2-1e-3": 53.115853989,
+        "QO2-1e-4": 66.894804462,
+        "QO2-3e-4": 59.948723621
+      },
+      "instance_hash": "248427603aad0881",
+      "instance_id": "lunar_ice_030_126_seed632300126",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 33.903452097,
+      "portfolio_ratio": 0.44155812586054405,
+      "q0_wall_sec": 76.781402292,
+      "qg2_captured_portfolio_savings_fraction": 0.5519281634353789,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 53.115853989,
+      "qg2_reachable_ratio": 0.691780202020799,
+      "qg2_vs_portfolio_wall_gap_sec": 19.212401892000003,
+      "scale": 30,
+      "state": "0ea5fbf30367ed20"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 167.542148042,
+        "QD1": 69.813891699,
+        "QO2-1e-3": 103.657031006,
+        "QO2-1e-4": 141.959164725,
+        "QO2-3e-4": 124.821084496
+      },
+      "instance_hash": "51b90dda9d2abf61",
+      "instance_id": "lunar_ice_030_109_seed632300109",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 69.813891699,
+      "portfolio_ratio": 0.4166945005474015,
+      "q0_wall_sec": 167.542148042,
+      "qg2_captured_portfolio_savings_fraction": 0.6537015948773337,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 103.657031006,
+      "qg2_reachable_ratio": 0.6186922647071167,
+      "qg2_vs_portfolio_wall_gap_sec": 33.843139307,
+      "scale": 30,
+      "state": "19e72715bb853acf"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 12.909284152,
+        "QD1": 30.611774731,
+        "QO2-1e-3": 11.986654012,
+        "QO2-1e-4": 12.689009829,
+        "QO2-3e-4": 12.424354467
+      },
+      "instance_hash": "9fa1d77397fab408",
+      "instance_id": "lunar_ice_030_066_seed632300066",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 11.986654012,
+      "portfolio_ratio": 0.928529721002612,
+      "q0_wall_sec": 12.909284152,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 11.986654012,
+      "qg2_reachable_ratio": 0.928529721002612,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "1abad38befcc5339"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 15.960758043,
+        "QB1": 30.804098116,
+        "QD1": 12.815566318,
+        "QO2-1e-3": 14.695827984,
+        "QO2-1e-4": 16.054598218,
+        "QO2-3e-4": 15.428830462
+      },
+      "instance_hash": "831e69b4363329cf",
+      "instance_id": "lunar_ice_030_011_seed110734001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 12.815566318,
+      "portfolio_ratio": 0.8029422088520787,
+      "q0_wall_sec": 15.960758043,
+      "qg2_captured_portfolio_savings_fraction": 0.40217899880173474,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 14.695827984,
+      "qg2_reachable_ratio": 0.9207474948500477,
+      "qg2_vs_portfolio_wall_gap_sec": 1.880261665999999,
+      "scale": 30,
+      "state": "1ddbce8dde86e8df"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 101.797006359,
+        "QD1": 69.425651324,
+        "QO2-1e-3": 77.955010769,
+        "QO2-1e-4": 86.613622701,
+        "QO2-3e-4": 80.50222122
+      },
+      "instance_hash": "995da11ced96f7ca",
+      "instance_id": "lunar_ice_030_028_seed110751001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 69.425651324,
+      "portfolio_ratio": 0.6820009134567443,
+      "q0_wall_sec": 101.797006359,
+      "qg2_captured_portfolio_savings_fraction": 0.7365152173649193,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 77.955010769,
+      "qg2_reachable_ratio": 0.7657888336527482,
+      "qg2_vs_portfolio_wall_gap_sec": 8.529359444999997,
+      "scale": 30,
+      "state": "26b8797e9e8cc7de"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached",
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 168.433402934,
+        "QO2-1e-3": 65.901225938,
+        "QO2-1e-4": 68.406082527,
+        "QO2-3e-4": 166.858631248
+      },
+      "instance_hash": "5fda46f898f2bd5f",
+      "instance_id": "lunar_ice_030_059_seed632300059",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 65.901225938,
+      "portfolio_ratio": 0.3912598379540141,
+      "q0_wall_sec": 168.433402934,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 65.901225938,
+      "qg2_reachable_ratio": 0.3912598379540141,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "27717a8e4111f20c"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 65.251793697,
+        "QB1": 7.950633694,
+        "QD1": 62.468903119,
+        "QO2-1e-3": 63.357569903,
+        "QO2-1e-4": 62.436128771,
+        "QO2-3e-4": 63.175545638
+      },
+      "instance_hash": "1a9130da05e88f03",
+      "instance_id": "lunar_ice_030_101_seed632300101",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 7.950633694,
+      "portfolio_ratio": 0.12184544276160698,
+      "q0_wall_sec": 65.251793697,
+      "qg2_captured_portfolio_savings_fraction": 0.04913800917560104,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 62.436128771,
+      "qg2_reachable_ratio": 0.956849233308824,
+      "qg2_vs_portfolio_wall_gap_sec": 54.485495076999996,
+      "scale": 30,
+      "state": "2913c80881a2d052"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 47.539950716,
+        "QB1": 8.991757285,
+        "QD1": 54.733263265,
+        "QO2-1e-3": 58.474889356,
+        "QO2-1e-4": 45.705224774,
+        "QO2-3e-4": 45.420605888
+      },
+      "instance_hash": "1a9130da05e88f03",
+      "instance_id": "lunar_ice_030_101_seed632300101",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 8.991757285,
+      "portfolio_ratio": 0.189141072920249,
+      "q0_wall_sec": 47.539950716,
+      "qg2_captured_portfolio_savings_fraction": 0.054979096018949895,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 45.420605888,
+      "qg2_reachable_ratio": 0.9554197091902596,
+      "qg2_vs_portfolio_wall_gap_sec": 36.428848603,
+      "scale": 30,
+      "state": "291fa839b1ad94b7"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 87.464214242,
+        "QD1": 95.114023925,
+        "QO2-1e-3": 53.547294167,
+        "QO2-1e-4": 78.495116739,
+        "QO2-3e-4": 73.227900823
+      },
+      "instance_hash": "96f6303ced3f6403",
+      "instance_id": "lunar_ice_030_021_seed110744001",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 53.547294167,
+      "portfolio_ratio": 0.612219461765733,
+      "q0_wall_sec": 87.464214242,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 53.547294167,
+      "qg2_reachable_ratio": 0.612219461765733,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "2de2d747885e19a8"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 10.785000143,
+        "QB1": 14.238837935,
+        "QD1": 6.543556002,
+        "QO2-1e-3": 9.02353433,
+        "QO2-1e-4": 10.249836732,
+        "QO2-3e-4": 9.694403202
+      },
+      "instance_hash": "3f9bde0203d56eae",
+      "instance_id": "lunar_ice_030_041_seed632300041",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 6.543556002,
+      "portfolio_ratio": 0.6067274840276282,
+      "q0_wall_sec": 10.785000143,
+      "qg2_captured_portfolio_savings_fraction": 0.4152985998265913,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 9.02353433,
+      "qg2_reachable_ratio": 0.8366744747663932,
+      "qg2_vs_portfolio_wall_gap_sec": 2.4799783280000005,
+      "scale": 30,
+      "state": "30eb79381d6557a2"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 65.754453003,
+        "QB1": 31.396334391,
+        "QD1": 65.786124036,
+        "QO2-1e-3": 66.853665662,
+        "QO2-1e-4": 64.326457713,
+        "QO2-3e-4": 63.284710448
+      },
+      "instance_hash": "12a30b66f6e6de3f",
+      "instance_id": "lunar_ice_030_070_seed632300070",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 31.396334391,
+      "portfolio_ratio": 0.4774784513767846,
+      "q0_wall_sec": 65.754453003,
+      "qg2_captured_portfolio_savings_fraction": 0.07188235720617742,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 63.284710448,
+      "qg2_reachable_ratio": 0.962439919393941,
+      "qg2_vs_portfolio_wall_gap_sec": 31.888376057,
+      "scale": 30,
+      "state": "32e86e58d4f131bb"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 40.571378066,
+        "QB1": 52.403666013,
+        "QD1": 42.843922168,
+        "QO2-1e-3": 35.866861528,
+        "QO2-1e-4": 37.940285419,
+        "QO2-3e-4": 38.089475133
+      },
+      "instance_hash": "79465fb090a5ac00",
+      "instance_id": "lunar_ice_030_056_seed632300056",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 35.866861528,
+      "portfolio_ratio": 0.8840434621090053,
+      "q0_wall_sec": 40.571378066,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 35.866861528,
+      "qg2_reachable_ratio": 0.8840434621090053,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "33d8bb58da67b242"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 24.256988364,
+        "QD1": 77.541595865,
+        "QO2-1e-3": 33.740667183,
+        "QO2-1e-4": 29.10035465,
+        "QO2-3e-4": 31.537134193
+      },
+      "instance_hash": "6553f2b929bc25cc",
+      "instance_id": "lunar_ice_030_034_seed110757001",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "Q0",
+      "portfolio_best_wall_sec": 24.256988364,
+      "portfolio_ratio": 1.0,
+      "q0_wall_sec": 24.256988364,
+      "qg2_captured_portfolio_savings_fraction": null,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 24.256988364,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "3724177f190b230d"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 100.087175476,
+        "QB1": 165.816088084,
+        "QD1": 44.86300655,
+        "QO2-1e-3": 75.537179763,
+        "QO2-1e-4": 90.265235869,
+        "QO2-3e-4": 83.466586238
+      },
+      "instance_hash": "c3b9c7d847f8b423",
+      "instance_id": "lunar_ice_030_002_seed110725001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 44.86300655,
+      "portfolio_ratio": 0.448239310747237,
+      "q0_wall_sec": 100.087175476,
+      "qg2_captured_portfolio_savings_fraction": 0.4445516553793109,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 75.537179763,
+      "qg2_reachable_ratio": 0.7547138722194546,
+      "qg2_vs_portfolio_wall_gap_sec": 30.674173212999996,
+      "scale": 30,
+      "state": "4610015a96caa710"
+    },
+    {
+      "arm_rejections": {
+        "QO2-1e-3": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 131.840770501,
+        "QB1": 23.092257527,
+        "QD1": 131.042159039,
+        "QO2-1e-4": 155.452990319,
+        "QO2-3e-4": 172.121718024
+      },
+      "instance_hash": "5934796ee8a488f2",
+      "instance_id": "lunar_ice_030_094_seed632300094",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 23.092257527,
+      "portfolio_ratio": 0.17515262872970577,
+      "q0_wall_sec": 131.840770501,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 131.840770501,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 108.74851297400001,
+      "scale": 30,
+      "state": "497c5e34d74915b0"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 31.642196839,
+        "QB1": 46.299876204,
+        "QD1": 13.090429042,
+        "QO2-1e-3": 21.862844831,
+        "QO2-1e-4": 27.175233857,
+        "QO2-3e-4": 24.255844453
+      },
+      "instance_hash": "2a0f316fcfb9669b",
+      "instance_id": "lunar_ice_030_098_seed632300098",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 13.090429042,
+      "portfolio_ratio": 0.4137016500025572,
+      "q0_wall_sec": 31.642196839,
+      "qg2_captured_portfolio_savings_fraction": 0.5271385517007935,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 21.862844831,
+      "qg2_reachable_ratio": 0.6909395369177831,
+      "qg2_vs_portfolio_wall_gap_sec": 8.772415789,
+      "scale": 30,
+      "state": "4feb1c95a06ab532"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached",
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 83.213959059,
+        "QO2-1e-3": 78.218434337,
+        "QO2-1e-4": 83.118036602,
+        "QO2-3e-4": 81.529017374
+      },
+      "instance_hash": "38b3ec633be999e5",
+      "instance_id": "lunar_ice_030_086_seed632300086",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 78.218434337,
+      "portfolio_ratio": 0.9399677075998981,
+      "q0_wall_sec": 83.213959059,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 78.218434337,
+      "qg2_reachable_ratio": 0.9399677075998981,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "52fd6757921bc003"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 59.444183861,
+        "QB1": 21.140676647,
+        "QD1": 81.387817166,
+        "QO2-1e-3": 62.117427619,
+        "QO2-1e-4": 62.319006453,
+        "QO2-3e-4": 61.396160509
+      },
+      "instance_hash": "77ed9bbec5af4873",
+      "instance_id": "lunar_ice_030_043_seed632300043",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 21.140676647,
+      "portfolio_ratio": 0.3556391100672496,
+      "q0_wall_sec": 59.444183861,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 59.444183861,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 38.303507214,
+      "scale": 30,
+      "state": "56be0bd9eb6e0384"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 50.972217705,
+        "QB1": 126.177428824,
+        "QD1": 39.689593091,
+        "QO2-1e-3": 50.060157995,
+        "QO2-1e-4": 47.517828227,
+        "QO2-3e-4": 45.845696799
+      },
+      "instance_hash": "d2f474f3d84d8761",
+      "instance_id": "lunar_ice_030_054_seed632300054",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 39.689593091,
+      "portfolio_ratio": 0.7786514865941715,
+      "q0_wall_sec": 50.972217705,
+      "qg2_captured_portfolio_savings_fraction": 0.4543730808555638,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 45.845696799,
+      "qg2_reachable_ratio": 0.8994251940209946,
+      "qg2_vs_portfolio_wall_gap_sec": 6.156103708000003,
+      "scale": 30,
+      "state": "60907ca4dc9d5ec4"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 103.54273924,
+        "QD1": 102.845551026,
+        "QO2-1e-3": 108.902944968,
+        "QO2-1e-4": 103.464910327,
+        "QO2-3e-4": 101.581622812
+      },
+      "instance_hash": "229210b89129ea7e",
+      "instance_id": "lunar_ice_030_075_seed632300075",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-3e-4",
+      "portfolio_best_wall_sec": 101.581622812,
+      "portfolio_ratio": 0.9810598363304417,
+      "q0_wall_sec": 103.54273924,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 101.581622812,
+      "qg2_reachable_ratio": 0.9810598363304417,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "72e84a7791afbd49"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 123.454420233,
+        "QD1": 60.764170725,
+        "QO2-1e-3": 132.349370753,
+        "QO2-1e-4": 171.475715175,
+        "QO2-3e-4": 151.866569285
+      },
+      "instance_hash": "0a9152c93c7ba288",
+      "instance_id": "lunar_ice_030_015_seed110738001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 60.764170725,
+      "portfolio_ratio": 0.49219923118441267,
+      "q0_wall_sec": 123.454420233,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 123.454420233,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 62.690249507999994,
+      "scale": 30,
+      "state": "747a11313ab9d9c3"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 41.393606049,
+        "QB1": 61.521605673,
+        "QD1": 16.770631632,
+        "QO2-1e-3": 30.343770754,
+        "QO2-1e-4": 38.779753515,
+        "QO2-3e-4": 33.548424474
+      },
+      "instance_hash": "1439b9d3d4c6ed00",
+      "instance_id": "lunar_ice_030_110_seed632300110",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 16.770631632,
+      "portfolio_ratio": 0.4051502933121516,
+      "q0_wall_sec": 41.393606049,
+      "qg2_captured_portfolio_savings_fraction": 0.4487611897680021,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 30.343770754,
+      "qg2_reachable_ratio": 0.7330545378936141,
+      "qg2_vs_portfolio_wall_gap_sec": 13.573139122,
+      "scale": 30,
+      "state": "792b51991dc86887"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 154.495711929,
+        "QD1": 101.560403569,
+        "QO2-1e-3": 137.85667324,
+        "QO2-1e-4": 135.152791802,
+        "QO2-3e-4": 140.488192135
+      },
+      "instance_hash": "830ee211746512ff",
+      "instance_id": "lunar_ice_030_012_seed110735001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 101.560403569,
+      "portfolio_ratio": 0.6573671353135876,
+      "q0_wall_sec": 154.495711929,
+      "qg2_captured_portfolio_savings_fraction": 0.3654067715154047,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 135.152791802,
+      "qg2_reachable_ratio": 0.8747996310998636,
+      "qg2_vs_portfolio_wall_gap_sec": 33.592388232999994,
+      "scale": 30,
+      "state": "79c7fb7c790bea6d"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 16.844689001,
+        "QD1": 51.682926582,
+        "QO2-1e-3": 12.533698711,
+        "QO2-1e-4": 16.196823835,
+        "QO2-3e-4": 16.126987389
+      },
+      "instance_hash": "4a7cf63a9c0ca6f7",
+      "instance_id": "lunar_ice_030_007_seed110730001",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 12.533698711,
+      "portfolio_ratio": 0.7440742129614816,
+      "q0_wall_sec": 16.844689001,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 12.533698711,
+      "qg2_reachable_ratio": 0.7440742129614816,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "7cb677b7f1db80a9"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 92.679271512,
+        "QD1": 41.783888455,
+        "QO2-1e-3": 68.298535367,
+        "QO2-1e-4": 83.011437174,
+        "QO2-3e-4": 76.815159229
+      },
+      "instance_hash": "b6920c9729d30e20",
+      "instance_id": "lunar_ice_030_035_seed110758001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 41.783888455,
+      "portfolio_ratio": 0.4508439457208064,
+      "q0_wall_sec": 92.679271512,
+      "qg2_captured_portfolio_savings_fraction": 0.4790363031101452,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 68.298535367,
+      "qg2_reachable_ratio": 0.7369343139275408,
+      "qg2_vs_portfolio_wall_gap_sec": 26.514646911999996,
+      "scale": 30,
+      "state": "7cbf653c37f17b17"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 34.073244882,
+        "QD1": 30.523832928,
+        "QO2-1e-3": 29.518308522,
+        "QO2-1e-4": 32.034064818,
+        "QO2-3e-4": 31.108897767
+      },
+      "instance_hash": "e30c0d8ad2c7ac2b",
+      "instance_id": "lunar_ice_030_073_seed632300073",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 29.518308522,
+      "portfolio_ratio": 0.8663192667509559,
+      "q0_wall_sec": 34.073244882,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 29.518308522,
+      "qg2_reachable_ratio": 0.8663192667509559,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "7f1fe560ac6d0b5f"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 121.256089482,
+        "QD1": 121.319914131,
+        "QO2-1e-3": 108.547703602,
+        "QO2-1e-4": 119.086248455,
+        "QO2-3e-4": 112.537746311
+      },
+      "instance_hash": "d7a0f727eac6dce2",
+      "instance_id": "lunar_ice_030_037_seed110760001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 108.547703602,
+      "portfolio_ratio": 0.8951938336928925,
+      "q0_wall_sec": 121.256089482,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 108.547703602,
+      "qg2_reachable_ratio": 0.8951938336928925,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "80c2d460212806de"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 102.478282658,
+        "QB1": 174.588524937,
+        "QO2-1e-3": 98.763181689,
+        "QO2-1e-4": 99.670159382,
+        "QO2-3e-4": 96.294080986
+      },
+      "instance_hash": "0d7bbbfb6b4d7f5b",
+      "instance_id": "lunar_ice_030_036_seed110759001",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-3e-4",
+      "portfolio_best_wall_sec": 96.294080986,
+      "portfolio_ratio": 0.9396535391538665,
+      "q0_wall_sec": 102.478282658,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 96.294080986,
+      "qg2_reachable_ratio": 0.9396535391538665,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "83c5efcc57ed3bf2"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 56.690660577,
+        "QB1": 17.10496641,
+        "QD1": 108.986763918,
+        "QO2-1e-3": 68.002368133,
+        "QO2-1e-4": 54.888372274,
+        "QO2-3e-4": 53.554692211
+      },
+      "instance_hash": "5fda46f898f2bd5f",
+      "instance_id": "lunar_ice_030_059_seed632300059",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 17.10496641,
+      "portfolio_ratio": 0.30172459159771486,
+      "q0_wall_sec": 56.690660577,
+      "qg2_captured_portfolio_savings_fraction": 0.07921973915046945,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 53.554692211,
+      "qg2_reachable_ratio": 0.9446828042911835,
+      "qg2_vs_portfolio_wall_gap_sec": 36.449725801,
+      "scale": 30,
+      "state": "8ae977e32ed7977a"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 30.637292609,
+        "QB1": 46.506582027,
+        "QD1": 54.341972267,
+        "QO2-1e-3": 27.151686213,
+        "QO2-1e-4": 35.886783678,
+        "QO2-3e-4": 34.705486983
+      },
+      "instance_hash": "027604d9c2416adc",
+      "instance_id": "lunar_ice_030_105_seed632300105",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 27.151686213,
+      "portfolio_ratio": 0.8862299472579354,
+      "q0_wall_sec": 30.637292609,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 27.151686213,
+      "qg2_reachable_ratio": 0.8862299472579354,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "94204d1de2a0c0a7"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 64.442410324,
+        "QB1": 151.437893265,
+        "QD1": 39.148383407,
+        "QO2-1e-3": 49.13905865,
+        "QO2-1e-4": 57.21842584,
+        "QO2-3e-4": 53.079746715
+      },
+      "instance_hash": "863728aa71054a7f",
+      "instance_id": "lunar_ice_030_072_seed632300072",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 39.148383407,
+      "portfolio_ratio": 0.6074940898419522,
+      "q0_wall_sec": 64.442410324,
+      "qg2_captured_portfolio_savings_fraction": 0.6050183991744976,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 49.13905865,
+      "qg2_reachable_ratio": 0.7625267025696487,
+      "qg2_vs_portfolio_wall_gap_sec": 9.990675243000005,
+      "scale": 30,
+      "state": "946ba5d9b79b01b8"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 50.345863723,
+        "QB1": 4.95985152,
+        "QD1": 61.688577028,
+        "QO2-1e-3": 47.962282823,
+        "QO2-1e-4": 49.570866762,
+        "QO2-3e-4": 49.35962419
+      },
+      "instance_hash": "dd9421dffc9608a0",
+      "instance_id": "lunar_ice_030_042_seed632300042",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.95985152,
+      "portfolio_ratio": 0.09851557115573215,
+      "q0_wall_sec": 50.345863723,
+      "qg2_captured_portfolio_savings_fraction": 0.05251796278859777,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 47.962282823,
+      "qg2_reachable_ratio": 0.9526558743114564,
+      "qg2_vs_portfolio_wall_gap_sec": 43.002431303,
+      "scale": 30,
+      "state": "9779ce2d629fcf63"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 100.282878447,
+        "QB1": 145.271285455,
+        "QD1": 43.872218974,
+        "QO2-1e-3": 71.061528835,
+        "QO2-1e-4": 88.575661485,
+        "QO2-3e-4": 81.452282499
+      },
+      "instance_hash": "7a1df5c6320b09df",
+      "instance_id": "lunar_ice_030_115_seed632300115",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 43.872218974,
+      "portfolio_ratio": 0.4374846399845482,
+      "q0_wall_sec": 100.282878447,
+      "qg2_captured_portfolio_savings_fraction": 0.5180111327361152,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 71.061528835,
+      "qg2_reachable_ratio": 0.7086107811769321,
+      "qg2_vs_portfolio_wall_gap_sec": 27.189309861000005,
+      "scale": 30,
+      "state": "a5e465f3e9c78e11"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 35.026768792,
+        "QB1": 52.43850245,
+        "QD1": 17.470851465,
+        "QO2-1e-3": 29.074512232,
+        "QO2-1e-4": 32.431918578,
+        "QO2-3e-4": 32.585353944
+      },
+      "instance_hash": "34ba2a2e8e3725fa",
+      "instance_id": "lunar_ice_030_103_seed632300103",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 17.470851465,
+      "portfolio_ratio": 0.4987857021224945,
+      "q0_wall_sec": 35.026768792,
+      "qg2_captured_portfolio_savings_fraction": 0.3390456020686408,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 29.074512232,
+      "qg2_reachable_ratio": 0.83006549661071,
+      "qg2_vs_portfolio_wall_gap_sec": 11.603660767000001,
+      "scale": 30,
+      "state": "a91eaa8f0cdd1173"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 77.738755238,
+        "QB1": 171.602365525,
+        "QD1": 45.205258016,
+        "QO2-1e-3": 54.631884161,
+        "QO2-1e-4": 67.508620846,
+        "QO2-3e-4": 60.705060634
+      },
+      "instance_hash": "24771c432e246bea",
+      "instance_id": "lunar_ice_030_106_seed632300106",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 45.205258016,
+      "portfolio_ratio": 0.5815022105461102,
+      "q0_wall_sec": 77.738755238,
+      "qg2_captured_portfolio_savings_fraction": 0.7102486068228328,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 54.631884161,
+      "qg2_reachable_ratio": 0.7027625280819396,
+      "qg2_vs_portfolio_wall_gap_sec": 9.426626145,
+      "scale": 30,
+      "state": "ac64f3c3b4b10571"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 105.326717932,
+        "QD1": 86.902670629,
+        "QO2-1e-3": 102.60369767,
+        "QO2-1e-4": 107.042257336,
+        "QO2-3e-4": 103.729215706
+      },
+      "instance_hash": "1236f04130e9423e",
+      "instance_id": "lunar_ice_030_008_seed110731001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 86.902670629,
+      "portfolio_ratio": 0.8250771725850724,
+      "q0_wall_sec": 105.326717932,
+      "qg2_captured_portfolio_savings_fraction": 0.14779707288075628,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 102.60369767,
+      "qg2_reachable_ratio": 0.974146918128048,
+      "qg2_vs_portfolio_wall_gap_sec": 15.701027041000003,
+      "scale": 30,
+      "state": "ace0fcec71ae1278"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 86.888536757,
+        "QB1": 166.333291954,
+        "QD1": 42.497651309,
+        "QO2-1e-3": 65.375901911,
+        "QO2-1e-4": 78.250656713,
+        "QO2-3e-4": 72.171746074
+      },
+      "instance_hash": "a94723f77fc4d316",
+      "instance_id": "lunar_ice_030_085_seed632300085",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 42.497651309,
+      "portfolio_ratio": 0.4891053859941572,
+      "q0_wall_sec": 86.888536757,
+      "qg2_captured_portfolio_savings_fraction": 0.484618286589488,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 65.375901911,
+      "qg2_reachable_ratio": 0.7524111275326906,
+      "qg2_vs_portfolio_wall_gap_sec": 22.878250602,
+      "scale": 30,
+      "state": "c00afaacd7cfc3d6"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 23.012197445,
+        "QB1": 16.952334267,
+        "QD1": 23.770358529,
+        "QO2-1e-3": 22.855477089,
+        "QO2-1e-4": 23.277110842,
+        "QO2-3e-4": 22.996580294
+      },
+      "instance_hash": "5934796ee8a488f2",
+      "instance_id": "lunar_ice_030_094_seed632300094",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 16.952334267,
+      "portfolio_ratio": 0.7366673394627655,
+      "q0_wall_sec": 23.012197445,
+      "qg2_captured_portfolio_savings_fraction": 0.025862028794472722,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 22.855477089,
+      "qg2_reachable_ratio": 0.9931896831506609,
+      "qg2_vs_portfolio_wall_gap_sec": 5.9031428219999995,
+      "scale": 30,
+      "state": "c8aba5ae5467e827"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 29.768946428,
+        "QB1": 38.853386999,
+        "QD1": 44.093498464,
+        "QO2-1e-3": 27.017087992,
+        "QO2-1e-4": 28.929518408,
+        "QO2-3e-4": 28.31917717
+      },
+      "instance_hash": "79465fb090a5ac00",
+      "instance_id": "lunar_ice_030_056_seed632300056",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 27.017087992,
+      "portfolio_ratio": 0.9075594279879632,
+      "q0_wall_sec": 29.768946428,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 27.017087992,
+      "qg2_reachable_ratio": 0.9075594279879632,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "cb6d0d57f7bf745a"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 18.227153843,
+        "QB1": 27.76686207,
+        "QD1": 15.866976049,
+        "QO2-1e-3": 14.662476907,
+        "QO2-1e-4": 17.16843179,
+        "QO2-3e-4": 15.863142951
+      },
+      "instance_hash": "053bf945b783c592",
+      "instance_id": "lunar_ice_030_017_seed110740001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 14.662476907,
+      "portfolio_ratio": 0.8044304137275394,
+      "q0_wall_sec": 18.227153843,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 14.662476907,
+      "qg2_reachable_ratio": 0.8044304137275394,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 30,
+      "state": "d153bca0d18cb4ae"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 166.355413195,
+        "QD1": 157.033638168,
+        "QO2-1e-3": 168.357056843,
+        "QO2-1e-4": 166.278953822,
+        "QO2-3e-4": 160.391203639
+      },
+      "instance_hash": "dc1edbae6691a809",
+      "instance_id": "lunar_ice_030_051_seed632300051",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 157.033638168,
+      "portfolio_ratio": 0.9439647027531763,
+      "q0_wall_sec": 166.355413195,
+      "qg2_captured_portfolio_savings_fraction": 0.6398147926467882,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 160.391203639,
+      "qg2_reachable_ratio": 0.9641477879111223,
+      "qg2_vs_portfolio_wall_gap_sec": 3.3575654709999867,
+      "scale": 30,
+      "state": "e2376880e89ec3e8"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 30.625020038,
+        "QB1": 24.076518796,
+        "QD1": 31.697357173,
+        "QO2-1e-3": 26.186372321,
+        "QO2-1e-4": 30.637812111,
+        "QO2-3e-4": 30.788071588
+      },
+      "instance_hash": "5934796ee8a488f2",
+      "instance_id": "lunar_ice_030_094_seed632300094",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 24.076518796,
+      "portfolio_ratio": 0.7861715279247322,
+      "q0_wall_sec": 30.625020038,
+      "qg2_captured_portfolio_savings_fraction": 0.6778112354216147,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 26.186372321,
+      "qg2_reachable_ratio": 0.8550646591743465,
+      "qg2_vs_portfolio_wall_gap_sec": 2.109853525000002,
+      "scale": 30,
+      "state": "e6eae8eaca37de9d"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 71.356519038,
+        "QB1": 119.938678183,
+        "QD1": 49.352335321,
+        "QO2-1e-3": 73.374181532,
+        "QO2-1e-4": 68.610923331,
+        "QO2-3e-4": 67.713493202
+      },
+      "instance_hash": "e10961c0987ab982",
+      "instance_id": "lunar_ice_030_124_seed632300124",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 49.352335321,
+      "portfolio_ratio": 0.6916303651908531,
+      "q0_wall_sec": 71.356519038,
+      "qg2_captured_portfolio_savings_fraction": 0.16556059896852596,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 67.713493202,
+      "qg2_reachable_ratio": 0.948946138557292,
+      "qg2_vs_portfolio_wall_gap_sec": 18.361157880999997,
+      "scale": 30,
+      "state": "f26ae850372e5c04"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 42.883664354,
+        "QB1": 107.26415038,
+        "QD1": 30.378426427,
+        "QO2-1e-3": 35.33971859,
+        "QO2-1e-4": 39.510804945,
+        "QO2-3e-4": 37.323434966
+      },
+      "instance_hash": "22579bbbcbaa414b",
+      "instance_id": "lunar_ice_030_040_seed110763001",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 30.378426427,
+      "portfolio_ratio": 0.7083915725165039,
+      "q0_wall_sec": 42.883664354,
+      "qg2_captured_portfolio_savings_fraction": 0.603262873368599,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 35.33971859,
+      "qg2_reachable_ratio": 0.8240834621378074,
+      "qg2_vs_portfolio_wall_gap_sec": 4.961292162999996,
+      "scale": 30,
+      "state": "f7382cec3c84c931"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 31.636783943,
+        "QB1": 43.144433544,
+        "QD1": 17.804555292,
+        "QO2-1e-3": 22.0039924,
+        "QO2-1e-4": 27.259824835,
+        "QO2-3e-4": 24.784805184
+      },
+      "instance_hash": "0afaabfe6aefb49e",
+      "instance_id": "lunar_ice_030_078_seed632300078",
+      "milestone": "EXACT_PROOF_COMPLETION",
+      "portfolio_best_arm": "QD1",
+      "portfolio_best_wall_sec": 17.804555292,
+      "portfolio_ratio": 0.5627801904289156,
+      "q0_wall_sec": 31.636783943,
+      "qg2_captured_portfolio_savings_fraction": 0.6964019888655901,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 22.0039924,
+      "qg2_reachable_ratio": 0.6955192550432623,
+      "qg2_vs_portfolio_wall_gap_sec": 4.1994371080000015,
+      "scale": 30,
+      "state": "f8b3522497fb271f"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 56.675951273,
+        "QB1": 53.646406371,
+        "QD1": 68.221661309,
+        "QO2-1e-3": 56.164645727,
+        "QO2-1e-4": 57.218800403,
+        "QO2-3e-4": 56.195955321
+      },
+      "instance_hash": "d0cb83991f4a3d59",
+      "instance_id": "lunar_ice_030_027_seed110750001",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 53.646406371,
+      "portfolio_ratio": 0.946546201096703,
+      "q0_wall_sec": 56.675951273,
+      "qg2_captured_portfolio_savings_fraction": 0.16877305421763372,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 56.164645727,
+      "qg2_reachable_ratio": 0.9909784390995554,
+      "qg2_vs_portfolio_wall_gap_sec": 2.5182393560000023,
+      "scale": 30,
+      "state": "ff6d6bd53f712bfe"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 116.478674171,
+        "QB1": 46.327164947,
+        "QD1": 216.888721556,
+        "QO2-1e-3": 118.08799539,
+        "QO2-1e-4": 119.747555336,
+        "QO2-3e-4": 115.689943388
+      },
+      "instance_hash": "3cbfb731b3d781d3",
+      "instance_id": "lunar_ice_050_035_seed631500035",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 46.327164947,
+      "portfolio_ratio": 0.39773087457183814,
+      "q0_wall_sec": 116.478674171,
+      "qg2_captured_portfolio_savings_fraction": 0.011243247532729535,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 115.689943388,
+      "qg2_reachable_ratio": 0.9932285391414907,
+      "qg2_vs_portfolio_wall_gap_sec": 69.362778441,
+      "scale": 50,
+      "state": "00173add273df865"
+    },
+    {
+      "arm_rejections": {
+        "QO2-1e-3": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 43.524350469,
+        "QB1": 75.917942484,
+        "QD1": 71.518097283,
+        "QO2-1e-4": 40.577661395,
+        "QO2-3e-4": 38.10444777
+      },
+      "instance_hash": "25362ff2e151d215",
+      "instance_id": "lunar_ice_050_093_seed631500093",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-3e-4",
+      "portfolio_best_wall_sec": 38.10444777,
+      "portfolio_ratio": 0.8754742427951844,
+      "q0_wall_sec": 43.524350469,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 38.10444777,
+      "qg2_reachable_ratio": 0.8754742427951844,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 50,
+      "state": "030aca1e5fc09bc6"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached",
+        "QO2-1e-3": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 264.669047897,
+        "QB1": 6.858762166,
+        "QO2-1e-4": 264.00705239,
+        "QO2-3e-4": 234.519253524
+      },
+      "instance_hash": "3aa65934f64e17a6",
+      "instance_id": "lunar_ice_050_104_seed631500104",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 6.858762166,
+      "portfolio_ratio": 0.025914485356327698,
+      "q0_wall_sec": 264.669047897,
+      "qg2_captured_portfolio_savings_fraction": 0.11694566137077393,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 234.519253524,
+      "qg2_reachable_ratio": 0.8860849252583051,
+      "qg2_vs_portfolio_wall_gap_sec": 227.660491358,
+      "scale": 50,
+      "state": "049f5f3f50330101"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 157.838365395,
+        "QB1": 23.085408533,
+        "QO2-1e-3": 142.060925603,
+        "QO2-1e-4": 156.243700145,
+        "QO2-3e-4": 152.992033579
+      },
+      "instance_hash": "3cbfb731b3d781d3",
+      "instance_id": "lunar_ice_050_035_seed631500035",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 23.085408533,
+      "portfolio_ratio": 0.1462598049290955,
+      "q0_wall_sec": 157.838365395,
+      "qg2_captured_portfolio_savings_fraction": 0.11708418248779237,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 142.060925603,
+      "qg2_reachable_ratio": 0.9000405272031547,
+      "qg2_vs_portfolio_wall_gap_sec": 118.97551707,
+      "scale": 50,
+      "state": "07c2054d2c7e0330"
+    },
+    {
+      "arm_rejections": {
+        "QO2-1e-3": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 116.846474806,
+        "QB1": 3.611688639,
+        "QD1": 244.964498848,
+        "QO2-1e-4": 110.552749196,
+        "QO2-3e-4": 108.213789449
+      },
+      "instance_hash": "4baed4484d49cbd3",
+      "instance_id": "lunar_ice_050_004_seed631500004",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 3.611688639,
+      "portfolio_ratio": 0.03090969278274317,
+      "q0_wall_sec": 116.846474806,
+      "qg2_captured_portfolio_savings_fraction": 0.0762370438379988,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 108.213789449,
+      "qg2_reachable_ratio": 0.9261194197656982,
+      "qg2_vs_portfolio_wall_gap_sec": 104.60210081000001,
+      "scale": 50,
+      "state": "08f7fb28cebb7c56"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 178.914134524,
+        "QB1": 5.075088564,
+        "QO2-1e-3": 145.319617096,
+        "QO2-1e-4": 162.679478051,
+        "QO2-3e-4": 159.081085056
+      },
+      "instance_hash": "189d17ab40641fe6",
+      "instance_id": "lunar_ice_050_042_seed631500042",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 5.075088564,
+      "portfolio_ratio": 0.02836605714524592,
+      "q0_wall_sec": 178.914134524,
+      "qg2_captured_portfolio_savings_fraction": 0.193250700626429,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 145.319617096,
+      "qg2_reachable_ratio": 0.8122310597908992,
+      "qg2_vs_portfolio_wall_gap_sec": 140.244528532,
+      "scale": 50,
+      "state": "1127b9c0702e2b13"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 265.5849773,
+        "QB1": 22.849795578,
+        "QO2-1e-3": 235.961537989,
+        "QO2-1e-4": 252.620879453,
+        "QO2-3e-4": 243.868284622
+      },
+      "instance_hash": "a2cd731ff1940372",
+      "instance_id": "lunar_ice_050_005_seed631500005",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 22.849795578,
+      "portfolio_ratio": 0.0860357231432909,
+      "q0_wall_sec": 265.5849773,
+      "qg2_captured_portfolio_savings_fraction": 0.12204015545190793,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 235.961537989,
+      "qg2_reachable_ratio": 0.8884596575749166,
+      "qg2_vs_portfolio_wall_gap_sec": 213.111742411,
+      "scale": 50,
+      "state": "16a0c17c5e1d9d2d"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 126.827220648,
+        "QB1": 12.972203185,
+        "QO2-1e-3": 177.355418524,
+        "QO2-1e-4": 175.138545798,
+        "QO2-3e-4": 175.487223418
+      },
+      "instance_hash": "76d79e95dddd8dbd",
+      "instance_id": "lunar_ice_050_082_seed631500082",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 12.972203185,
+      "portfolio_ratio": 0.10228248414434181,
+      "q0_wall_sec": 126.827220648,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 126.827220648,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 113.855017463,
+      "scale": 50,
+      "state": "1cd4ca8822f6c7e9"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 53.653183309,
+        "QB1": 9.787518323,
+        "QO2-1e-3": 45.983547733,
+        "QO2-1e-4": 51.672479591,
+        "QO2-3e-4": 44.659041123
+      },
+      "instance_hash": "8b2d5522e96f696c",
+      "instance_id": "lunar_ice_050_052_seed631500052",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 9.787518323,
+      "portfolio_ratio": 0.18242195000120717,
+      "q0_wall_sec": 53.653183309,
+      "qg2_captured_portfolio_savings_fraction": 0.20503831844041426,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 44.659041123,
+      "qg2_reachable_ratio": 0.8323651714344545,
+      "qg2_vs_portfolio_wall_gap_sec": 34.8715228,
+      "scale": 50,
+      "state": "1d687ee08e7da3ef"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 178.768580954,
+        "QB1": 8.883492992,
+        "QO2-1e-3": 171.745881367,
+        "QO2-1e-4": 208.490437768,
+        "QO2-3e-4": 139.38129701
+      },
+      "instance_hash": "e2351e6dee0cda61",
+      "instance_id": "lunar_ice_050_084_seed631500084",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 8.883492992,
+      "portfolio_ratio": 0.049692697366579566,
+      "q0_wall_sec": 178.768580954,
+      "qg2_captured_portfolio_savings_fraction": 0.23184662301149211,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 139.38129701,
+      "qg2_reachable_ratio": 0.7796744610612815,
+      "qg2_vs_portfolio_wall_gap_sec": 130.497804018,
+      "scale": 50,
+      "state": "21ae4ea2a6313f59"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 117.445147658,
+        "QB1": 18.268965205,
+        "QO2-1e-3": 105.190897799,
+        "QO2-1e-4": 114.33927716,
+        "QO2-3e-4": 111.076201733
+      },
+      "instance_hash": "a2cd731ff1940372",
+      "instance_id": "lunar_ice_050_005_seed631500005",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 18.268965205,
+      "portfolio_ratio": 0.15555317158099358,
+      "q0_wall_sec": 117.445147658,
+      "qg2_captured_portfolio_savings_fraction": 0.12356041093643969,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 105.190897799,
+      "qg2_reachable_ratio": 0.8956598028665744,
+      "qg2_vs_portfolio_wall_gap_sec": 86.921932594,
+      "scale": 50,
+      "state": "22dc7567b2e9f657"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 288.550496908,
+        "QB1": 8.585335359,
+        "QO2-1e-3": 188.773208034,
+        "QO2-1e-4": 273.294308339,
+        "QO2-3e-4": 272.087600857
+      },
+      "instance_hash": "99e1f3b86da616df",
+      "instance_id": "lunar_ice_050_094_seed631500094",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 8.585335359,
+      "portfolio_ratio": 0.029753320306141442,
+      "q0_wall_sec": 288.550496908,
+      "qg2_captured_portfolio_savings_fraction": 0.35639180361566813,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 188.773208034,
+      "qg2_reachable_ratio": 0.6542120358717923,
+      "qg2_vs_portfolio_wall_gap_sec": 180.187872675,
+      "scale": 50,
+      "state": "2693fc13a4757124"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 180.691834804,
+        "QB1": 16.378369711,
+        "QD1": 223.137209155,
+        "QO2-1e-3": 156.819813406,
+        "QO2-1e-4": 172.834986264,
+        "QO2-3e-4": 164.944310678
+      },
+      "instance_hash": "77502af9b5102b51",
+      "instance_id": "lunar_ice_050_064_seed631500064",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 16.378369711,
+      "portfolio_ratio": 0.09064255575668896,
+      "q0_wall_sec": 180.691834804,
+      "qg2_captured_portfolio_savings_fraction": 0.14528341535788702,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 156.819813406,
+      "qg2_reachable_ratio": 0.8678854447192125,
+      "qg2_vs_portfolio_wall_gap_sec": 140.441443695,
+      "scale": 50,
+      "state": "284dd0fd7301ceaf"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 98.238683823,
+        "QB1": 34.853890457,
+        "QO2-1e-3": 64.480451582,
+        "QO2-1e-4": 92.641306621,
+        "QO2-3e-4": 91.965143157
+      },
+      "instance_hash": "9c83fdb58474a9b3",
+      "instance_id": "lunar_ice_050_074_seed631500074",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 34.853890457,
+      "portfolio_ratio": 0.35478784019335446,
+      "q0_wall_sec": 98.238683823,
+      "qg2_captured_portfolio_savings_fraction": 0.5325919743253139,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 64.480451582,
+      "qg2_reachable_ratio": 0.6563651819498787,
+      "qg2_vs_portfolio_wall_gap_sec": 29.626561125000002,
+      "scale": 50,
+      "state": "2caf8d2c99997982"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 136.112149435,
+        "QB1": 6.313455052,
+        "QO2-1e-3": 73.530376112,
+        "QO2-1e-4": 62.048143447,
+        "QO2-3e-4": 62.372266416
+      },
+      "instance_hash": "4a28762bbff9ac24",
+      "instance_id": "lunar_ice_050_112_seed631500112",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 6.313455052,
+      "portfolio_ratio": 0.0463842138869093,
+      "q0_wall_sec": 136.112149435,
+      "qg2_captured_portfolio_savings_fraction": 0.5706067101835217,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 62.048143447,
+      "qg2_reachable_ratio": 0.4558604335069364,
+      "qg2_vs_portfolio_wall_gap_sec": 55.734688395,
+      "scale": 50,
+      "state": "35d0873ac21ca8d3"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 150.301150951,
+        "QB1": 3.628137582,
+        "QD1": 126.750644622,
+        "QO2-1e-3": 161.860900651,
+        "QO2-1e-4": 145.999934223,
+        "QO2-3e-4": 150.076835137
+      },
+      "instance_hash": "b70c6aba018e85d6",
+      "instance_id": "lunar_ice_050_044_seed631500044",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 3.628137582,
+      "portfolio_ratio": 0.024139120419529033,
+      "q0_wall_sec": 150.301150951,
+      "qg2_captured_portfolio_savings_fraction": 0.029325208702019448,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 145.999934223,
+      "qg2_reachable_ratio": 0.9713826760421664,
+      "qg2_vs_portfolio_wall_gap_sec": 142.371796641,
+      "scale": 50,
+      "state": "3d66dbba3038511b"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 26.47949097,
+        "QB1": 3.457331955,
+        "QD1": 65.721871814,
+        "QO2-1e-3": 30.356092703,
+        "QO2-1e-4": 24.948383515,
+        "QO2-3e-4": 23.844333575
+      },
+      "instance_hash": "12f7872a529a6186",
+      "instance_id": "lunar_ice_050_109_seed631500109",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 3.457331955,
+      "portfolio_ratio": 0.13056640548404017,
+      "q0_wall_sec": 26.47949097,
+      "qg2_captured_portfolio_savings_fraction": 0.11446178411343061,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 23.844333575,
+      "qg2_reachable_ratio": 0.9004830796035502,
+      "qg2_vs_portfolio_wall_gap_sec": 20.38700162,
+      "scale": 50,
+      "state": "3e7322a66c78cc05"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 55.540344418,
+        "QB1": 2.899578653,
+        "QD1": 141.584176684,
+        "QO2-1e-3": 63.387548937,
+        "QO2-1e-4": 53.10155496,
+        "QO2-3e-4": 51.740302587
+      },
+      "instance_hash": "912baccad9194515",
+      "instance_id": "lunar_ice_050_050_seed631500050",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 2.899578653,
+      "portfolio_ratio": 0.052206709976041835,
+      "q0_wall_sec": 55.540344418,
+      "qg2_captured_portfolio_savings_fraction": 0.07218819437323956,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 51.740302587,
+      "qg2_reachable_ratio": 0.9315805137540983,
+      "qg2_vs_portfolio_wall_gap_sec": 48.840723934,
+      "scale": 50,
+      "state": "41a056b792b14680"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached",
+        "QO2-1e-3": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 91.372502623,
+        "QB1": 76.353287072,
+        "QO2-1e-4": 91.418946146,
+        "QO2-3e-4": 130.602736371
+      },
+      "instance_hash": "4e152d825ab99e80",
+      "instance_id": "lunar_ice_050_089_seed631500089",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 76.353287072,
+      "portfolio_ratio": 0.8356265274579509,
+      "q0_wall_sec": 91.372502623,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 91.372502623,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 15.019215551000002,
+      "scale": 50,
+      "state": "4ef70d4e3cad6f6c"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 56.899615031,
+        "QB1": 12.609039792,
+        "QO2-1e-3": 60.081103413,
+        "QO2-1e-4": 61.133234919,
+        "QO2-3e-4": 61.642712352
+      },
+      "instance_hash": "2ada80d74596481e",
+      "instance_id": "lunar_ice_050_054_seed631500054",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 12.609039792,
+      "portfolio_ratio": 0.22160149563631237,
+      "q0_wall_sec": 56.899615031,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 56.899615031,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 44.290575239000006,
+      "scale": 50,
+      "state": "4f69beb82ccd69d4"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 138.867712675,
+        "QB1": 22.036331417,
+        "QO2-1e-3": 122.482998876,
+        "QO2-1e-4": 134.176540066,
+        "QO2-3e-4": 126.124807445
+      },
+      "instance_hash": "4d60769374b405cc",
+      "instance_id": "lunar_ice_050_017_seed631500017",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 22.036331417,
+      "portfolio_ratio": 0.15868578082345805,
+      "q0_wall_sec": 138.867712675,
+      "qg2_captured_portfolio_savings_fraction": 0.14024240424597453,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 122.482998876,
+      "qg2_reachable_ratio": 0.8820120711763569,
+      "qg2_vs_portfolio_wall_gap_sec": 100.446667459,
+      "scale": 50,
+      "state": "502156bff4e07d4d"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 77.943875827,
+        "QB1": 11.697836412,
+        "QO2-1e-3": 75.035015899,
+        "QO2-1e-4": 78.219961842,
+        "QO2-3e-4": 76.076106777
+      },
+      "instance_hash": "0682b505d8d1d399",
+      "instance_id": "lunar_ice_050_051_seed631500051",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 11.697836412,
+      "portfolio_ratio": 0.15008025053775723,
+      "q0_wall_sec": 77.943875827,
+      "qg2_captured_portfolio_savings_fraction": 0.043909944710465956,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 75.035015899,
+      "qg2_reachable_ratio": 0.9626800707927798,
+      "qg2_vs_portfolio_wall_gap_sec": 63.337179487,
+      "scale": 50,
+      "state": "50de321cc0d1134d"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 237.252024636,
+        "QB1": 26.902988416,
+        "QO2-1e-3": 225.039027985,
+        "QO2-1e-4": 233.298530561,
+        "QO2-3e-4": 230.520552585
+      },
+      "instance_hash": "0c06f7aebee070cd",
+      "instance_id": "lunar_ice_050_088_seed631500088",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 26.902988416,
+      "portfolio_ratio": 0.11339413628724757,
+      "q0_wall_sec": 237.252024636,
+      "qg2_captured_portfolio_savings_fraction": 0.05806062566517614,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 225.039027985,
+      "qg2_reachable_ratio": 0.9485231088344237,
+      "qg2_vs_portfolio_wall_gap_sec": 198.136039569,
+      "scale": 50,
+      "state": "519a82f92f5c5923"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 99.788921288,
+        "QB1": 4.898870521,
+        "QD1": 120.194562178,
+        "QO2-1e-3": 87.76595429,
+        "QO2-1e-4": 94.469982113,
+        "QO2-3e-4": 90.962532332
+      },
+      "instance_hash": "8447aca9eb4f767b",
+      "instance_id": "lunar_ice_050_090_seed631500090",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.898870521,
+      "portfolio_ratio": 0.04909232866503697,
+      "q0_wall_sec": 99.788921288,
+      "qg2_captured_portfolio_savings_fraction": 0.12670418975243336,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 87.76595429,
+      "qg2_reachable_ratio": 0.8795160139741304,
+      "qg2_vs_portfolio_wall_gap_sec": 82.86708376899999,
+      "scale": 50,
+      "state": "53725a08da222521"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 37.742010824,
+        "QB1": 8.304879984,
+        "QO2-1e-3": 44.815274936,
+        "QO2-1e-4": 37.029179948,
+        "QO2-3e-4": 36.841559358
+      },
+      "instance_hash": "3350a6bfc924c276",
+      "instance_id": "lunar_ice_050_028_seed631500028",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 8.304879984,
+      "portfolio_ratio": 0.22004338938716425,
+      "q0_wall_sec": 37.742010824,
+      "qg2_captured_portfolio_savings_fraction": 0.030588968432223737,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 36.841559358,
+      "qg2_reachable_ratio": 0.9761419318594597,
+      "qg2_vs_portfolio_wall_gap_sec": 28.536679374,
+      "scale": 50,
+      "state": "591bbbb8732cd58d"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached",
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 121.694167974,
+        "QO2-1e-3": 121.63512604,
+        "QO2-1e-4": 119.818741377,
+        "QO2-3e-4": 117.09869475
+      },
+      "instance_hash": "0fd635383e810e30",
+      "instance_id": "lunar_ice_050_086_seed631500086",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-3e-4",
+      "portfolio_best_wall_sec": 117.09869475,
+      "portfolio_ratio": 0.9622375229601651,
+      "q0_wall_sec": 121.694167974,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 117.09869475,
+      "qg2_reachable_ratio": 0.9622375229601651,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 50,
+      "state": "5c4540baab4b2387"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 130.427593715,
+        "QB1": 10.649999273,
+        "QO2-1e-3": 211.30876812,
+        "QO2-1e-4": 121.20919867,
+        "QO2-3e-4": 150.706107029
+      },
+      "instance_hash": "1b5acb0a90bd6c96",
+      "instance_id": "lunar_ice_050_020_seed631500020",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 10.649999273,
+      "portfolio_ratio": 0.08165449480170225,
+      "q0_wall_sec": 130.427593715,
+      "qg2_captured_portfolio_savings_fraction": 0.07696259962428804,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 121.20919867,
+      "qg2_reachable_ratio": 0.9293217425666589,
+      "qg2_vs_portfolio_wall_gap_sec": 110.559199397,
+      "scale": 50,
+      "state": "5cb5b9d470a508b3"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 92.741491895,
+        "QB1": 11.796627111,
+        "QD1": 103.875153255,
+        "QO2-1e-3": 85.413937041,
+        "QO2-1e-4": 85.372753256,
+        "QO2-3e-4": 85.408470319
+      },
+      "instance_hash": "2a0c27c36cf5d8dc",
+      "instance_id": "lunar_ice_050_058_seed631500058",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 11.796627111,
+      "portfolio_ratio": 0.12719902246511083,
+      "q0_wall_sec": 92.741491895,
+      "qg2_captured_portfolio_savings_fraction": 0.09103404717103863,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 85.372753256,
+      "qg2_reachable_ratio": 0.9205453946401603,
+      "qg2_vs_portfolio_wall_gap_sec": 73.57612614499999,
+      "scale": 50,
+      "state": "63582c71b936c249"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 17.873790423,
+        "QB1": 4.901645083,
+        "QD1": 76.694916573,
+        "QO2-1e-3": 15.458617518,
+        "QO2-1e-4": 17.947299775,
+        "QO2-3e-4": 17.442066402
+      },
+      "instance_hash": "76d79e95dddd8dbd",
+      "instance_id": "lunar_ice_050_082_seed631500082",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.901645083,
+      "portfolio_ratio": 0.2742364639507332,
+      "q0_wall_sec": 17.873790423,
+      "qg2_captured_portfolio_savings_fraction": 0.18618145585778634,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 15.458617518,
+      "qg2_reachable_ratio": 0.8648762882498525,
+      "qg2_vs_portfolio_wall_gap_sec": 10.556972435,
+      "scale": 50,
+      "state": "6394fec20a605646"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 68.129818177,
+        "QB1": 38.204756279,
+        "QO2-1e-3": 74.021335817,
+        "QO2-1e-4": 65.532661396,
+        "QO2-3e-4": 64.759096737
+      },
+      "instance_hash": "5ee92327bcea07c7",
+      "instance_id": "lunar_ice_050_024_seed631500024",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 38.204756279,
+      "portfolio_ratio": 0.5607641015530784,
+      "q0_wall_sec": 68.129818177,
+      "qg2_captured_portfolio_savings_fraction": 0.11263874579404924,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 64.759096737,
+      "qg2_reachable_ratio": 0.9505250192912164,
+      "qg2_vs_portfolio_wall_gap_sec": 26.55434045799999,
+      "scale": 50,
+      "state": "6894b93948b237fd"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 158.413839797,
+        "QB1": 4.54464092,
+        "QO2-1e-3": 128.255686566,
+        "QO2-1e-4": 157.996197991,
+        "QO2-3e-4": 152.591369971
+      },
+      "instance_hash": "3a7da0462fb3a235",
+      "instance_id": "lunar_ice_050_006_seed631500006",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.54464092,
+      "portfolio_ratio": 0.028688408322301552,
+      "q0_wall_sec": 158.413839797,
+      "qg2_captured_portfolio_savings_fraction": 0.19599863683639396,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 128.255686566,
+      "qg2_reachable_ratio": 0.809624252087783,
+      "qg2_vs_portfolio_wall_gap_sec": 123.711045646,
+      "scale": 50,
+      "state": "6e08411f8f53ec62"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 78.243752711,
+        "QB1": 6.83871609,
+        "QD1": 199.180929832,
+        "QO2-1e-3": 141.061757139,
+        "QO2-1e-4": 75.730404838,
+        "QO2-3e-4": 72.976866633
+      },
+      "instance_hash": "64704a096835cc0e",
+      "instance_id": "lunar_ice_050_047_seed631500047",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 6.83871609,
+      "portfolio_ratio": 0.08740271079864208,
+      "q0_wall_sec": 78.243752711,
+      "qg2_captured_portfolio_savings_fraction": 0.0737607083090694,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 72.976866633,
+      "qg2_reachable_ratio": 0.9326861775475712,
+      "qg2_vs_portfolio_wall_gap_sec": 66.138150543,
+      "scale": 50,
+      "state": "6f569e0434378835"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 142.323401891,
+        "QB1": 16.33495595,
+        "QO2-1e-3": 216.297728849,
+        "QO2-1e-4": 138.351546708,
+        "QO2-3e-4": 158.476634756
+      },
+      "instance_hash": "21281999c55ebdf5",
+      "instance_id": "lunar_ice_050_106_seed631500106",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 16.33495595,
+      "portfolio_ratio": 0.11477350690724997,
+      "q0_wall_sec": 142.323401891,
+      "qg2_captured_portfolio_savings_fraction": 0.0315255510402915,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 138.351546708,
+      "qg2_reachable_ratio": 0.9720927470097862,
+      "qg2_vs_portfolio_wall_gap_sec": 122.016590758,
+      "scale": 50,
+      "state": "728e2cf16792ff34"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 100.535047416,
+        "QB1": 5.748080056,
+        "QO2-1e-3": 113.629331542,
+        "QO2-1e-4": 95.452425564,
+        "QO2-3e-4": 100.12889951
+      },
+      "instance_hash": "52abf4ea3e284db2",
+      "instance_id": "lunar_ice_050_100_seed631500100",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 5.748080056,
+      "portfolio_ratio": 0.057174887800224006,
+      "q0_wall_sec": 100.535047416,
+      "qg2_captured_portfolio_savings_fraction": 0.053621526181930196,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 95.452425564,
+      "qg2_reachable_ratio": 0.9494442785611984,
+      "qg2_vs_portfolio_wall_gap_sec": 89.70434550799999,
+      "scale": 50,
+      "state": "741927fab7b661d9"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 160.471462835,
+        "QB1": 4.425114401,
+        "QO2-1e-3": 225.683393888,
+        "QO2-1e-4": 156.180130938,
+        "QO2-3e-4": 181.148637353
+      },
+      "instance_hash": "358339b8bf74286c",
+      "instance_id": "lunar_ice_050_031_seed631500031",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.425114401,
+      "portfolio_ratio": 0.027575709243393587,
+      "q0_wall_sec": 160.471462835,
+      "qg2_captured_portfolio_savings_fraction": 0.0275003672951376,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 156.180130938,
+      "qg2_reachable_ratio": 0.9732579748374797,
+      "qg2_vs_portfolio_wall_gap_sec": 151.755016537,
+      "scale": 50,
+      "state": "752324dc50248c91"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 231.768745335,
+        "QB1": 6.530868341,
+        "QO2-1e-3": 215.485625362,
+        "QO2-1e-4": 214.021766923,
+        "QO2-3e-4": 214.926120554
+      },
+      "instance_hash": "a2cd731ff1940372",
+      "instance_id": "lunar_ice_050_005_seed631500005",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 6.530868341,
+      "portfolio_ratio": 0.028178382428399658,
+      "q0_wall_sec": 231.768745335,
+      "qg2_captured_portfolio_savings_fraction": 0.07879215809014554,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 214.021766923,
+      "qg2_reachable_ratio": 0.9234280774728775,
+      "qg2_vs_portfolio_wall_gap_sec": 207.490898582,
+      "scale": 50,
+      "state": "78b8de07f6f4bb85"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 110.69191816,
+        "QB1": 50.020337893,
+        "QO2-1e-3": 95.297782272,
+        "QO2-1e-4": 103.932638415,
+        "QO2-3e-4": 100.876258771
+      },
+      "instance_hash": "8394ac4c3ab00ee0",
+      "instance_id": "lunar_ice_050_083_seed631500083",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 50.020337893,
+      "portfolio_ratio": 0.4518878950195617,
+      "q0_wall_sec": 110.69191816,
+      "qg2_captured_portfolio_savings_fraction": 0.2537289422865593,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 95.297782272,
+      "qg2_reachable_ratio": 0.8609280953488538,
+      "qg2_vs_portfolio_wall_gap_sec": 45.27744437900001,
+      "scale": 50,
+      "state": "793c990cc2af2da6"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 168.895158423,
+        "QB1": 32.12620747,
+        "QO2-1e-3": 285.800574645,
+        "QO2-1e-4": 160.661982418,
+        "QO2-3e-4": 200.148040709
+      },
+      "instance_hash": "7aa7d1d5731319d8",
+      "instance_id": "lunar_ice_050_069_seed631500069",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 32.12620747,
+      "portfolio_ratio": 0.19021390411641947,
+      "q0_wall_sec": 168.895158423,
+      "qg2_captured_portfolio_savings_fraction": 0.06019769799820488,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 160.661982418,
+      "qg2_reachable_ratio": 0.9512527411568549,
+      "qg2_vs_portfolio_wall_gap_sec": 128.535774948,
+      "scale": 50,
+      "state": "8458006077f4f457"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 120.357888331,
+        "QB1": 22.213634949,
+        "QO2-1e-3": 62.511179899,
+        "QO2-1e-4": 114.857893176,
+        "QO2-3e-4": 74.776692331
+      },
+      "instance_hash": "6391c731a4b39763",
+      "instance_id": "lunar_ice_050_059_seed631500059",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 22.213634949,
+      "portfolio_ratio": 0.1845631828294427,
+      "q0_wall_sec": 120.357888331,
+      "qg2_captured_portfolio_savings_fraction": 0.5894049466844208,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 62.511179899,
+      "qg2_reachable_ratio": 0.5193775062510738,
+      "qg2_vs_portfolio_wall_gap_sec": 40.29754495,
+      "scale": 50,
+      "state": "8c009557b24b98fb"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 39.359310711,
+        "QB1": 28.070220032,
+        "QO2-1e-3": 72.516098687,
+        "QO2-1e-4": 36.787705887,
+        "QO2-3e-4": 60.923220847
+      },
+      "instance_hash": "9c83fdb58474a9b3",
+      "instance_id": "lunar_ice_050_074_seed631500074",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 28.070220032,
+      "portfolio_ratio": 0.7131786488363232,
+      "q0_wall_sec": 39.359310711,
+      "qg2_captured_portfolio_savings_fraction": 0.22779556805081788,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 36.787705887,
+      "qg2_reachable_ratio": 0.9346633673825672,
+      "qg2_vs_portfolio_wall_gap_sec": 8.717485855,
+      "scale": 50,
+      "state": "90cfd05d0c68ce43"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 154.091869999,
+        "QB1": 5.375386736,
+        "QO2-1e-3": 146.529654403,
+        "QO2-1e-4": 149.098992429,
+        "QO2-3e-4": 151.499897353
+      },
+      "instance_hash": "86cdf4b7b887978a",
+      "instance_id": "lunar_ice_050_048_seed631500048",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 5.375386736,
+      "portfolio_ratio": 0.034884298153010175,
+      "q0_wall_sec": 154.091869999,
+      "qg2_captured_portfolio_savings_fraction": 0.0508498818024529,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 146.529654403,
+      "qg2_reachable_ratio": 0.9509239806353892,
+      "qg2_vs_portfolio_wall_gap_sec": 141.154267667,
+      "scale": 50,
+      "state": "91f5036e36f9da6d"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 49.322616463,
+        "QB1": 4.764331012,
+        "QO2-1e-3": 41.804601616,
+        "QO2-1e-4": 47.917455058,
+        "QO2-3e-4": 45.277280557
+      },
+      "instance_hash": "86cdf4b7b887978a",
+      "instance_id": "lunar_ice_050_048_seed631500048",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.764331012,
+      "portfolio_ratio": 0.09659526103149911,
+      "q0_wall_sec": 49.322616463,
+      "qg2_captured_portfolio_savings_fraction": 0.16872316272733245,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 41.804601616,
+      "qg2_reachable_ratio": 0.8475746952183744,
+      "qg2_vs_portfolio_wall_gap_sec": 37.040270604,
+      "scale": 50,
+      "state": "952b1a4146ea73ef"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached",
+        "QO2-1e-4": "right_censored_or_milestone_not_reached",
+        "QO2-3e-4": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 277.421381199,
+        "QB1": 6.538196873,
+        "QO2-1e-3": 164.558044878
+      },
+      "instance_hash": "95daa896df4bc6d6",
+      "instance_id": "lunar_ice_050_113_seed631500113",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 6.538196873,
+      "portfolio_ratio": 0.023567746814402955,
+      "q0_wall_sec": 277.421381199,
+      "qg2_captured_portfolio_savings_fraction": 0.4166494742072002,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 164.558044878,
+      "qg2_reachable_ratio": 0.5931700151112692,
+      "qg2_vs_portfolio_wall_gap_sec": 158.019848005,
+      "scale": 50,
+      "state": "9793f2394f93b170"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached",
+        "QO2-1e-3": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 201.943694241,
+        "QB1": 19.04121279,
+        "QO2-1e-4": 194.511900481,
+        "QO2-3e-4": 187.224585575
+      },
+      "instance_hash": "920c8db058b79562",
+      "instance_id": "lunar_ice_050_101_seed631500101",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 19.04121279,
+      "portfolio_ratio": 0.09428971209804739,
+      "q0_wall_sec": 201.943694241,
+      "qg2_captured_portfolio_savings_fraction": 0.08047517206563047,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 187.224585575,
+      "qg2_reachable_ratio": 0.9271128087394787,
+      "qg2_vs_portfolio_wall_gap_sec": 168.183372785,
+      "scale": 50,
+      "state": "9eebc066a0269edc"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached",
+        "QO2-1e-3": "right_censored_or_milestone_not_reached",
+        "QO2-1e-4": "right_censored_or_milestone_not_reached",
+        "QO2-3e-4": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 277.194399256,
+        "QB1": 64.930286541
+      },
+      "instance_hash": "5c58b492ad90d736",
+      "instance_id": "lunar_ice_050_001_seed631500001",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 64.930286541,
+      "portfolio_ratio": 0.23424097570252245,
+      "q0_wall_sec": 277.194399256,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 277.194399256,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 212.264112715,
+      "scale": 50,
+      "state": "a2faf1eb73a7047c"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 164.638028882,
+        "QB1": 115.450933713,
+        "QO2-1e-3": 195.887480823,
+        "QO2-1e-4": 172.78926844,
+        "QO2-3e-4": 208.107077893
+      },
+      "instance_hash": "5c58b492ad90d736",
+      "instance_id": "lunar_ice_050_001_seed631500001",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 115.450933713,
+      "portfolio_ratio": 0.7012409860406337,
+      "q0_wall_sec": 164.638028882,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 164.638028882,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 49.18709516899999,
+      "scale": 50,
+      "state": "a4c02860a3c3c0d9"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 131.819264189,
+        "QB1": 117.164648379,
+        "QD1": 187.664874722,
+        "QO2-1e-3": 118.899390963,
+        "QO2-1e-4": 126.577020176,
+        "QO2-3e-4": 123.270836884
+      },
+      "instance_hash": "378f69ee0e6ff0ab",
+      "instance_id": "lunar_ice_050_046_seed631500046",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 117.164648379,
+      "portfolio_ratio": 0.8888279653193293,
+      "q0_wall_sec": 131.819264189,
+      "qg2_captured_portfolio_savings_fraction": 0.8816248336707503,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 118.899390963,
+      "qg2_reachable_ratio": 0.9019879734158148,
+      "qg2_vs_portfolio_wall_gap_sec": 1.7347425840000028,
+      "scale": 50,
+      "state": "a878bbb5f683b39f"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 22.116361814,
+        "QB1": 83.45692546,
+        "QO2-1e-3": 20.007504231,
+        "QO2-1e-4": 20.902915182,
+        "QO2-3e-4": 20.643945709
+      },
+      "instance_hash": "04d0000b6570b37f",
+      "instance_id": "lunar_ice_050_030_seed631500030",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 20.007504231,
+      "portfolio_ratio": 0.9046471747597716,
+      "q0_wall_sec": 22.116361814,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 20.007504231,
+      "qg2_reachable_ratio": 0.9046471747597716,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 50,
+      "state": "af7999c86b590859"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 61.088762721,
+        "QB1": 200.26443266,
+        "QO2-1e-3": 63.671227988,
+        "QO2-1e-4": 58.654485007,
+        "QO2-3e-4": 69.454447915
+      },
+      "instance_hash": "517f781cd10a4e6f",
+      "instance_id": "lunar_ice_050_070_seed631500070",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-4",
+      "portfolio_best_wall_sec": 58.654485007,
+      "portfolio_ratio": 0.9601517921533678,
+      "q0_wall_sec": 61.088762721,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 58.654485007,
+      "qg2_reachable_ratio": 0.9601517921533678,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 50,
+      "state": "b7c7fa53ad4e3256"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 130.522102769,
+        "QB1": 45.890476893,
+        "QO2-1e-3": 135.128179339,
+        "QO2-1e-4": 136.074775893,
+        "QO2-3e-4": 135.035791278
+      },
+      "instance_hash": "01e841018383758a",
+      "instance_id": "lunar_ice_050_013_seed631500013",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 45.890476893,
+      "portfolio_ratio": 0.35159161490232543,
+      "q0_wall_sec": 130.522102769,
+      "qg2_captured_portfolio_savings_fraction": 0.0,
+      "qg2_reachable_best_arm": "Q0",
+      "qg2_reachable_best_wall_sec": 130.522102769,
+      "qg2_reachable_ratio": 1.0,
+      "qg2_vs_portfolio_wall_gap_sec": 84.63162587600002,
+      "scale": 50,
+      "state": "bddb27f5c8068c2a"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 183.718675787,
+        "QB1": 5.056029799,
+        "QO2-1e-3": 160.001935998,
+        "QO2-1e-4": 178.214967419,
+        "QO2-3e-4": 169.019309805
+      },
+      "instance_hash": "32ce07fe65a91279",
+      "instance_id": "lunar_ice_050_037_seed631500037",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 5.056029799,
+      "portfolio_ratio": 0.02752049990204516,
+      "q0_wall_sec": 183.718675787,
+      "qg2_captured_portfolio_savings_fraction": 0.13274593386797234,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 160.001935998,
+      "qg2_reachable_ratio": 0.8709073005920381,
+      "qg2_vs_portfolio_wall_gap_sec": 154.945906199,
+      "scale": 50,
+      "state": "c2367bfca6272aae"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 118.567379957,
+        "QB1": 1.69332067,
+        "QD1": 180.676050529,
+        "QO2-1e-3": 114.863523611,
+        "QO2-1e-4": 115.606841564,
+        "QO2-3e-4": 116.429319559
+      },
+      "instance_hash": "cec7c35c7527cc5e",
+      "instance_id": "lunar_ice_050_092_seed631500092",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 1.69332067,
+      "portfolio_ratio": 0.01428150533995189,
+      "q0_wall_sec": 118.567379957,
+      "qg2_captured_portfolio_savings_fraction": 0.03169100456162541,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 114.863523611,
+      "qg2_reachable_ratio": 0.9687615906892499,
+      "qg2_vs_portfolio_wall_gap_sec": 113.170202941,
+      "scale": 50,
+      "state": "d27a74ef26ac82a9"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 21.88924588,
+        "QB1": 26.014579705,
+        "QD1": 62.622691724,
+        "QO2-1e-3": 19.327698504,
+        "QO2-1e-4": 21.039733439,
+        "QO2-3e-4": 20.201682864
+      },
+      "instance_hash": "7817fd045e68d6d4",
+      "instance_id": "lunar_ice_050_041_seed631500041",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 19.327698504,
+      "portfolio_ratio": 0.8829769015322514,
+      "q0_wall_sec": 21.88924588,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 19.327698504,
+      "qg2_reachable_ratio": 0.8829769015322514,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 50,
+      "state": "d2e31bae02d4c5ec"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 217.351131671,
+        "QB1": 4.940780325,
+        "QO2-1e-3": 199.221316483,
+        "QO2-1e-4": 209.419678772,
+        "QO2-3e-4": 207.291463727
+      },
+      "instance_hash": "0c8a327f7a19fb45",
+      "instance_id": "lunar_ice_050_018_seed631500018",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.940780325,
+      "portfolio_ratio": 0.022731790200562468,
+      "q0_wall_sec": 217.351131671,
+      "qg2_captured_portfolio_savings_fraction": 0.085352785648699,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 199.221316483,
+      "qg2_reachable_ratio": 0.9165874359677008,
+      "qg2_vs_portfolio_wall_gap_sec": 194.28053615800002,
+      "scale": 50,
+      "state": "d437b0c44eb5e5c9"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 194.779360445,
+        "QB1": 12.236789827,
+        "QD1": 193.089485684,
+        "QO2-1e-3": 169.983366562,
+        "QO2-1e-4": 188.405051076,
+        "QO2-3e-4": 198.41683178
+      },
+      "instance_hash": "2a0c27c36cf5d8dc",
+      "instance_id": "lunar_ice_050_058_seed631500058",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 12.236789827,
+      "portfolio_ratio": 0.06282385258398726,
+      "q0_wall_sec": 194.779360445,
+      "qg2_captured_portfolio_savings_fraction": 0.1358367738498088,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 169.983366562,
+      "qg2_reachable_ratio": 0.872697015606016,
+      "qg2_vs_portfolio_wall_gap_sec": 157.746576735,
+      "scale": 50,
+      "state": "d7771509577da59e"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached",
+        "QO2-1e-3": "right_censored_or_milestone_not_reached",
+        "QO2-3e-4": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 270.244735705,
+        "QB1": 12.151417119,
+        "QO2-1e-4": 262.763846738
+      },
+      "instance_hash": "0dc26d01d21ca2d4",
+      "instance_id": "lunar_ice_050_065_seed631500065",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 12.151417119,
+      "portfolio_ratio": 0.044964491490648406,
+      "q0_wall_sec": 270.244735705,
+      "qg2_captured_portfolio_savings_fraction": 0.02898520972175911,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 262.763846738,
+      "qg2_reachable_ratio": 0.9723180954941296,
+      "qg2_vs_portfolio_wall_gap_sec": 250.61242961899998,
+      "scale": 50,
+      "state": "e1ac1c6523ef7cc5"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 240.494648666,
+        "QB1": 4.027305821,
+        "QO2-1e-3": 237.157555159,
+        "QO2-1e-4": 231.171030337,
+        "QO2-3e-4": 228.103885353
+      },
+      "instance_hash": "8743bbc2f6d56a07",
+      "instance_id": "lunar_ice_050_019_seed631500019",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.027305821,
+      "portfolio_ratio": 0.016745926960699816,
+      "q0_wall_sec": 240.494648666,
+      "qg2_captured_portfolio_savings_fraction": 0.05239946947398101,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 228.103885353,
+      "qg2_reachable_ratio": 0.9484780082146097,
+      "qg2_vs_portfolio_wall_gap_sec": 224.076579532,
+      "scale": 50,
+      "state": "e6f0984565791deb"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 206.07194136,
+        "QB1": 87.377402501,
+        "QO2-1e-3": 202.160060447,
+        "QO2-1e-4": 176.899726287,
+        "QO2-3e-4": 199.265755812
+      },
+      "instance_hash": "1ec2cf00c7bb42de",
+      "instance_id": "lunar_ice_050_027_seed631500027",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 87.377402501,
+      "portfolio_ratio": 0.42401406967072214,
+      "q0_wall_sec": 206.07194136,
+      "qg2_captured_portfolio_savings_fraction": 0.24577554581221608,
+      "qg2_reachable_best_arm": "QO2-1e-4",
+      "qg2_reachable_best_wall_sec": 176.899726287,
+      "qg2_reachable_ratio": 0.8584367435931647,
+      "qg2_vs_portfolio_wall_gap_sec": 89.52232378599999,
+      "scale": 50,
+      "state": "ef18d735920d4732"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 148.751499361,
+        "QB1": 4.597151708,
+        "QO2-1e-3": 131.426725207,
+        "QO2-1e-4": 144.639556744,
+        "QO2-3e-4": 139.99908333
+      },
+      "instance_hash": "52abf4ea3e284db2",
+      "instance_id": "lunar_ice_050_100_seed631500100",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 4.597151708,
+      "portfolio_ratio": 0.030904910052996025,
+      "q0_wall_sec": 148.751499361,
+      "qg2_captured_portfolio_savings_fraction": 0.12018211338102114,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 131.426725207,
+      "qg2_reachable_ratio": 0.8835321040229983,
+      "qg2_vs_portfolio_wall_gap_sec": 126.829573499,
+      "scale": 50,
+      "state": "f64282472adf772b"
+    },
+    {
+      "arm_rejections": {},
+      "eligible_arm_walls_sec": {
+        "Q0": 14.866231665,
+        "QB1": 3.996566224,
+        "QD1": 149.357148631,
+        "QO2-1e-3": 16.991420095,
+        "QO2-1e-4": 14.455967701,
+        "QO2-3e-4": 14.05223552
+      },
+      "instance_hash": "52abf4ea3e284db2",
+      "instance_id": "lunar_ice_050_100_seed631500100",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QB1",
+      "portfolio_best_wall_sec": 3.996566224,
+      "portfolio_ratio": 0.2688351906562328,
+      "q0_wall_sec": 14.866231665,
+      "qg2_captured_portfolio_savings_fraction": 0.07488695483944112,
+      "qg2_reachable_best_arm": "QO2-3e-4",
+      "qg2_reachable_best_wall_sec": 14.05223552,
+      "qg2_reachable_ratio": 0.9452452939424847,
+      "qg2_vs_portfolio_wall_gap_sec": 10.055669296,
+      "scale": 50,
+      "state": "f6f73c361f667067"
+    },
+    {
+      "arm_rejections": {
+        "QB1": "right_censored_or_milestone_not_reached",
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 175.44485967,
+        "QO2-1e-3": 147.638499253,
+        "QO2-1e-4": 166.151233028,
+        "QO2-3e-4": 158.021679417
+      },
+      "instance_hash": "5c58b492ad90d736",
+      "instance_id": "lunar_ice_050_001_seed631500001",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 147.638499253,
+      "portfolio_ratio": 0.8415094037562463,
+      "q0_wall_sec": 175.44485967,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 147.638499253,
+      "qg2_reachable_ratio": 0.8415094037562463,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 50,
+      "state": "fabf2ceca559e138"
+    },
+    {
+      "arm_rejections": {
+        "QD1": "right_censored_or_milestone_not_reached"
+      },
+      "eligible_arm_walls_sec": {
+        "Q0": 54.628826063,
+        "QB1": 15.264860224,
+        "QO2-1e-3": 0.785114229,
+        "QO2-1e-4": 52.178432187,
+        "QO2-3e-4": 49.956337937
+      },
+      "instance_hash": "0b9587c758919666",
+      "instance_id": "lunar_ice_050_011_seed631500011",
+      "milestone": "ADMISSION_BATCH_READY",
+      "portfolio_best_arm": "QO2-1e-3",
+      "portfolio_best_wall_sec": 0.785114229,
+      "portfolio_ratio": 0.014371793896771222,
+      "q0_wall_sec": 54.628826063,
+      "qg2_captured_portfolio_savings_fraction": 1.0,
+      "qg2_reachable_best_arm": "QO2-1e-3",
+      "qg2_reachable_best_wall_sec": 0.785114229,
+      "qg2_reachable_ratio": 0.014371793896771222,
+      "qg2_vs_portfolio_wall_gap_sec": 0.0,
+      "scale": 50,
+      "state": "fb4c02d06ea3438b"
+    }
+  ],
+  "deployable": false,
+  "development_only": true,
+  "generated_at": "2026-08-05T19:05:43+08:00",
+  "interpretation": "post_hoc_empirical_ceiling_over_completed_exact_safe_measured_arms",
+  "measured_portfolio_arms": [
+    "Q0",
+    "QD1",
+    "QB1",
+    "QO2-1e-4",
+    "QO2-3e-4",
+    "QO2-1e-3"
+  ],
+  "not_a_perfect_queue_oracle": true,
+  "qg2_label_supervision_authority": "none_heterogeneous_arm_winners_are_not_qg2_label_targets",
+  "qg2_reachable_arms": [
+    "Q0",
+    "QO2-1e-4",
+    "QO2-3e-4",
+    "QO2-1e-3"
+  ],
+  "random_arms_excluded": [
+    "Random61635",
+    "Random91267",
+    "Random170141"
+  ],
+  "rejection_counts": {
+    "arm:right_censored_or_milestone_not_reached": 81
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_measured_portfolio_oracle.v1",
+  "starts_no_solver_process": true,
+  "training_authority": false,
+  "watch_pids": [
+    492593
+  ],
+  "watch_pids_alive": []
+}

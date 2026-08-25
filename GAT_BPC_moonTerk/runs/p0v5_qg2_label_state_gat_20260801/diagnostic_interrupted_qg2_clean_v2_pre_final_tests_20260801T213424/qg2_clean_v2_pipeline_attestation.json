@@ -1,0 +1,65 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_pipeline_attestation.v1",
+  "collection_id": "qg2_clean_v2",
+  "attested_at_local": "2026-08-01T21:28:02+08:00",
+  "development_only": true,
+  "production_default": false,
+  "controllers": [
+    {
+      "stage": "collection",
+      "pid": 3771916,
+      "exec_session_id": 28297,
+      "state": "RUNNING_SCALE30_BATCH01"
+    },
+    {
+      "stage": "tree_and_bounded_oracle",
+      "pid": 3774614,
+      "exec_session_id": 98194,
+      "state": "WAITING_FOR_COLLECTION_PREFLIGHT"
+    },
+    {
+      "stage": "training_and_calibration",
+      "pid": 3774732,
+      "exec_session_id": 30388,
+      "state": "WAITING_FOR_ORACLE_GATE"
+    },
+    {
+      "stage": "development_e2e",
+      "pid": 3774841,
+      "exec_session_id": 60207,
+      "state": "WAITING_FOR_CALIBRATION_GATE"
+    },
+    {
+      "stage": "formal_full20",
+      "pid": 3776534,
+      "exec_session_id": 57744,
+      "state": "WAITING_FOR_DEVELOPMENT_E2E_GATE"
+    },
+    {
+      "stage": "independent_candidate_finalizer",
+      "pid": 3782272,
+      "exec_session_id": 30968,
+      "state": "WAITING_FOR_FORMAL_FULL20_GATE"
+    }
+  ],
+  "freeze_sha256": {
+    "collection": "0a45986c582eecb58079e4d0c7d3e621d7afa5dd1e2e7d740fa7ffc5a090415c",
+    "tree_supplement": "0eb679ddb3bdaad8bd4c1327fa8665c166516119f8eb27af40a2c202e4a3f3bf",
+    "oracle_execution": "b774504c64f972f3eca136e200ef77b0e3e42f82f623e5a6d7e52b49da0a57fe",
+    "post_oracle": "005c61fe2ce70241d2f44dfb0451e3e89f1b9b234f3c914e53f0b28d1e8ad932",
+    "development_e2e": "d047a4dc934ad1e5054fa2579de0da0312cd141d71bf06a61295a81a920706c1",
+    "formal_full20": "b095836b5b249ff488d8eebb2f116332670f63fe2f3e1c13db3af6d872b1bc71",
+    "candidate_finalizer": "db0f8ebbfc83ecacbf72d7642bfa44c90ee88289baf317a8c0c4d0001b9ef7e4"
+  },
+  "early_strict_index_validation": {
+    "artifact": "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_early_validation_index.json",
+    "scale30_context_count": 5,
+    "scale30_instance_count": 5,
+    "scale50_context_count": 0,
+    "excluded_count": 0,
+    "observed_source_engine_hash": "0389484e5f5623f2",
+    "observed_exact_action_policy_hash": "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca"
+  },
+  "gate_chain": "collection_preflight_then_tree_then_oracle_then_training_then_calibration_then_development_e2e_then_formal_full20_then_independent_candidate_freeze",
+  "failure_semantics": "every_failed_or_missing_upstream_gate_stops_all_downstream_mutation"
+}

@@ -1,0 +1,77 @@
+{
+  "budget_results": [
+    {
+      "contexts_above_250ms": 19,
+      "contexts_above_two_percent": 11,
+      "gate": {
+        "paired_prefix_fraction": false,
+        "paired_prefix_warm_p99": false,
+        "representation_metrics": false,
+        "taxed_oracle": true
+      },
+      "maximum_paired_prefix_fraction_of_qpf0": 0.30251437964616434,
+      "metrics_status": "NOT_EVALUATED_EARLY_COST_GATE_FAILED",
+      "paired_prefix_median_ms": 295.0361021794379,
+      "paired_prefix_p99_ms": 405.12122120708227,
+      "passed": false,
+      "rollout_budget": 128,
+      "taxed_oracle_gm": {
+        "30": 0.877444501080051,
+        "50": 0.9638142034654911
+      }
+    },
+    {
+      "contexts_above_250ms": 19,
+      "contexts_above_two_percent": 11,
+      "gate": {
+        "paired_prefix_fraction": false,
+        "paired_prefix_warm_p99": false,
+        "representation_metrics": false,
+        "taxed_oracle": true
+      },
+      "maximum_paired_prefix_fraction_of_qpf0": 0.30251437964616434,
+      "metrics_status": "NOT_EVALUATED_EARLY_COST_GATE_FAILED",
+      "paired_prefix_median_ms": 295.0361021794379,
+      "paired_prefix_p99_ms": 405.12122120708227,
+      "passed": false,
+      "rollout_budget": 512,
+      "taxed_oracle_gm": {
+        "30": 0.877444501080051,
+        "50": 0.9638142034654911
+      }
+    },
+    {
+      "contexts_above_250ms": 19,
+      "contexts_above_two_percent": 11,
+      "gate": {
+        "paired_prefix_fraction": false,
+        "paired_prefix_warm_p99": false,
+        "representation_metrics": false,
+        "taxed_oracle": true
+      },
+      "maximum_paired_prefix_fraction_of_qpf0": 0.30251437964616434,
+      "metrics_status": "NOT_EVALUATED_EARLY_COST_GATE_FAILED",
+      "paired_prefix_median_ms": 295.0361021794379,
+      "paired_prefix_p99_ms": 405.12122120708227,
+      "passed": false,
+      "rollout_budget": 2048,
+      "taxed_oracle_gm": {
+        "30": 0.877444501080051,
+        "50": 0.9638142034654911
+      }
+    }
+  ],
+  "decision": "FAIL",
+  "diagnostic_only": true,
+  "early_stop_contract": "any early gate failure stops the chain",
+  "ooF_artifacts_emitted": false,
+  "ooF_training_completed": false,
+  "ooF_training_started": true,
+  "performance_authority": false,
+  "prefix_context_count": 38,
+  "prefix_task_count": 76,
+  "reason": "PREFIX_COST_GATE_FAILED_BEFORE_OOF",
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_representation_report.v1",
+  "smallest_passing_budget": null,
+  "triplet_count": 114
+}

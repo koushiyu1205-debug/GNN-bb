@@ -1,0 +1,72 @@
+{
+  "actions": [
+    "QPF0",
+    "QPD1"
+  ],
+  "allowed_scales": [
+    30,
+    50
+  ],
+  "candidate_training_forbidden": true,
+  "coverage_audit": {
+    "confidence": 0.95,
+    "maximum_repaired_candidate_cap": 600,
+    "primary_cohort": "v7_pilot_scale30",
+    "target_eligible_instances": [
+      8,
+      37
+    ]
+  },
+  "deployment_authorized": false,
+  "development_only": true,
+  "execution": {
+    "blocked_fresh_process_repeats": 3,
+    "memory_limit_gb": 10.867,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "single_native_process": true
+  },
+  "experiment_id": "p0v5_frontier_observability_root_cause_v7r2_20260818",
+  "feature_sufficiency": {
+    "fold_count": 5,
+    "maximum_epochs": 200,
+    "maximum_gat_gap_to_best_control": 0.02,
+    "maximum_similar_opposite_label_fraction": 0.35,
+    "minimum_scale50_balanced_accuracy": 0.65,
+    "minimum_scale50_rank_accuracy": 0.65,
+    "model_kinds": [
+      "gat",
+      "mlp",
+      "linear",
+      "no_message",
+      "shuffled_topology"
+    ],
+    "patience": 25,
+    "seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "similar_pair_distance_quantile": 0.1
+  },
+  "frozen_before_qpd1_wall_outcomes": true,
+  "manifest_generation_forbidden": true,
+  "probe_boundary": 4096,
+  "production_switch_authorized": false,
+  "run_root": "runs/p0v5_frontier_observability_root_cause_v7r2_20260818",
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_root_cause_config.v1",
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v5_frontier_observability_root_cause_v7r.json",
+  "source_config_sha256": "4b1570aab89dd63cb82738287a979df62f3a62df8d998fe62a80fccf78379117",
+  "source_v7_run_root": "runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817",
+  "switch_gate": {
+    "minimum_determined_context_fraction": 0.75,
+    "minimum_determined_instances_per_scale": 12,
+    "minimum_scale50_benefit_instances": 4,
+    "minimum_scale50_neutral_or_harm_instances": 4,
+    "minimum_winner_instances_per_scale": 5,
+    "oracle_gm_at_most": 0.95
+  },
+  "threshold_search_forbidden": true
+}

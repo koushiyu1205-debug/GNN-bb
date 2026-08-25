@@ -46,6 +46,7 @@ def run_native_spprc_acceptance(
     dry_run: bool = False,
     route_opportunity_collection_only_root_pool: bool = False,
     route_opportunity_collection_root_pool_time_cap_sec: float = 0.0,
+    effective_memory_cap_gb: float = 0.0,
 ) -> dict:
     root = Path(project_root).resolve()
     output = _root_path(root, output_dir)
@@ -86,6 +87,9 @@ def run_native_spprc_acceptance(
         if limit:
             scale_instances = scale_instances[: max(0, int(limit))]
         scale_output = output / f"scale_{int(scale):03d}"
+        effective_memory = effective_memory_limit_gb(profile.memory_limit_gb)
+        if float(effective_memory_cap_gb) > 0.0:
+            effective_memory = min(effective_memory, float(effective_memory_cap_gb))
         row = {
             "scale": int(scale),
             "backend_id": backend_id,
@@ -96,7 +100,11 @@ def run_native_spprc_acceptance(
             "live_sri_policy": str(config.get("live_sri_policy", "no_cut")),
             "proof_queue_experiment_policy": proof_queue_experiment,
             "profile": asdict(profile),
-            "effective_memory_limit_gb": round(effective_memory_limit_gb(profile.memory_limit_gb), 6),
+            "effective_memory_limit_gb": round(effective_memory, 6),
+            "externally_capped_memory_limit_gb": (
+                float(effective_memory_cap_gb)
+                if float(effective_memory_cap_gb) > 0.0 else None
+            ),
             "instance_count": len(scale_instances),
             "instances": [str(path) for path in scale_instances],
             "output_dir": str(scale_output),

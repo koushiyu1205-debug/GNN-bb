@@ -1,0 +1,91 @@
+{
+  "action_universe": [
+    "Q0",
+    "QGR1",
+    "QD1",
+    "QB1"
+  ],
+  "execution": {
+    "arm_order": "rotate_by_state_hash",
+    "blocked_fresh_process_repeats": 3,
+    "formal_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "q0_repeated_in_every_block": true,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "same_prefrozen_milestone_required": true,
+    "single_native_process": true
+  },
+  "formal_outcomes_may_not_reenter_training": true,
+  "lifecycle_authority": [
+    "root_cg"
+  ],
+  "qgr1_training": {
+    "bucket_width": 0.0001,
+    "hard_zero_quantile": 0.75,
+    "inner_train_validation_instances_per_scale": [
+      11,
+      3
+    ],
+    "maximum_epochs": 40,
+    "maximum_pairs_per_context": 50000,
+    "neutral_huber_weight": 0.1,
+    "neutral_pair_fraction": 0.25,
+    "outer_train_instances_per_scale": 14,
+    "patience": 8,
+    "potential_l1_weight": 1e-05,
+    "pressure_weight": "sqrt(1+action_surface_group_size)_clipped_at_8",
+    "supervised_pair_fraction": 0.75
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_execution_freeze.v3",
+  "selector_training": {
+    "attention_heads": 2,
+    "candidate_model": "gat",
+    "control_models": [
+      "mlp",
+      "linear",
+      "no_message",
+      "shuffled_topology"
+    ],
+    "dropout": 0.1,
+    "fold_count": 5,
+    "hidden_dim": 16,
+    "maximum_epochs": 200,
+    "maximum_parameters_exclusive": 20000,
+    "patience": 25,
+    "probability_calibration_source": "train_oof_predictions",
+    "refit_epoch": "median_fold_best_epoch",
+    "seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "torch_threads": 1
+  },
+  "status": "FROZEN_BEFORE_ANY_V3_ARM_OUTCOME",
+  "threshold_grid": {
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "risk_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ]
+  }
+}

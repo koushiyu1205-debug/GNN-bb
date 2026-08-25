@@ -1,0 +1,171 @@
+{
+  "action_universe": [
+    "Q0",
+    "QG2",
+    "QD1",
+    "QB1"
+  ],
+  "all_rejected_action": "Q0",
+  "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/arm_selector_linear_control_v1/qg2_v3_linear_arm_selector.pt",
+  "checkpoint_sha256": "8031877456ddb54cbd7ba1640af53a7932cfdee8323e2dda4f6bf02949237768",
+  "classification_metrics": {
+    "calibration": {
+      "QB1": {
+        "adverse_accuracy": 0.8636363636363636,
+        "benefit_accuracy": 0.8636363636363636
+      },
+      "QD1": {
+        "adverse_accuracy": 0.8636363636363636,
+        "benefit_accuracy": 0.8636363636363636
+      }
+    },
+    "heldout": {
+      "QB1": {
+        "adverse_accuracy": 0.8636363636363636,
+        "benefit_accuracy": 0.9090909090909091
+      },
+      "QD1": {
+        "adverse_accuracy": 0.6818181818181818,
+        "benefit_accuracy": 0.6818181818181818
+      }
+    },
+    "train": {
+      "QB1": {
+        "adverse_accuracy": 0.9242424242424242,
+        "benefit_accuracy": 0.9242424242424242
+      },
+      "QD1": {
+        "adverse_accuracy": 0.9848484848484849,
+        "benefit_accuracy": 0.9848484848484849
+      }
+    }
+  },
+  "context_count": 110,
+  "deployable": false,
+  "deployment_authorized": false,
+  "development_only": true,
+  "forced_veto_arms": {
+    "QG2": {
+      "reason": "fresh_force_on_screen_4_of_4_adverse_zero_benefit",
+      "screen_summary": {
+        "action_eligible_count": 4,
+        "adverse_count": 4,
+        "all_safe": true,
+        "beneficial_count": 0,
+        "both_censored_count": 0,
+        "comparable_count": 4,
+        "context_count": 4,
+        "harmful_count": 4,
+        "observed_net_geomean_ratio": 1.325995822131967
+      }
+    }
+  },
+  "fresh_process_validation_required": true,
+  "instance_count": 94,
+  "model_order": [
+    "gat",
+    "mlp",
+    "linear"
+  ],
+  "normalization_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/train_normalization.json",
+  "normalization_sha256": "9706b6371589786670e8ac91a2dd1c6b0072fc433287de6c5f463952f2015c9d",
+  "oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_training_only_v2_view.json",
+  "oracle_summary_sha256": "5e4fd3a2355d5547db3b3a102bfd524cee148ff6c180403f7cae477f6f47d119",
+  "partition_counts": {
+    "calibration": 22,
+    "heldout": 22,
+    "train": 66
+  },
+  "partition_reports": {
+    "calibration": {
+      "activated_count": 19,
+      "beneficial_count": 18,
+      "context_count": 22,
+      "harmful_count": 1,
+      "net_geomean_ratio": 0.25746591455320084,
+      "per_scale": {
+        "30": {
+          "activated_count": 7,
+          "context_count": 10,
+          "net_geomean_ratio": 0.7322565813627794
+        },
+        "50": {
+          "activated_count": 12,
+          "context_count": 12,
+          "net_geomean_ratio": 0.10775401386762427
+        }
+      },
+      "q0_count": 3,
+      "qb1_count": 12,
+      "qd1_count": 7
+    },
+    "heldout": {
+      "activated_count": 16,
+      "beneficial_count": 14,
+      "context_count": 22,
+      "harmful_count": 2,
+      "net_geomean_ratio": 0.3687338791028762,
+      "per_scale": {
+        "30": {
+          "activated_count": 6,
+          "context_count": 10,
+          "net_geomean_ratio": 0.8458168618762124
+        },
+        "50": {
+          "activated_count": 10,
+          "context_count": 12,
+          "net_geomean_ratio": 0.18460507172297413
+        }
+      },
+      "q0_count": 6,
+      "qb1_count": 13,
+      "qd1_count": 3
+    },
+    "train": {
+      "activated_count": 54,
+      "beneficial_count": 51,
+      "context_count": 66,
+      "harmful_count": 3,
+      "net_geomean_ratio": 0.2774543213519231,
+      "per_scale": {
+        "30": {
+          "activated_count": 18,
+          "context_count": 28,
+          "net_geomean_ratio": 0.6913368674069581
+        },
+        "50": {
+          "activated_count": 36,
+          "context_count": 38,
+          "net_geomean_ratio": 0.14159075814102828
+        }
+      },
+      "q0_count": 12,
+      "qb1_count": 37,
+      "qd1_count": 17
+    }
+  },
+  "qg2_force_on_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/force_on_screen_v1/report.json",
+  "qg2_force_on_report_sha256": "4ed45b5f36a3f2271dcc2f3f5dc164f4e7fbe084e99c819259b2cf3b53fd1c10",
+  "ranker_training_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/training_report.json",
+  "ranker_training_report_sha256": "72fa196d28cf4c295151d3cc25a7bcea9b2926f294bda26b9cdc8a8a94a072fa",
+  "rejection_counts": {
+    "noncompliant_context": 90
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v3_arm_selector_control_training.v1",
+  "thresholds": {
+    "forced_veto_arms": [
+      "QG2"
+    ],
+    "maximum_adverse_probability": 0.5,
+    "minimum_benefit_probability": 0.5,
+    "minimum_expected_gain": 0.0,
+    "risk_penalty": 0.5
+  },
+  "trainable_arms": [
+    "QD1",
+    "QB1"
+  ],
+  "trained_model": "linear",
+  "training_curve_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/arm_selector_linear_control_v1/training_curve.jsonl",
+  "training_curve_sha256": "ca68589a7f03efefd098c542c73b4ef03faf5340dd91f5a1c595d4d4c0902fc1"
+}

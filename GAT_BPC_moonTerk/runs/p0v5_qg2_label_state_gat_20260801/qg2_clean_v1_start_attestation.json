@@ -1,0 +1,15 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_collection_start_attestation.v1",
+  "collection_id": "qg2_clean_v1",
+  "started_at_local": "2026-08-01T20:20:52+08:00",
+  "controller_pid": 3757994,
+  "python_version": "3.13.13",
+  "collection_controller_sha256": "f2bb32805219515186a55b293e3d448e7766465cb76a315138f439f54dfac8dc",
+  "index_builder_sha256": "2c38352b825fe0a554f43d8f36162bbe557c91dd824c42193bc5097124a8b6ff",
+  "oracle_controller_sha256": "8c626f7ca95ddc0783206041836bd77c8d593d5192ba1b96349e9fdd6e1beea4",
+  "bounded_oracle_runner_sha256": "e82006af37a299fe572ba99ebdaae472c5dce1e8e0326dcdf62770692d835360",
+  "acceptance_wrapper_sha256": "ee7c495f410fa011a63051593ecd7083c9c195211eccfb83c70f45ba673ff74f",
+  "collection_freeze_sha256": "2e097f1c574ec9d132a560c7d9e6580d93874f69d45dccdea87a302da6e6f60d",
+  "source_mutation_after_start_permitted": false,
+  "initial_instance": "data/p0v5_qg2_oracle_development_v3/scale_030/instance_001_logical_graph.json"
+}

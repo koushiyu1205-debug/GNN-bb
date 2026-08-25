@@ -1,0 +1,8 @@
+{
+  "diagnostic_only_outcomes_used": false,
+  "formal_benchmark_instances_used": false,
+  "literal_q0_future_trace_only": true,
+  "performance_outcomes_used": false,
+  "rows": [],
+  "schema_version": "lunar_ice_bpc.p0v5_qgr1_q0_trace_corpus.v1"
+}

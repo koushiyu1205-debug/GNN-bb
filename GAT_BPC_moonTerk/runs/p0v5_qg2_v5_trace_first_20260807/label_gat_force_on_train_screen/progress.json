@@ -1,0 +1,10 @@
+{
+  "completed_by_scale": {
+    "30": 3,
+    "50": 0
+  },
+  "completed_contexts": 3,
+  "last_state_hash": "0761d9c2343be849c79f9a818d0663ee4a01ee24c447bb0a8245872aa9969d84",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v3_force_on_progress.v1",
+  "selected_contexts": 10
+}

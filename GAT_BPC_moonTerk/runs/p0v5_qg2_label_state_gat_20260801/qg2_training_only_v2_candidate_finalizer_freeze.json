@@ -1,0 +1,21 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_training_only_v2_candidate_finalizer_freeze.v1",
+  "freeze_id": "P0V5_QG2_TRAINING_ONLY_V2_CANDIDATE_FINALIZER_20260805",
+  "frozen_at_local": "2026-08-05T00:00:09+08:00",
+  "development_only": true,
+  "deployable": false,
+  "production_default": false,
+  "production_switch_performed": false,
+  "historical_baselines_unchanged": true,
+  "p0v4_changed": false,
+  "p0v5_exact_control_changed": false,
+  "fallback_action": "Q0",
+  "formal_controller_freeze_sha256": "ba4493f2caf2ab148db0ee32b014a1089053a6a51f3203d3a3f5cabc4fe60162",
+  "completion_rule": "all_training_only_v2_gates_and_tests_pass_before_independent_candidate_freeze",
+  "frozen_file_sha256": {
+    "scripts/audit_p0v5_qg2_training_only_v2_completion.py": "83369c80383a8dc6836cb510eeaee40f8283b821e1c03c4bfba42b8f3cd9a676",
+    "scripts/finalize_p0v5_qg2_training_only_v2_candidate.py": "490b8dfdafd6d69b5c291b4aa0ebf52a64bed3e821990849489c53d53cb85343",
+    "tests/test_p0v5_qg2_training_only_v2_completion_audit.py": "811864acf2531e5e8cf6049f13b2022b0b326cbdbdbbe9342cc01f36d3475931",
+    "tests/test_p0v5_qg2_training_only_v2_finalizer.py": "fb1cad68e598adc4b8a700cf14a1ae793cbf5ddb9cf6cf7fcd61193968b67ad8"
+  }
+}

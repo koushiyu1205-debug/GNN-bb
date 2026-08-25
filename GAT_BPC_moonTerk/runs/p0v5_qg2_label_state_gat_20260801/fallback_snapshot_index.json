@@ -1,0 +1,88 @@
+{
+  "bounded_oracle_context_limit": 300,
+  "bounded_oracle_context_limit_per_scale": 150,
+  "coverage": {
+    "30": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 1,
+      "instance_count": 1,
+      "root_context_count": 1
+    },
+    "50": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 2,
+      "instance_count": 1,
+      "root_context_count": 2
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "duplicate_instance_paths": {},
+  "excluded_count": 0,
+  "exclusions": [],
+  "instance_roots": [
+    "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation"
+  ],
+  "oracle_preflight_ready": false,
+  "rows": [
+    {
+      "active_cut_count": 0,
+      "active_task_coverage_count": 30,
+      "active_task_set_count": 1435,
+      "branch_pair_count": 0,
+      "instance_content_hash": "fc2fcb5cd8441d07",
+      "instance_hash": "fc2fcb5cd8441d07",
+      "instance_id": "lunar_ice_030_001_seed120730001",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_030/instance_001_logical_graph.json",
+      "previous_q0_wall_stratum": "lt10",
+      "pricing_lifecycle_scope": "root_cg",
+      "round": 27,
+      "scale": 30,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots/scale30/fc2fcb5cd8441d07/f74772ae9a6d73434e59dfed68f702df01604d21e4e19dc2b9ce3e37634c3b7d.json",
+      "snapshot_sha256": "4c98681eb448d3ab604a2410b04d426e16f6916207ef34af0c43f42a0002d77e",
+      "source_state_hash": "f74772ae9a6d73434e59dfed68f702df01604d21e4e19dc2b9ce3e37634c3b7d",
+      "state_hash": "f74772ae9a6d73434e59dfed68f702df01604d21e4e19dc2b9ce3e37634c3b7d",
+      "v5_midpoint_reason": "midpoint_no_audited_negative"
+    },
+    {
+      "active_cut_count": 0,
+      "active_task_coverage_count": 50,
+      "active_task_set_count": 6883,
+      "branch_pair_count": 0,
+      "instance_content_hash": "ab18975e3fe870c5",
+      "instance_hash": "ab18975e3fe870c5",
+      "instance_id": "lunar_ice_050_001_seed140730001",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_050/instance_001_logical_graph.json",
+      "previous_q0_wall_stratum": "lt10",
+      "pricing_lifecycle_scope": "root_cg",
+      "round": 55,
+      "scale": 50,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots/scale50/ab18975e3fe870c5/2cd0b6860a8a20864d99da405a22260e992f788c6b0c1b84dcf6eac3a128ff58.json",
+      "snapshot_sha256": "00c6ab70d647a24202a744d7e6e3dfa5f127a1d5986cb33eeda9fc5a62e6e4a9",
+      "source_state_hash": "2cd0b6860a8a20864d99da405a22260e992f788c6b0c1b84dcf6eac3a128ff58",
+      "state_hash": "2cd0b6860a8a20864d99da405a22260e992f788c6b0c1b84dcf6eac3a128ff58",
+      "v5_midpoint_reason": "midpoint_no_audited_negative"
+    },
+    {
+      "active_cut_count": 0,
+      "active_task_coverage_count": 50,
+      "active_task_set_count": 7011,
+      "branch_pair_count": 0,
+      "instance_content_hash": "ab18975e3fe870c5",
+      "instance_hash": "ab18975e3fe870c5",
+      "instance_id": "lunar_ice_050_001_seed140730001",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/dssr_v2_validation/scale_050/instance_001_logical_graph.json",
+      "previous_q0_wall_stratum": "10to60",
+      "pricing_lifecycle_scope": "root_cg",
+      "round": 56,
+      "scale": 50,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots/scale50/ab18975e3fe870c5/cf996352d4c92221a78ebf9989e22c410ae8520bd22fb7d6096a40d9de37205a.json",
+      "snapshot_sha256": "d446cf31d594d0347ab9b89c5b1c37619144750d4a5ad443609565425983626e",
+      "source_state_hash": "cf996352d4c92221a78ebf9989e22c410ae8520bd22fb7d6096a40d9de37205a",
+      "state_hash": "cf996352d4c92221a78ebf9989e22c410ae8520bd22fb7d6096a40d9de37205a",
+      "v5_midpoint_reason": "midpoint_no_audited_negative"
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_fallback_snapshot_index.v1",
+  "snapshot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots"
+}

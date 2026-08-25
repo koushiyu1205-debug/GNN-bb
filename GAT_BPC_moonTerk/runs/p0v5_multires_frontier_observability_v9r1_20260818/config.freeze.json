@@ -1,0 +1,65 @@
+{
+  "action_universe": [
+    "CONTINUE_Q0",
+    "SWITCH_QD1_AT_4096"
+  ],
+  "additional_label_pops": 0,
+  "auxiliary_prefix_requests": 0,
+  "cell_graph_shape": [
+    8,
+    8
+  ],
+  "deployment_authorized": false,
+  "development_only": true,
+  "diagnostic_only": true,
+  "experiment_id": "p0v5_multires_frontier_observability_v9r1_20260818",
+  "forced_veto": [
+    "QB1",
+    "QGR1"
+  ],
+  "gate": {
+    "conservative_separate_graph_build_plus_inference_p99_ms": 15.0,
+    "maximum_gap_below_best_simple_ba": 0.02,
+    "maximum_gap_below_best_topology_ba": 0.0,
+    "maximum_per_context_fraction_of_qpf0": 0.02,
+    "minimum_topology_rank_drop": 0.02,
+    "scale50_minimum_adverse_balanced_accuracy": 0.7,
+    "scale50_minimum_benefit_balanced_accuracy": 0.7,
+    "scale50_minimum_rank_accuracy": 0.65,
+    "warm_tensorization_plus_ensemble_inference_p99_ms": 10.0
+  },
+  "label_sample_cap": 256,
+  "model": {
+    "candidate": "gat",
+    "controls": [
+      "mlp",
+      "linear",
+      "no_message",
+      "shuffled_topology"
+    ],
+    "dropout": 0.1,
+    "fold_count": 5,
+    "heads": 2,
+    "hidden_dim": 16,
+    "layers_per_view": 2,
+    "maximum_epochs": 200,
+    "maximum_parameters": 30000,
+    "patience": 25,
+    "seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "torch_threads": 1
+  },
+  "next_if_fail": "MULTI_TIMEPOINT_LATE_SWITCH_ORACLE",
+  "next_if_pass": "SINGLE_REQUEST_NATIVE_FRESH_PILOT",
+  "performance_authority": false,
+  "processed_label_boundary": 4096,
+  "production_switch_authorized": false,
+  "run_root": "runs/p0v5_multires_frontier_observability_v9r1_20260818",
+  "schema_version": "lunar_ice_bpc.p0v5_multires_frontier_observability_config.v1",
+  "source_v7r2_run_root": "runs/p0v5_frontier_observability_root_cause_v7r2_20260818",
+  "source_v7r3_run_root": "runs/p0v5_frontier_observability_root_cause_v7r3_20260818",
+  "source_v9r0_run_root": "runs/p0v5_base_label_frontier_observability_v9r0_20260818"
+}

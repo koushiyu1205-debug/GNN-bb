@@ -1,58 +1,34 @@
-# Phase 4 Structured Review
+# 2026-08-03 中文主稿结构化审稿与编辑综合
 
-## Review boundary
+## 审稿边界
 
-Three independent reviews were completed against the synchronized
-no-task-wait manuscript, implementation evidence, generated LaTeX, and PDF:
+三名独立审稿者仅依据各自提示文件与 `manuscript_zh_trc.md` 进行方法、贡献和清晰度审查。三份输出的文本独立性得分为 0.95；自动脚本因贡献审稿中的栏目名 “Contribution clarity” 含有字符串 `clarity` 给出一次交叉引用提示，经人工核对属于误报。
 
-1. mathematical exactness and implementation consistency;
-2. contribution structure and evidence maturity;
-3. terminology, narrative clarity, and rendering.
+## 共同结论
 
-The standalone records are stored under `reviews/`.
+三名审稿者均认为，稿件已经形成清楚的主线：月球水冰候选区域的原位证据需求引出多路径、多趟次规划，完整路线列进一步引出精确定价，学习机制则被限制为搜索顺序信号。禁止任务点等待、基地延迟出发、固定时相实例和有限路径方案内的精确性边界表达清楚。
 
-## Findings and dispositions
+三名审稿者也一致指出，当前仍是带待补实验的工作主稿。确定性组件消融、GAT 与线性/MLP 的配对比较以及四阶段多时相结果尚未完成，因此不能形成单组件加速、学习加速或最佳任务阶段结论。题目中的学习主线能否保留为实证贡献，取决于后续配对实验。
 
-### Mathematical exactness
+## 本轮已经处理的问题
 
-The reviewer found one implementation--proof scope mismatch in the optional
-completion bound and one imprecise tolerance statement. Both were corrected.
-Equation (18) now admits branch restrictions but requires an empty active-cut
-context, matching the executable. The text also distinguishes the
-proof-bearing native \(10^{-12}\) path-equality comparison from the
-non-certifying Python seed/reference \(10^{-9}\) comparison. The frozen
-80-instance baseline has the optional completion bound disabled. A final
-review confirmed that Equations (3), (6a), and (16)--(18), Lemmas 1--5, and
-Theorem 1 are mutually consistent under their displayed assumptions.
+1. 第 4.3 节新增式（15c），明确回程目标增量、车队对偶只计一次、SRI-3 系数增量以及终止标签与式（13）真实约化成本相等。
+2. 式（17）给出可复现的剩余正任务对偶上界，并继续限定为无活动割情形。
+3. 消除 $q(L)$ 同时表示载荷和部分约化成本的冲突；式（26）–（27）直接使用 $\bar c^{\mathrm{part}}(L)$，并为约化成本区间宽度使用独立符号。
+4. “路径方案—趟次—多趟次路线—路线列”术语重新对齐；SRI-3 的被选对象统一称为路线。
+5. 把结果节的项目管理式“作者待填”块移入 Markdown 注释，正文只保留证据边界。
+6. 把“证明尾部已经成为主要瓶颈”改为由未完成记录提示、仍需阶段工作量数据确认的诊断表述。
 
-### Contribution and evidence boundary
+## 仍未解决的投稿风险
 
-The reviewer confirmed exactly three Introduction contributions: model,
-algorithm, and benchmark/evaluation package. To remove a possible ambiguity,
-Table 1 is now called the frozen implementation baseline and is explicitly
-separated from the pending strictly paired L0 learning control. The English
-and Chinese contribution statements now say directly that learning-guidance
-and seasonal comparison results remain pending. Historical wait-permitted
-results remain a separate evidence class.
+- 第 6.2–6.4 节缺少确定性组件、学习排序和多时相实证结果。
+- 尚缺多路径、禁止任务点等待和多趟次等模型选择的决策价值或敏感性实验。
+- 实例生成算法、完整参数表、硬件与求解器版本、数值容差及超时统计协议仍需在投稿稿中补齐。
+- 需要加入月表任务与多路径示意、trip/multi-trip route 层级、精确 BPC 与学习权限边界等核心图件。
+- 当前引文库自动质量审计仍有元数据不匹配和无 DOI 项，最终参考文献尚未达到投稿状态。
 
-### Clarity, terminology, and presentation
+## 编辑结论
 
-The reviewer confirmed the uniform “arrival equals service start” meaning,
-the service-versus-wait distinction, and the `trip` / `multi-trip route`
-terminology. The first task-window definition now states that \(r_i\) is an
-earliest service-start time and \(D_i\) a latest service-completion time.
-The exposed task-risk conversion was replaced by the frozen preprocessing
-input \(\rho_i^{\mathrm{srv}}\), with the code mapping retained only in the
-internal notation ledger. The duplicate PDF title was removed and algorithm
-tables were reformatted with a narrow line-number column. Formula rendering
-and the PDF text layer passed direct inspection.
+**当前中文正文的叙事重构通过；完整论文仍为 Major Revision。**
 
-## Final verdict
-
-**PASS FOR THE SYNCHRONIZED ENGLISH WORKING DRAFT.**
-
-No unresolved mathematical, evidence-boundary, terminology, or rendering
-defect remains within the present scope. This verdict does not activate the
-still-missing learning, held-out/OOD, or mission-epoch results, and it does
-not convert historical wait-permitted evidence into evidence for the revised
-model.
+本轮已经解决“像代码说明书、缺少清晰思路”的主要写作问题，并修复审稿中发现的两处方法表达缺口。下一阶段应优先补充实例生成/参数说明和核心图件，再依次完成确定性组件消融、学习排序与多时相实验；在结果冻结前，现有的证据限制不得放宽。

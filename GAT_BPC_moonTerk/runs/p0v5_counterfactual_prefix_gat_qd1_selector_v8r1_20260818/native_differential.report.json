@@ -1,0 +1,23 @@
+{
+  "case_count": 500,
+  "checks": [
+    "disabled_vs_v7_q0",
+    "prefix_no_routes_or_certificate",
+    "base_graph_hash_q0_qd1",
+    "sample_determinism",
+    "migration_integrity",
+    "legal_routes",
+    "minimum_rc",
+    "rc_reconstruction",
+    "certificate"
+  ],
+  "cross_binary_report": "cross_binary_native_differential.report.json",
+  "cross_binary_report_sha256": "20b260cef9a27c75678593502a6ea28fbd5d1f6e7296cfe1b7a3d0a11ebf8356",
+  "ctest_stdout": "Internal ctest changing into directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8r1\nTest project /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8r1\n    Start 1: lunar_spprc_native_tests\n1/2 Test #1: lunar_spprc_native_tests .........   Passed    0.73 sec\n    Start 2: lunar_spprc_patch_queue_check\n2/2 Test #2: lunar_spprc_patch_queue_check ....   Passed    0.02 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   0.75 sec\n",
+  "ctest_stdout_sha256": "7b904447245046521592640cd567c0b0d1091f487275f0f6b98c7e21efa8debf",
+  "decision": "PASS",
+  "python_validation_stdout": "...........                                                              [100%]\n=============================== warnings summary ===============================\ntests/test_p0v5_counterfactual_prefix_gat_qd1_selector_v8.py::test_triplet_contract_and_shared_gat_shapes\n  /home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_counterfactual_prefix_gat_qd1_selector_v8.py:250: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.\n  Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:838.)\n    assert all(0.0 <= float(value) <= 1.0 for value in outputs.values())\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n11 passed, 1 warning in 1.39s\n",
+  "python_validation_stdout_sha256": "391d25c63674c148bcc44816873d5749ffcd22ed39f11a68d1fdf20ddd2846b9",
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_native_differential.v1",
+  "state_size_bytes": 176
+}

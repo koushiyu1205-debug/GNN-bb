@@ -81,3 +81,17 @@ been transferred to timing, path-option preprocessing, label dominance, proof
 assumptions, terminology, implementation evidence, and the frozen scale-5--30
 baseline. Historical cut, state-refinement, and scale-50/100 measurements
 remain outside the revised-model evidence class.
+
+## 2026-08-03 Chinese narrative-transfer check
+
+- The six-paragraph Introduction preserves the author-confirmed logic and exactly three contribution groups.
+- The model still uses arrival equals service start, no task/en-route waiting, depot-only departure delay and a fixed mission epoch per solve.
+- Equations (1)–(15b) and (16)–(28) retain their prior mathematical roles; new Equation (15c) makes the vehicle dual, return cost, SRI-3 coefficient and terminal reduced cost explicit rather than changing the feasible set.
+- The objective remains normalized operating cost + risk + 0.4 times science-weighted completion time; makespan remains reporting-only.
+- Root-only SRI-3 and deterministic Ryan–Foster branching remain the only cut and branch mechanisms in scope.
+- GAT remains a within-base-return-class, within-reduced-cost-bin ordering signal; it does not filter labels or control feasibility, dominance, costs, bounds, cuts, branching, pruning or termination.
+- The exact baseline remains 80/80 proved optimal for 5–30 tasks and 15/20 for 50 tasks; the five incomplete pricing runs remain non-conclusive.
+- The LOLA average-illumination product is separated from the LOLA permanently-shadowed-region layer used for route shadow exposure.
+- Multi-epoch results remain absent, and the independent fixed-instance design is not restated as a departure-time-dependent path model.
+
+**Verdict: PASS for logic transfer; learning, component-ablation and mission-epoch result claims remain inactive.**

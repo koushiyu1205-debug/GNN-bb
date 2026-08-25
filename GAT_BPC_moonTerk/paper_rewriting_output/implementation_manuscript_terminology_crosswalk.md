@@ -43,3 +43,18 @@ this crosswalk with its exact activation conditions. The manuscript should then
 state those conditions and their mathematical consequence directly. A code
 identifier may appear in an internal evidence ledger, but not as the subject or
 predicate of a scientific claim in the manuscript.
+# 2026-08-03 P0V4+V5/QG2 update
+
+| Project/internal term | English manuscript term | Chinese manuscript term | Use rule |
+|---|---|---|---|
+| `P0V4` | memory-compact exhaustive exact-pricing fallback | 内存紧凑的原生穷举精确定价回退 | Define once; use the conceptual term thereafter |
+| `V5 midpoint` | bidirectional midpoint negative-column prepass | 双向中点负列预处理 | Explicitly state no certificate authority |
+| `V5 group screen` | deterministic root SRI-3 candidate-group screening | 根节点 SRI-3 候选分组筛选 | A commitment heuristic over valid rows, not learned cuts |
+| `Q0` | deterministic partial-reduced-cost label queue | 确定性部分约化成本标签队列 | Literal runtime fallback |
+| `QG2` | within-bucket label-state ordering | 约化成本桶内的标签状态学习排序 | No filtering, dominance, bound, pruning, branch, cut, or proof action |
+| `exact_negative_escape` | enlarged negative pool with frozen diverse batch admission | 扩大负列池后的确定性多样化批量接纳 | Distinguish raw negatives from master-ready columns |
+| fail-closed statuses | incomplete outcome without the corresponding exact conclusion | 不给出相应精确结论的安全终止 | Do not print raw status enums in prose |
+| proof debt | unresolved proof obligation | 未解决证明义务 | Use mathematical conditions rather than queue field names |
+
+This table is internal and must remain outside both the English and Chinese
+manuscript bodies.

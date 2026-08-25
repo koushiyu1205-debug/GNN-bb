@@ -1,0 +1,195 @@
+{
+  "action_universe": [
+    "CONTINUE_Q0",
+    "SWITCH_QD1"
+  ],
+  "allowed_scales": [
+    30,
+    50
+  ],
+  "candidate_generation": {
+    "generator": {
+      "allow_incomplete": false,
+      "continue_after_timeout": true,
+      "draw_figures": false,
+      "max_attempts_per_instance": 200,
+      "max_workers": 1,
+      "min_free_mem_gb": 12.0,
+      "path_preview": "none",
+      "skip_bpc_future_check": true,
+      "skip_preflight": true,
+      "worker_rss_budget_mb": 4096
+    },
+    "main_eligible_instances_per_scale": 37,
+    "main_instance_root": "data/p0v5_native_frontier_gat_qd1_selector_v7_main_candidates",
+    "main_maximum_generated_per_scale": 70,
+    "maximum_root_contexts_train": 2,
+    "pilot_eligible_instances_per_scale": 8,
+    "pilot_instance_root": "data/p0v5_native_frontier_gat_qd1_selector_v7_pilot_candidates",
+    "pilot_maximum_generated_per_scale": 20,
+    "primary_contexts_calibration": 1,
+    "primary_contexts_heldout": 1,
+    "seed_formula": "first_31_bits_sha256_p0v5-v7-<cohort>:<scale>:<candidate_index>",
+    "tree_supplement_forbidden": true
+  },
+  "deployment_authorized": false,
+  "development_only": true,
+  "execution": {
+    "blocked_fresh_process_repeats": 3,
+    "full_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "single_native_process": true
+  },
+  "experiment_id": "p0v5_native_frontier_gat_qd1_selector_v7_20260817",
+  "formal_instance_root": "data/instances",
+  "gates": {
+    "calibration": {
+      "minimum_activation_instances_scale30": 4,
+      "minimum_activation_instances_scale50": 3,
+      "minimum_topology_rank_drop": 0.02,
+      "net_gm_strictly_below": 1.0
+    },
+    "development_e2e": {
+      "minimum_activation_instances_per_scale": 2,
+      "net_gm_strictly_below": 1.0,
+      "worst_instance_ratio_at_most": 1.1
+    },
+    "formal": {
+      "large_scale_gm_strictly_below": 1.0,
+      "minimum_activation_instances_per_scale": 5,
+      "p90_ratio_at_most": 1.05,
+      "small_scale_gm_at_most": 1.01,
+      "worst_ratio_at_most": 1.2
+    },
+    "heldout": {
+      "minimum_activation_instances_per_scale": 3,
+      "net_gm_strictly_below": 1.0,
+      "warm_p99_ms_at_most": 10.0
+    },
+    "main": {
+      "determined_context_fraction": 0.75,
+      "determined_train_instances": 16,
+      "minimum_adverse_or_neutral_instances": 4,
+      "minimum_benefit_instances": 5,
+      "minimum_switch_winner_instances": 7,
+      "oracle_gm_at_most": 0.95
+    },
+    "pilot": {
+      "determined_contexts_per_scale": 7,
+      "minimum_qpd1_winner_instances": 3,
+      "oracle_gm_at_most": 0.95
+    },
+    "probe_overhead": {
+      "gm_at_most": 1.01,
+      "p90_at_most": 1.02,
+      "warm_p99_ms_at_most": 10.0,
+      "worst_at_most": 1.05
+    }
+  },
+  "lifecycle_authority": [
+    "root_cg"
+  ],
+  "literal_bypass_scales": [
+    5,
+    10,
+    20
+  ],
+  "native_binary": "build/native-spprc-frontier-gat-v7/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "native_build_dir": "build/native-spprc-frontier-gat-v7",
+  "native_probe_modes": [
+    "disabled",
+    "collect_force_q0",
+    "force_qd1",
+    "learned"
+  ],
+  "permanent_forced_veto_arms": [
+    "QB1",
+    "QGR1"
+  ],
+  "probe_boundary": 4096,
+  "production_switch_authorized": false,
+  "run_root": "runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817",
+  "runtime_policy": "P0V5_ROOT_FRONTIER_GAT_QD1_SELECTOR_V7",
+  "schema_version": "lunar_ice_bpc.p0v5_native_frontier_gat_qd1_config.v7",
+  "selected_exact_config": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "selector_training": {
+    "attention_heads": 2,
+    "candidate_model": "gat",
+    "control_models": [
+      "mlp",
+      "linear",
+      "no_message",
+      "shuffled_topology"
+    ],
+    "dropout": 0.1,
+    "ensemble": {
+      "adverse": "maximum",
+      "benefit": "mean",
+      "disagreement": "benefit_probability_range",
+      "positive_gain": "minimum"
+    },
+    "fold_count": 5,
+    "hidden_dim": 16,
+    "layers": 2,
+    "loss_weights": {
+      "adverse_bce": 1.0,
+      "beneficial_gain_huber": 0.5,
+      "benefit_bce": 1.0,
+      "qd1_vs_q0_margin_rank": 0.25
+    },
+    "maximum_ensemble_parameters_exclusive": 45000,
+    "maximum_epochs": 200,
+    "maximum_parameters_per_seed_exclusive": 15000,
+    "ood_relative_margin": 0.05,
+    "patience": 25,
+    "seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "torch_threads": 1
+  },
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v5_native_frontier_gat_qd1_selector_v7.json",
+  "source_config_sha256": "927b0c66e5193e86924227cc49a110bc96417cc2987c1f933aeb46aeeaf9a568",
+  "split": {
+    "calibration": 8,
+    "development_e2e": 3,
+    "selector_heldout": 6,
+    "train": 20
+  },
+  "status": "BOOTSTRAP_FROZEN_BEFORE_DIAGNOSTIC_WALL_OUTCOMES",
+  "threshold_grid": {
+    "adverse_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "maximum_disagreement": [
+      0.05,
+      0.1,
+      0.15
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ]
+  },
+  "v6_run_root": "runs/p0v5_minimal_interaction_gat_qd1_selector_v6_20260817",
+  "v6_terminal_reason": "NO_SAFE_GAT_CALIBRATION_THRESHOLD"
+}

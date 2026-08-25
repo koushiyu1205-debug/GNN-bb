@@ -1,6 +1,6 @@
 # Integrity Audit
 
-- Output directory: `paper_rewriting_output`
+- Output directory: `/home/kai/work/GAT_BPC_moonTerk/paper_rewriting_output`
 - Total findings: 4
 - LaTeX gate: READY
 

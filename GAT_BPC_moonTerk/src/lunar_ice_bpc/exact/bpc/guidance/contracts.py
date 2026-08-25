@@ -23,6 +23,8 @@ from lunar_ice_bpc.exact.core.cuts import (
 
 CANONICAL_SOLVE_BINDING_SCHEMA_V2 = "lunar_ice_bpc.canonical_solve_binding.v2"
 PRICING_ORDERING_HINTS_SCHEMA_V2 = "lunar_ice_bpc.pricing_ordering_hints.v2"
+QG2_LABEL_STATE_SCHEMA_V1 = "lunar_spprc.qg2_label_state.v1"
+QG2_LABEL_STATE_FEATURE_COUNT = 15
 GUIDANCE_LIFECYCLE_TELEMETRY_SCHEMA_V2 = (
     "lunar_ice_bpc.guidance_lifecycle_telemetry.v2"
 )
@@ -283,6 +285,8 @@ class PricingOrderingHintsV2:
     arc_priorities: tuple[tuple[str, float], ...] = tuple()
     harvest_priorities: tuple[tuple[str, float], ...] = tuple()
     proof_tail_risk: float | None = None
+    label_state_coefficients: tuple[float, ...] = tuple()
+    label_state_schema_version: str = ""
     queue_policy_id: str = "Q0"
     uncertainty: float = 0.0
     ood: bool = False
@@ -299,12 +303,27 @@ class PricingOrderingHintsV2:
             *[value for _, value in self.task_priorities],
             *[value for _, value in self.arc_priorities],
             *[value for _, value in self.harvest_priorities],
+            *self.label_state_coefficients,
             self.uncertainty,
         ]
         if self.proof_tail_risk is not None:
             values.append(self.proof_tail_risk)
         if any(not isfinite(float(value)) for value in values):
             raise ValueError("guidance scores must be finite")
+        if self.label_state_coefficients:
+            if len(self.label_state_coefficients) != (
+                QG2_LABEL_STATE_FEATURE_COUNT
+            ):
+                raise ValueError(
+                    "label-state guidance requires exactly "
+                    f"{QG2_LABEL_STATE_FEATURE_COUNT} coefficients"
+                )
+            if self.label_state_schema_version != QG2_LABEL_STATE_SCHEMA_V1:
+                raise ValueError("unsupported label-state guidance schema")
+        elif self.label_state_schema_version:
+            raise ValueError(
+                "label-state schema requires label-state coefficients"
+            )
         for name, rows in (
             ("task", self.task_priorities),
             ("arc", self.arc_priorities),
@@ -330,6 +349,12 @@ class PricingOrderingHintsV2:
             "arc_priorities": [list(row) for row in self.arc_priorities],
             "harvest_priorities": [list(row) for row in self.harvest_priorities],
             "proof_tail_risk": self.proof_tail_risk,
+            "label_state_coefficients": list(
+                self.label_state_coefficients
+            ),
+            "label_state_schema_version": (
+                self.label_state_schema_version
+            ),
             "queue_policy_id": self.queue_policy_id,
             "uncertainty": self.uncertainty,
             "ood": self.ood,

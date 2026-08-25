@@ -1,0 +1,26 @@
+{
+  "case_count": 500,
+  "compared_fields": [
+    "status",
+    "search_exhaustive",
+    "frontier_empty",
+    "labels_dropped",
+    "best_found_rc",
+    "unexplored_rc_lower_bound",
+    "certificate_blockers",
+    "canonical_route_universe_with_reduced_cost"
+  ],
+  "literal_q0_exact_proof_only": true,
+  "new_binary": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-residual-gat-v4/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "new_binary_sha256": "c747bcdc674aabd7809b1b253300c033cfd37fad493f02bf3cf623136d2c42f4",
+  "new_build": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-residual-gat-v4",
+  "new_result_digest": "b44fb261d66b30f5dbdb588cdae26f3bbe5b5b25a13b27fae6956bd066621888",
+  "old_binary": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-context-queue-portfolio-v1/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "old_binary_sha256": "a17a15ecbc4227acc6f9dba63a3b89b515be22979f2228a79f79471b0dba8c18",
+  "old_build": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-context-queue-portfolio-v1",
+  "old_result_digest": "b44fb261d66b30f5dbdb588cdae26f3bbe5b5b25a13b27fae6956bd066621888",
+  "redline_count": 0,
+  "redlines": [],
+  "schema_version": "lunar_ice_bpc.p0v5_native_telemetry_differential.v4",
+  "status": "PASS"
+}

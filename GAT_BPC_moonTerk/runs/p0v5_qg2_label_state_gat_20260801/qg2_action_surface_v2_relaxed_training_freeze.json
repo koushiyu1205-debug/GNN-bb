@@ -1,0 +1,26 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_relaxed_training_freeze.v1",
+  "development_only": true,
+  "deployable": false,
+  "authority": "exploratory_model_training_only",
+  "deployment_gate_unchanged": true,
+  "paper_claim_gate_unchanged": true,
+  "minimum_strict_calibration_contexts": 52,
+  "oracle_execution_freeze": "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_oracle_execution_freeze.json",
+  "oracle_execution_freeze_sha256": "bf09c8242d61cc06975a18a13b0637b7802ea56a52ee74eb064cd9e894d3a679",
+  "thresholds": {
+    "minimum_determined_contexts_per_scale": 20,
+    "minimum_gain_5pct_contexts_per_scale": 5,
+    "minimum_positive_instances_per_scale": 5,
+    "maximum_paired_geomean_ratio": 0.95,
+    "maximum_instance_bootstrap_95_upper": 0.98,
+    "maximum_instance_saved_wall_fraction": 0.35
+  },
+  "frozen_file_sha256": {
+    "scripts/evaluate_p0v5_qg2_relaxed_training_gate.py": "5d4479a46efe085aa37d0eaa717ae14a62a5063fd50a31b8afc076dcd56ede71",
+    "scripts/run_p0v5_qg2_relaxed_training_entry.py": "6ebbbc99b326fa17968f9beebb4120e0bd0ec65954839ccaed176f42d30fe45a",
+    "scripts/run_p0v5_qg2_relaxed_training_after_oracle.py": "5267b82c22ee535d6e77b5c391e1af1f441a6910c34c2113ac2c50460ea5fe31",
+    "scripts/train_p0v5_qg2_model_comparison.py": "9b3ea67b883a117efb05e97bb494017f1666e88c342b54b8683f0e4939f569e1",
+    "scripts/calibrate_p0v5_qg2_models.py": "633a0d8d62119ffd35456a6349f853823f029b36250837ebf13edc70fed0abb7"
+  }
+}

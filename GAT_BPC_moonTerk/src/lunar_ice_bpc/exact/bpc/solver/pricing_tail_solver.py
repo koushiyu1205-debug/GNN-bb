@@ -1241,6 +1241,12 @@ def solve_node_pricing_with_b2b_r3(
             one_deviation_sparse_tail_action_resolver=(
                 post_harvest_resolver
             ),
+            **_proof_tail_live_context_kwargs(
+                master_columns=master_columns,
+                round_index=round_index,
+                history=history,
+                current_context=master.reduced_cost_context,
+            ),
         )
         judge_wall_time = perf_counter() - judge_start
         remaining_after_candidate_generation = _remaining_wall_time_limit(
@@ -1568,6 +1574,7 @@ def solve_node_pricing_with_b2b_r3(
                 "final_judge_status": judge.pricing_payload.get("status"),
                 "compact_pricing_phase": judge.pricing_payload.get("compact_pricing_phase"),
                 "final_judge_wall_time": round(judge_wall_time, 6),
+                **_proof_tail_round_fields(judge.pricing_payload),
                 "negative_column_count": int(
                     judge.pricing_payload.get("negative_column_count")
                     or len(getattr(judge, "negative_columns", tuple()))
@@ -2349,6 +2356,12 @@ def _solve_b2b_seeded_tail_cg(
             labeling_final_judge_exact_harvest_target=effective_exact_harvest_target,
             labeling_final_judge_pass_strategy=next_final_judge_pass_strategy,
             labeling_final_judge_harvest_time_cap_sec=final_judge_harvest_time_cap_sec,
+            **_proof_tail_live_context_kwargs(
+                master_columns=master_columns,
+                round_index=round_index,
+                history=history,
+                current_context=master.reduced_cost_context,
+            ),
         )
         final_judge_call_count += 1
         last_judge_payload = judge.pricing_payload
@@ -2470,6 +2483,7 @@ def _solve_b2b_seeded_tail_cg(
                 **_one_deviation_round_fields(
                     harvest_payload
                 ),
+                **_proof_tail_round_fields(judge.pricing_payload),
                 "added_to_master_count": int(added),
                 "added_column_count": int(added),
                 "duplicate_only_audit_status": None if duplicate_audit is None else duplicate_audit.get("status"),
@@ -3059,6 +3073,12 @@ def _solve_b2b_r2_worker_before_final_judge(
             labeling_final_judge_harvest_time_cap_sec=final_judge_harvest_time_cap_sec,
             harvest_discovery_duals=oracle_harvest_duals,
             harvest_discovery_metadata=oracle_harvest_metadata,
+            **_proof_tail_live_context_kwargs(
+                master_columns=master_columns,
+                round_index=round_index,
+                history=history,
+                current_context=master.reduced_cost_context,
+            ),
         )
         judge_wall_time = perf_counter() - judge_start
         remaining_after_candidate_generation = _remaining_wall_time_limit(
@@ -3248,6 +3268,7 @@ def _solve_b2b_r2_worker_before_final_judge(
                 "final_judge_status": judge.pricing_payload.get("status"),
                 "compact_pricing_phase": judge.pricing_payload.get("compact_pricing_phase"),
                 "final_judge_wall_time": round(judge_wall_time, 6),
+                **_proof_tail_round_fields(judge.pricing_payload),
                 "adaptive_tail_harvest_limit": int(
                     round_max_columns_per_round
                 ),
@@ -6362,6 +6383,125 @@ def _dual_context_payload(context) -> dict:
             str(key): float(value)
             for key, value in getattr(context, "cut_duals", {}).items()
         },
+    }
+
+
+def _proof_tail_round_fields(payload: Mapping[str, object]) -> dict:
+    """Retain only literal-Q0 facts that exist before the next request."""
+
+    proof_attempted = bool(
+        payload.get("labeling_final_judge_proof_pass_attempted")
+    )
+    previous_policy = str(
+        payload.get("labeling_final_judge_proof_pass_queue_policy_id")
+        or "Q0"
+    )
+    literal_q0 = proof_attempted and previous_policy == "Q0"
+    return {
+        "proof_tail_previous_queue_policy_id": (
+            previous_policy if proof_attempted else ""
+        ),
+        "proof_tail_previous_proof_wall_sec": (
+            payload.get("labeling_final_judge_proof_pass_wall_time")
+            if literal_q0
+            else None
+        ),
+        "proof_tail_previous_processed_labels": (
+            payload.get("labeling_final_judge_proof_pass_processed_labels")
+            if literal_q0
+            else None
+        ),
+        "proof_tail_previous_dominance_candidate_checks": (
+            payload.get(
+                "labeling_final_judge_proof_pass_dominance_candidate_checks"
+            )
+            if literal_q0
+            else None
+        ),
+        "proof_tail_previous_dominance_wall_sec": (
+            payload.get(
+                "labeling_final_judge_proof_pass_dominance_wall_sec"
+            )
+            if literal_q0
+            else None
+        ),
+        "proof_tail_previous_max_visited_bucket_size": (
+            payload.get(
+                "labeling_final_judge_proof_pass_max_visited_bucket_size"
+            )
+            if literal_q0
+            else None
+        ),
+    }
+
+
+def _proof_tail_live_context_kwargs(
+    *,
+    master_columns,
+    round_index: int,
+    history: list[dict],
+    current_context,
+) -> dict:
+    """Build honest pre-intervention trajectory features for QG2.
+
+    The first round has no previous-proof or dual-delta value; ``None`` is
+    propagated so tensorization can emit an explicit missingness mask rather
+    than treating an unavailable field as a real zero.
+    """
+
+    previous = dict(history[-1]) if history else {}
+    previous_dual = dict(previous.get("dual_context") or {})
+    current_dual = _dual_context_payload(current_context)
+    dual_delta: float | None = None
+    if previous_dual:
+        previous_tasks = dict(previous_dual.get("task_duals") or {})
+        current_tasks = dict(current_dual.get("task_duals") or {})
+        previous_cuts = dict(previous_dual.get("cut_duals") or {})
+        current_cuts = dict(current_dual.get("cut_duals") or {})
+        dual_delta = abs(
+            float(previous_dual.get("fleet_dual") or 0.0)
+            - float(current_dual.get("fleet_dual") or 0.0)
+        )
+        dual_delta += sum(
+            abs(
+                float(previous_tasks.get(key, 0.0))
+                - float(current_tasks.get(key, 0.0))
+            )
+            for key in set(previous_tasks) | set(current_tasks)
+        )
+        dual_delta += sum(
+            abs(
+                float(previous_cuts.get(key, 0.0))
+                - float(current_cuts.get(key, 0.0))
+            )
+            for key in set(previous_cuts) | set(current_cuts)
+        )
+    trace_enabled = str(
+        os.getenv("LUNAR_ICE_PROOF_TAIL_LABEL_TRACE", "0")
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    return {
+        "proof_tail_active_column_count": len(tuple(master_columns)),
+        "proof_tail_round_index": max(0, int(round_index)),
+        "proof_tail_previous_proof_wall_sec": previous.get(
+            "proof_tail_previous_proof_wall_sec"
+        ),
+        "proof_tail_previous_processed_labels": previous.get(
+            "proof_tail_previous_processed_labels"
+        ),
+        "proof_tail_previous_queue_policy_id": str(
+            previous.get("proof_tail_previous_queue_policy_id") or ""
+        ),
+        "proof_tail_previous_dominance_candidate_checks": previous.get(
+            "proof_tail_previous_dominance_candidate_checks"
+        ),
+        "proof_tail_previous_dominance_wall_sec": previous.get(
+            "proof_tail_previous_dominance_wall_sec"
+        ),
+        "proof_tail_previous_max_visited_bucket_size": previous.get(
+            "proof_tail_previous_max_visited_bucket_size"
+        ),
+        "proof_tail_dual_delta_l1": dual_delta,
+        "proof_tail_label_trace_enabled": trace_enabled,
     }
 
 

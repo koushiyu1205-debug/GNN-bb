@@ -1,0 +1,16 @@
+{
+  "all_frozen_hashes_verified": true,
+  "archive": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round2_20260819/source_snapshot.terminal.tar.gz",
+  "archive_member_count": 222,
+  "archive_sha256": "00174c5c6c80b0d6592c501431fd406abf0cc99c26f0339b9f611b7718f9f8f2",
+  "deployment_authorized": false,
+  "frozen_source_file_count": 222,
+  "hash_mismatch_count": 0,
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_terminal_source_snapshot.v1",
+  "source_freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round2_20260819/source.freeze.json",
+  "source_freeze_sha256": "8e79971ae042c66b8261d95da24ae38e1b587b34074950495fe963fba997aa9c",
+  "status": "FROZEN_AFTER_TERMINAL_BEFORE_NEXT_ROUND_SOURCE_CHANGES",
+  "terminal_decision": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round2_20260819/terminal_decision.json",
+  "terminal_decision_sha256": "130878cb868c319cd80799936c1e93d3c305193c203a52f4332b1216f24b9bec"
+}

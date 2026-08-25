@@ -1,0 +1,17 @@
+{
+  "gate": {
+    "conservative_separate_graph_build_plus_inference_p99_ms": 15.0,
+    "maximum_gap_below_best_simple_ba": 0.02,
+    "maximum_gap_below_best_topology_ba": 0.0,
+    "maximum_per_context_fraction_of_qpf0": 0.02,
+    "minimum_topology_rank_drop": 0.02,
+    "scale50_minimum_adverse_balanced_accuracy": 0.7,
+    "scale50_minimum_benefit_balanced_accuracy": 0.7,
+    "scale50_minimum_rank_accuracy": 0.65,
+    "warm_tensorization_plus_ensemble_inference_p99_ms": 10.0
+  },
+  "if_fail": "MULTI_TIMEPOINT_LATE_SWITCH_ORACLE",
+  "if_pass": "SINGLE_REQUEST_NATIVE_FRESH_PILOT",
+  "schema_version": "lunar_ice_bpc.p0v5_multires_frontier_acceptance.v1",
+  "threshold_relaxation_forbidden": true
+}

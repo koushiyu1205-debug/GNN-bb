@@ -1,0 +1,33 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_candidate_finalizer_freeze.v1",
+  "status": "FROZEN_ACTION_SURFACE_V2_BEFORE_FORMAL_RESULT_OR_CANDIDATE",
+  "development_only": true,
+  "deployable": false,
+  "production_default": false,
+  "frozen_at_local": "2026-08-03T10:50:54+08:00",
+  "collection_id": "qg2_action_surface_v2",
+  "activation_gate": "formal_full20_pass_and_pre_final_completion_audit_pass",
+  "candidate_schema": "lunar_ice_bpc.p0v5_qg2_action_surface_v2_candidate_freeze.v1",
+  "candidate_model_id": "P0V5_QG2_ACTION_SURFACE_V2_LABEL_STATE_GAT",
+  "automatic_production_switch": false,
+  "historical_baseline_mutation_permitted": false,
+  "frozen_file_sha256": {
+    "scripts/finalize_p0v5_qg2_action_surface_v2_candidate.py": "54e99ac09f4907a83a65d2aa89058464f715d6a7f9b750ab1e498705a2307f44",
+    "scripts/audit_p0v5_qg2_action_surface_v2_completion.py": "dffc9529cc15585ccf9797bdf8ff3155e2697f5a1f447fb8ea3017aaa6cbef54",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_oracle_execution_freeze.json": "bf09c8242d61cc06975a18a13b0637b7802ea56a52ee74eb064cd9e894d3a679",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_post_oracle_freeze.json": "ae867b34f7fa7a9127db423f2c2c1855b4a7b9480717431891d8da67bc89a083",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_relaxed_training_freeze.json": "4a61f55a6a4c14ac67577cbffe8dd4f0a2b27b27921123d92b767408bc2fb325",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_e2e_controller_freeze.json": "672c7dd6aae94feaa07937c10da57d0e8be0a959689ce2403f4b9a358a7de93d",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_formal_controller_freeze.json": "b207196a0ba6242cef098aa686df4b92a67736e5a9a9d57e49335247aed33262",
+    "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+    "runs/native_bpc_baseline_registry.json": "55b275979586ce9a260b375dfa7016811b64711c48fbce22a94e06c99081aa20",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py": "8ee8c4f493479035c5af5b20259b22b11bdf384dbaa88208a65f2143f77aa9b1",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_gat.py": "018d39c8688f7fb0cedff5fdde29f5fe037253a6fe75fbc21f7c93645f7a5db8",
+    "build/native-spprc-bidirectional-feasibility-v1/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so": "272b6bcf4f65052a1321fb35a131d850f5ff80737009065543fc685b5db53a65"
+  },
+  "test_evidence": {
+    "python_passed": 83,
+    "native_ctest_passed": 2,
+    "failed": 0
+  }
+}

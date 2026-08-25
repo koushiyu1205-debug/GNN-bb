@@ -1,0 +1,972 @@
+{
+  "assignment_algorithm": "deterministic_min_cost_categorical_balance_v1",
+  "context_counts_by_scale_partition": {
+    "30": {
+      "calibration": 6,
+      "development_e2e": 5,
+      "selector_heldout": 6,
+      "train": 22
+    },
+    "50": {
+      "calibration": 10,
+      "development_e2e": 8,
+      "selector_heldout": 10,
+      "train": 33
+    }
+  },
+  "instance_descriptors": {
+    "07318c0416425be5": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1542.0,
+      "median_round": 28.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "0901f02491d45908": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 3,
+      "median_active_column_density": 6646.0,
+      "median_round": 54.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "10to60+missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "125aaef31ef11d35": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 1,
+      "median_active_column_density": 5513.0,
+      "median_round": 45.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "existing_realmap_development_v4"
+    },
+    "14c6262160809d66": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 2,
+      "median_active_column_density": 7899.0,
+      "median_round": 63.5,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "16407bf4d988d595": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 3,
+      "median_active_column_density": 6062.0,
+      "median_round": 50.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "10to60+missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "1d448e7e4e70ede2": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 3,
+      "median_active_column_density": 5662.0,
+      "median_round": 45.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "22e4e44594b5766b": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 3,
+      "median_active_column_density": 7410.0,
+      "median_round": 61.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "23cc0c6fee9f1fa0": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 3,
+      "median_active_column_density": 6516.0,
+      "median_round": 52.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "10to60+missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "296a3155f2f99afa": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1469.0,
+      "median_round": 24.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "2bbb50cae32ddac2": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1004.0,
+      "median_round": 18.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "36658f9c48a480aa": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1139.0,
+      "median_round": 20.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "39a7a6d009dfabc5": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 3,
+      "median_active_column_density": 7115.0,
+      "median_round": 59.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "10to60+missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "3f257a94c89bf615": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 6210.0,
+      "median_round": 55.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "4082eed14fe91216": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 3,
+      "median_active_column_density": 5887.0,
+      "median_round": 51.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "lt10+missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "48daf3edb6a543da": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 7004.0,
+      "median_round": 58.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "4a75319d174fdd19": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1348.0,
+      "median_round": 23.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "existing_realmap_development_v4"
+    },
+    "4c3e017314d9a3ee": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1254.0,
+      "median_round": 21.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "510dcbb1be8deee5": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 3,
+      "median_active_column_density": 5412.0,
+      "median_round": 46.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "56286c37063f6048": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 3,
+      "median_active_column_density": 4535.0,
+      "median_round": 36.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "58f3f03af6b2c317": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1583.0,
+      "median_round": 26.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "5a60954d271d2610": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 2,
+      "median_active_column_density": 5454.0,
+      "median_round": 46.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "existing_realmap_development_v4+r1_imported_root_q0"
+    },
+    "5ac004e434340ddd": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 3,
+      "median_active_column_density": 1270.0,
+      "median_round": 22.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "62d180c8d93ff71c": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 3,
+      "median_active_column_density": 8352.0,
+      "median_round": 72.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "existing_realmap_development_v4"
+    },
+    "632509abd49511a8": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 2,
+      "median_active_column_density": 7039.0,
+      "median_round": 57.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "existing_realmap_development_v4+r1_imported_root_q0"
+    },
+    "659b7b2bfa17c32e": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 3,
+      "median_active_column_density": 7615.0,
+      "median_round": 62.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "665810f5957bfe6b": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 3,
+      "median_active_column_density": 4961.0,
+      "median_round": 41.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "10to60+missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "6cc232d48d44f2d3": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1233.0,
+      "median_round": 20.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "6f17b70d5674dc08": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1358.0,
+      "median_round": 22.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "716f194babe1bf7d": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1521.0,
+      "median_round": 25.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "76555c58e6b150f2": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1492.0,
+      "median_round": 25.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "77176536c5b0f521": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1634.0,
+      "median_round": 26.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "79478c234c73e4f2": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 2,
+      "median_active_column_density": 8461.5,
+      "median_round": 67.5,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "7ad0c8d59c88bbe1": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1235.0,
+      "median_round": 20.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "7c513c6edeea1faf": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1186.0,
+      "median_round": 19.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "7f3230fed387dae8": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 2,
+      "median_active_column_density": 5078.5,
+      "median_round": 41.5,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "existing_realmap_development_v4+r1_imported_root_q0"
+    },
+    "86fee1c7915b86b5": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1256.0,
+      "median_round": 23.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "8e35efca611548b7": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 6378.5,
+      "median_round": 51.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "existing_realmap_development_v4"
+    },
+    "9003925e2924006a": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 2,
+      "median_active_column_density": 9138.5,
+      "median_round": 75.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "9672e4cf0026eb9b": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 2,
+      "median_active_column_density": 5157.0,
+      "median_round": 41.5,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "existing_realmap_development_v4+r1_imported_root_q0"
+    },
+    "9e28af267ed553c3": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1442.0,
+      "median_round": 23.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "a21f4ca58f222d77": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 6089.0,
+      "median_round": 49.5,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "a24edd8f7a832053": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1714.5,
+      "median_round": 29.5,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "a7acc5b02e62e549": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1809.0,
+      "median_round": 32.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "c3b4e15cc7f5a44f": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1213.0,
+      "median_round": 23.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "da4d44d7b526f0d1": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1370.0,
+      "median_round": 23.0,
+      "median_round_band": "mid",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "e5f80e8bd698b75d": {
+      "active_column_density_band": "mid",
+      "context_multiplicity": 2,
+      "median_active_column_density": 1493.5,
+      "median_round": 27.5,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "ea7975bf0465b1c7": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 2,
+      "median_active_column_density": 5470.0,
+      "median_round": 43.5,
+      "median_round_band": "low",
+      "previous_q0_pressure": "10to60+missing",
+      "scale": 50,
+      "source_cohort": "r1_imported_root_q0"
+    },
+    "f4bc9660f12da0de": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1745.0,
+      "median_round": 29.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "fb48c93eda646029": {
+      "active_column_density_band": "low",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1212.0,
+      "median_round": 20.0,
+      "median_round_band": "low",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    },
+    "fbd070417ed00ce5": {
+      "active_column_density_band": "high",
+      "context_multiplicity": 1,
+      "median_active_column_density": 1791.0,
+      "median_round": 31.0,
+      "median_round_band": "high",
+      "previous_q0_pressure": "missing",
+      "scale": 30,
+      "source_cohort": "generated_v2_candidate"
+    }
+  },
+  "instance_partition": {
+    "07318c0416425be5": "train",
+    "0901f02491d45908": "train",
+    "125aaef31ef11d35": "train",
+    "14c6262160809d66": "train",
+    "16407bf4d988d595": "selector_heldout",
+    "1d448e7e4e70ede2": "development_e2e",
+    "22e4e44594b5766b": "train",
+    "23cc0c6fee9f1fa0": "train",
+    "296a3155f2f99afa": "train",
+    "2bbb50cae32ddac2": "development_e2e",
+    "36658f9c48a480aa": "train",
+    "39a7a6d009dfabc5": "calibration",
+    "3f257a94c89bf615": "selector_heldout",
+    "4082eed14fe91216": "calibration",
+    "48daf3edb6a543da": "calibration",
+    "4a75319d174fdd19": "train",
+    "4c3e017314d9a3ee": "train",
+    "510dcbb1be8deee5": "train",
+    "56286c37063f6048": "selector_heldout",
+    "58f3f03af6b2c317": "development_e2e",
+    "5a60954d271d2610": "selector_heldout",
+    "5ac004e434340ddd": "train",
+    "62d180c8d93ff71c": "train",
+    "632509abd49511a8": "development_e2e",
+    "659b7b2bfa17c32e": "development_e2e",
+    "665810f5957bfe6b": "train",
+    "6cc232d48d44f2d3": "train",
+    "6f17b70d5674dc08": "train",
+    "716f194babe1bf7d": "train",
+    "76555c58e6b150f2": "calibration",
+    "77176536c5b0f521": "train",
+    "79478c234c73e4f2": "train",
+    "7ad0c8d59c88bbe1": "train",
+    "7c513c6edeea1faf": "selector_heldout",
+    "7f3230fed387dae8": "train",
+    "86fee1c7915b86b5": "calibration",
+    "8e35efca611548b7": "train",
+    "9003925e2924006a": "train",
+    "9672e4cf0026eb9b": "calibration",
+    "9e28af267ed553c3": "selector_heldout",
+    "a21f4ca58f222d77": "train",
+    "a24edd8f7a832053": "calibration",
+    "a7acc5b02e62e549": "train",
+    "c3b4e15cc7f5a44f": "selector_heldout",
+    "da4d44d7b526f0d1": "development_e2e",
+    "e5f80e8bd698b75d": "selector_heldout",
+    "ea7975bf0465b1c7": "train",
+    "f4bc9660f12da0de": "train",
+    "fb48c93eda646029": "calibration",
+    "fbd070417ed00ce5": "train"
+  },
+  "multiplicity_quota": {
+    "30": {
+      "calibration": {
+        "1": 2,
+        "2": 2,
+        "3": 0
+      },
+      "development_e2e": {
+        "1": 1,
+        "2": 2,
+        "3": 0
+      },
+      "selector_heldout": {
+        "1": 2,
+        "2": 2,
+        "3": 0
+      },
+      "train": {
+        "1": 7,
+        "2": 6,
+        "3": 1
+      }
+    },
+    "50": {
+      "calibration": {
+        "1": 0,
+        "2": 2,
+        "3": 2
+      },
+      "development_e2e": {
+        "1": 0,
+        "2": 1,
+        "3": 2
+      },
+      "selector_heldout": {
+        "1": 0,
+        "2": 2,
+        "3": 2
+      },
+      "train": {
+        "1": 1,
+        "2": 7,
+        "3": 6
+      }
+    }
+  },
+  "rows": [
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "07318c0416425be5",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_020_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "0901f02491d45908",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_002_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "125aaef31ef11d35",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_006_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "14c6262160809d66",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_050/instance_001_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "16407bf4d988d595",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_018_logical_graph.json",
+      "partition": "selector_heldout",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "1d448e7e4e70ede2",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_050/instance_002_logical_graph.json",
+      "partition": "development_e2e",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "22e4e44594b5766b",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_050/instance_003_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "23cc0c6fee9f1fa0",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_013_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "296a3155f2f99afa",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_010_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "2bbb50cae32ddac2",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_030_logical_graph.json",
+      "partition": "development_e2e",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "36658f9c48a480aa",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_014_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "39a7a6d009dfabc5",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_015_logical_graph.json",
+      "partition": "calibration",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "3f257a94c89bf615",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_019_logical_graph.json",
+      "partition": "selector_heldout",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "4082eed14fe91216",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_001_logical_graph.json",
+      "partition": "calibration",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "48daf3edb6a543da",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_050/instance_004_logical_graph.json",
+      "partition": "calibration",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "4a75319d174fdd19",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_014_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "4c3e017314d9a3ee",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_011_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "510dcbb1be8deee5",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_007_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "56286c37063f6048",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_014_logical_graph.json",
+      "partition": "selector_heldout",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "58f3f03af6b2c317",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_001_logical_graph.json",
+      "partition": "development_e2e",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "5a60954d271d2610",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_010_logical_graph.json",
+      "partition": "selector_heldout",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "5ac004e434340ddd",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_009_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "62d180c8d93ff71c",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_016_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "632509abd49511a8",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_009_logical_graph.json",
+      "partition": "development_e2e",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "659b7b2bfa17c32e",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_050/instance_005_logical_graph.json",
+      "partition": "development_e2e",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 3,
+      "instance_content_hash": "665810f5957bfe6b",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_012_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "6cc232d48d44f2d3",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_019_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "6f17b70d5674dc08",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_004_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "716f194babe1bf7d",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_017_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "76555c58e6b150f2",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_005_logical_graph.json",
+      "partition": "calibration",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "77176536c5b0f521",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_028_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "79478c234c73e4f2",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_008_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "7ad0c8d59c88bbe1",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_018_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "7c513c6edeea1faf",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_013_logical_graph.json",
+      "partition": "selector_heldout",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "7f3230fed387dae8",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_011_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "86fee1c7915b86b5",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_016_logical_graph.json",
+      "partition": "calibration",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "8e35efca611548b7",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_004_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "9003925e2924006a",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_003_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "9672e4cf0026eb9b",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_005_logical_graph.json",
+      "partition": "calibration",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "9e28af267ed553c3",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_008_logical_graph.json",
+      "partition": "selector_heldout",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "a21f4ca58f222d77",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_017_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "a24edd8f7a832053",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_011_logical_graph.json",
+      "partition": "calibration",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "a7acc5b02e62e549",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_012_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "c3b4e15cc7f5a44f",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_009_logical_graph.json",
+      "partition": "selector_heldout",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "da4d44d7b526f0d1",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_013_logical_graph.json",
+      "partition": "development_e2e",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "e5f80e8bd698b75d",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_008_logical_graph.json",
+      "partition": "selector_heldout",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 2,
+      "instance_content_hash": "ea7975bf0465b1c7",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_050/instance_020_logical_graph.json",
+      "partition": "train",
+      "scale": 50
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "f4bc9660f12da0de",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_012_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "fb48c93eda646029",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_010_logical_graph.json",
+      "partition": "calibration",
+      "scale": 30
+    },
+    {
+      "context_multiplicity": 1,
+      "instance_content_hash": "fbd070417ed00ce5",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_029_logical_graph.json",
+      "partition": "train",
+      "scale": 30
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_instance_split.v3",
+  "seed": 260814025,
+  "status": "FROZEN_BEFORE_ANY_V3_ARM_OUTCOME"
+}

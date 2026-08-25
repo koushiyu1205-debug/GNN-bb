@@ -1,0 +1,8 @@
+{
+  "decision": "FAIL",
+  "immediate_cause": "PREFIX_COST_GATE_FAILED_BEFORE_OOF",
+  "performance_authority": false,
+  "reason": "COUNTERFACTUAL_PREFIX_NOT_IDENTIFIABLE",
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_budget_decision.v1",
+  "selected_rollout_budget": null
+}

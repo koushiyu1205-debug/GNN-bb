@@ -1,0 +1,83 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_gat_qd1_config.v8",
+  "experiment_id": "p0v5_counterfactual_prefix_gat_qd1_selector_v8_20260818",
+  "run_root": "runs/p0v5_counterfactual_prefix_gat_qd1_selector_v8_20260818",
+  "v7r3_run_root": "runs/p0v5_frontier_observability_root_cause_v7r3_20260818",
+  "v7r3_terminal_reason": "SCALE50_BENEFIT_HARM_NOT_SEPARABLE",
+  "runtime_policy": "P0V5_ROOT_COUNTERFACTUAL_PREFIX_GAT_QD1_SELECTOR_V8",
+  "action_universe": ["CONTINUE_Q0", "SWITCH_QD1_AT_4096"],
+  "permanent_forced_veto_arms": ["QB1", "QGR1"],
+  "allowed_scales": [30, 50],
+  "literal_bypass_scales": [5, 10, 20],
+  "lifecycle_authority": ["root_cg"],
+  "processed_label_boundary": 4096,
+  "rollout_checkpoint_grid": [128, 512, 2048],
+  "label_sample_cap": 256,
+  "native_build_dir": "build/native-spprc-counterfactual-prefix-v8",
+  "native_binary": "build/native-spprc-counterfactual-prefix-v8/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "selected_exact_config": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "representation_development": {
+    "contexts": 38,
+    "matched_tasks": 228,
+    "collapsed_labels": 38,
+    "performance_authority": false,
+    "scale50_minimum_benefit_balanced_accuracy": 0.70,
+    "scale50_minimum_rank_accuracy": 0.65,
+    "maximum_similar_opposite_label_fraction": 0.35,
+    "maximum_gat_ba_gap_to_simple": 0.02,
+    "minimum_topology_rank_drop": 0.02,
+    "paired_prefix_warm_p99_ms": 250.0,
+    "paired_prefix_fraction_of_qpf0": 0.02,
+    "taxed_oracle_gm_at_most": 0.97
+  },
+  "candidate_generation": {
+    "pilot_instances_per_scale": 8,
+    "calibration_instances_per_scale": 6,
+    "heldout_instances_per_scale": 6,
+    "development_e2e_instances_per_scale": 3,
+    "total_eligible_instances_per_scale": 23,
+    "pilot_candidate_caps": {"30": 160, "50": 23},
+    "total_candidate_caps": {"30": 385, "50": 57},
+    "tree_supplement_forbidden": true,
+    "outcome_blind_selection": true
+  },
+  "selector_training": {
+    "candidate_model": "gat",
+    "control_models": ["mlp", "linear", "no_message", "shuffled_topology"],
+    "hidden_dim": 16,
+    "attention_heads": 2,
+    "layers": 2,
+    "dropout": 0.1,
+    "maximum_parameters_per_seed_exclusive": 30000,
+    "maximum_ensemble_parameters_exclusive": 90000,
+    "torch_threads": 1,
+    "fold_count": 5,
+    "seeds": [61635, 91267, 170141],
+    "maximum_epochs": 200,
+    "patience": 25,
+    "ood_relative_margin": 0.05,
+    "loss_weights": {
+      "benefit_bce": 1.0,
+      "beneficial_gain_huber": 0.5,
+      "adverse_bce": 1.0,
+      "qd1_vs_q0_rank": 0.25
+    }
+  },
+  "threshold_grid": {
+    "minimum_benefit_probability": [0.6, 0.7, 0.8, 0.9],
+    "maximum_adverse_probability": [0.02, 0.05, 0.1],
+    "minimum_expected_gain": [0.02, 0.05, 0.1],
+    "adverse_penalty": [0.5, 1.0, 2.0],
+    "maximum_disagreement": [0.05, 0.1, 0.15]
+  },
+  "execution": {
+    "blocked_fresh_process_repeats": 3,
+    "replay_caps_sec": {"30": 300, "50": 600},
+    "full_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "single_native_process": true
+  },
+  "development_only": true,
+  "deployment_authorized": false,
+  "production_switch_authorized": false
+}

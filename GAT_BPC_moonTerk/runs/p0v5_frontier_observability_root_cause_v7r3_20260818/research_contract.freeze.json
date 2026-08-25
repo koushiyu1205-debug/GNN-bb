@@ -1,0 +1,14 @@
+{
+  "advancement_requires": [
+    "post4096_switch_oracle_headroom",
+    "natural_context_coverage_feasible",
+    "frontier_feature_sufficiency",
+    "scale50_benefit_harm_separability"
+  ],
+  "candidate_training_forbidden": true,
+  "instance_grouped_evaluation_required": true,
+  "manifest_generation_forbidden": true,
+  "question": "is exact-safe QD1 benefit predictable from the action-previsible frontier after 4096 literal-Q0 pops",
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_contract.v1",
+  "threshold_search_forbidden": true
+}

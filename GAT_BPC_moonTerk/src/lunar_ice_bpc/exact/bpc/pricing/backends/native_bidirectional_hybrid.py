@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import replace
 import importlib
 from math import isfinite
+import os
 from time import perf_counter
 
 from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
@@ -422,10 +423,229 @@ class NativeBidirectionalMidpointHybridBackend:
         prepass_wall_sec: float = 0.0,
         prepass_telemetry: dict | None = None,
     ) -> BackendResult:
-        fallback_backend, fallback_backend_id = (
-            self._p0v4_fallback_backend(request)
+        fallback_request = replace(
+            request,
+            proof_tail_fallback_context=True,
+            proof_tail_v5_midpoint_wall_sec=max(
+                0.0, float(prepass_wall_sec)
+            ),
+            proof_tail_v5_midpoint_reason=str(reason),
         )
-        fallback = fallback_backend.solve(request)
+        qg2_snapshot_telemetry = {
+            "proof_tail_qg2_snapshot_written": False,
+            "proof_tail_qg2_snapshot_reason": "qg2_not_requested",
+        }
+        qg2_telemetry = {
+            "proof_tail_gat_runtime_enabled": False,
+            "proof_tail_gat_action": "Q0",
+            "proof_tail_gat_fallback_reason": "qg2_not_requested",
+            "proof_tail_gat_ood": False,
+            "proof_tail_gat_inference_wall_ms": 0.0,
+        }
+        frontier_telemetry = {
+            "proof_tail_frontier_runtime_enabled": False,
+            "proof_tail_frontier_runtime_action": "CONTINUE_Q0",
+            "proof_tail_frontier_runtime_reason": "v7_not_requested",
+            "proof_tail_frontier_model_call_count": 0,
+        }
+        frontier_manifest = str(os.getenv(
+            "LUNAR_ICE_P0V5_FRONTIER_GAT_QD1_V7_MANIFEST", ""
+        )).strip()
+        temporal_manifest = str(os.getenv(
+            "LUNAR_ICE_P0V5_TEMPORAL_GAT_V1_MANIFEST", ""
+        )).strip()
+        temporal_runtime_requested = bool(temporal_manifest)
+        if not temporal_runtime_requested:
+            try:
+                from lunar_ice_bpc.guidance.temporal_frontier_gat_runtime_v1 import (
+                    temporal_frontier_runtime_requested as _temporal_requested,
+                )
+
+                temporal_runtime_requested = bool(_temporal_requested())
+            except Exception:
+                # A malformed active registry still owns this branch.  The
+                # installer below records the problem and restores literal Q0.
+                temporal_runtime_requested = True
+        portfolio_manifest = str(os.getenv(
+            "LUNAR_ICE_P0V5_CONTEXT_QUEUE_PORTFOLIO_V1_MANIFEST", ""
+        )).strip()
+        qg2_requested = bool(
+            fallback_request.proof_tail_gat_enabled
+            or fallback_request.proof_tail_gat_manifest_path
+            or str(os.getenv(
+                "LUNAR_ICE_PROOF_TAIL_GAT_MANIFEST", ""
+            )).strip()
+            or str(os.getenv(
+                "LUNAR_ICE_P0V5_QG2_FALLBACK_SNAPSHOT_DIR", ""
+            )).strip()
+            or str(os.getenv(
+                "LUNAR_ICE_P0V5_QG2_V3_SELECTOR_MANIFEST", ""
+            )).strip()
+            or portfolio_manifest
+        )
+        if temporal_runtime_requested:
+            try:
+                from lunar_ice_bpc.guidance.temporal_frontier_gat_runtime_v1 import (
+                    prepare_temporal_frontier_request_from_environment,
+                )
+
+                fallback_request, frontier_telemetry = (
+                    prepare_temporal_frontier_request_from_environment(
+                        fallback_request
+                    )
+                )
+                qg2_snapshot_telemetry = {
+                    "proof_tail_qg2_snapshot_written": False,
+                    "proof_tail_qg2_snapshot_reason": (
+                        "temporal_frontier_runtime_owns_request"
+                    ),
+                }
+            except Exception as exc:
+                fallback_request = replace(
+                    fallback_request,
+                    proof_queue_policy_id="Q0",
+                    guidance_mode="off",
+                    guidance_hints=None,
+                    proof_tail_frontier_probe_mode="disabled",
+                    proof_tail_frontier_trial_pop_budget=0,
+                    proof_tail_frontier_observation_boundaries=(),
+                    proof_tail_frontier_gat_bundle=None,
+                    proof_tail_frontier_manifest_path="",
+                    proof_tail_frontier_manifest_sha256="",
+                    proof_tail_frontier_bundle_sha256="",
+                )
+                frontier_telemetry = {
+                    "proof_tail_frontier_runtime_enabled": True,
+                    "proof_tail_frontier_runtime_action": "CONTINUE_Q0",
+                    "proof_tail_frontier_runtime_reason": (
+                        "temporal_fail_closed:" f"{exc!r}"
+                    ),
+                    "proof_tail_frontier_model_call_count": 0,
+                }
+        elif frontier_manifest:
+            try:
+                from lunar_ice_bpc.guidance.frontier_gat_qd1_runtime_v7 import (
+                    prepare_frontier_gat_qd1_request_from_environment,
+                )
+
+                fallback_request, frontier_telemetry = (
+                    prepare_frontier_gat_qd1_request_from_environment(
+                        fallback_request
+                    )
+                )
+                qg2_snapshot_telemetry = {
+                    "proof_tail_qg2_snapshot_written": False,
+                    "proof_tail_qg2_snapshot_reason": (
+                        "v7_frontier_runtime_owns_request"
+                    ),
+                }
+            except Exception as exc:
+                fallback_request = replace(
+                    fallback_request,
+                    proof_queue_policy_id="Q0",
+                    guidance_mode="off",
+                    guidance_hints=None,
+                    proof_tail_frontier_probe_mode="disabled",
+                    proof_tail_frontier_observation_boundaries=(),
+                    proof_tail_frontier_gat_bundle=None,
+                    proof_tail_frontier_manifest_path="",
+                    proof_tail_frontier_manifest_sha256="",
+                    proof_tail_frontier_bundle_sha256="",
+                )
+                frontier_telemetry = {
+                    "proof_tail_frontier_runtime_enabled": True,
+                    "proof_tail_frontier_runtime_action": "CONTINUE_Q0",
+                    "proof_tail_frontier_runtime_reason": (
+                        "v7_fail_closed:" f"{exc!r}"
+                    ),
+                    "proof_tail_frontier_model_call_count": 0,
+                }
+        elif qg2_requested:
+            v3_selector_manifest = str(os.getenv(
+                "LUNAR_ICE_P0V5_QG2_V3_SELECTOR_MANIFEST", ""
+            )).strip()
+            try:
+                if portfolio_manifest:
+                    # This module has no Torch dependency at import time.  Its
+                    # very first runtime branch returns scale5/10/20 unchanged
+                    # before reading a manifest or importing tensor code.
+                    from lunar_ice_bpc.guidance.context_queue_portfolio_runtime import (
+                        prepare_context_queue_portfolio_request_from_environment,
+                    )
+                    fallback_request, qg2_telemetry = (
+                        prepare_context_queue_portfolio_request_from_environment(
+                            fallback_request
+                        )
+                    )
+                    qg2_snapshot_telemetry = {
+                        "proof_tail_qg2_snapshot_written": False,
+                        "proof_tail_qg2_snapshot_reason": (
+                            "portfolio_runtime_owns_context_corpus"
+                        ),
+                    }
+                else:
+                    from lunar_ice_bpc.guidance.proof_queue_label_state_runtime import (
+                        prepare_qg2_request_from_environment,
+                        record_qg2_fallback_snapshot,
+                    )
+                    qg2_snapshot_telemetry = record_qg2_fallback_snapshot(
+                        fallback_request
+                    )
+                if v3_selector_manifest and not portfolio_manifest:
+                    from lunar_ice_bpc.guidance.qg2_v3_selector_runtime import (
+                        prepare_qg2_v3_selector_request_from_environment,
+                    )
+                    fallback_request, qg2_telemetry = (
+                        prepare_qg2_v3_selector_request_from_environment(
+                            fallback_request
+                        )
+                    )
+                elif not portfolio_manifest:
+                    fallback_request, qg2_telemetry = (
+                        prepare_qg2_request_from_environment(fallback_request)
+                    )
+            except Exception as exc:
+                # QG2 is ordering-only.  Any manifest, oracle, binding, OOD,
+                # inference, or output failure restores the literal Q0 request.
+                fallback_request = replace(
+                    fallback_request,
+                    proof_queue_policy_id="Q0",
+                    guidance_mode="off",
+                    guidance_hints=None,
+                )
+                qg2_telemetry = {
+                    "proof_tail_gat_runtime_enabled": True,
+                    "proof_tail_gat_action": "Q0",
+                    "proof_tail_gat_fallback_reason": (
+                        "qg2_fail_closed:" f"{exc!r}"
+                    ),
+                    "proof_tail_gat_ood": False,
+                    "proof_tail_gat_inference_wall_ms": 0.0,
+                }
+                if v3_selector_manifest:
+                    qg2_telemetry.update({
+                        "proof_tail_selector_runtime_enabled": True,
+                        "proof_tail_selector_action": "Q0",
+                        "proof_tail_selector_decision_reason": (
+                            "selector_fail_closed:" f"{exc!r}"
+                        ),
+                        "proof_tail_selector_ood": False,
+                        "proof_tail_selector_inference_wall_ms": 0.0,
+                    })
+                if portfolio_manifest:
+                    qg2_telemetry.update({
+                        "proof_tail_portfolio_runtime_enabled": True,
+                        "proof_tail_portfolio_action": "Q0",
+                        "proof_tail_portfolio_decision_reason": (
+                            "portfolio_fail_closed:" f"{exc!r}"
+                        ),
+                        "proof_tail_portfolio_ood": False,
+                        "proof_tail_portfolio_inference_wall_ms": 0.0,
+                    })
+        fallback_backend, fallback_backend_id = (
+            self._p0v4_fallback_backend(fallback_request)
+        )
+        fallback = fallback_backend.solve(fallback_request)
         telemetry = dict(fallback.telemetry)
         telemetry.update(
             {
@@ -465,6 +685,9 @@ class NativeBidirectionalMidpointHybridBackend:
             }
         )
         telemetry.update(dict(prepass_telemetry or {}))
+        telemetry.update(qg2_snapshot_telemetry)
+        telemetry.update(qg2_telemetry)
+        telemetry.update(frontier_telemetry)
         return replace(
             fallback,
             backend_id=self.backend_id,

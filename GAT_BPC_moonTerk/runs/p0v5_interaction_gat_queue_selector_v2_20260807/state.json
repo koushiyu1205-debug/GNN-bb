@@ -1,0 +1,11 @@
+{
+  "current_stage": "TERMINAL",
+  "deployment_authorized": false,
+  "development_only": true,
+  "experiment_id": "p0v5_interaction_gat_queue_selector_v2_20260807",
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_state.v2",
+  "status": "FAIL",
+  "terminal": true,
+  "terminal_decision": "INSUFFICIENT_ROOT_GAT_COVERAGE"
+}

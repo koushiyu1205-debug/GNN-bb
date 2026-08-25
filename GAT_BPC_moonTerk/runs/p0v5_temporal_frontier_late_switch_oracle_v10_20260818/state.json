@@ -1,0 +1,17 @@
+{
+  "candidate_trained": false,
+  "current_stage": "TERMINAL",
+  "deployment_authorized": false,
+  "development_only": true,
+  "diagnostic_only": true,
+  "experiment_id": "p0v5_temporal_frontier_late_switch_oracle_v10_20260818",
+  "manifest_generated": false,
+  "performance_freeze": "performance.freeze.registry.json",
+  "production_switch_authorized": false,
+  "scheduled_task_count": 240,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_state.v1",
+  "status": "FAIL",
+  "terminal": true,
+  "terminal_decision": "terminal_decision.json",
+  "terminal_reason": "NO_SCALE50_LATE_SWITCH_ORACLE_HEADROOM"
+}

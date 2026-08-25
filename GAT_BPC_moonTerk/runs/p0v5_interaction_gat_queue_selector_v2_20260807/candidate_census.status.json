@@ -1,0 +1,23 @@
+{
+  "arm_outcomes_read": 0,
+  "coverage": {
+    "30": {
+      "eligible_contexts": 27,
+      "eligible_instances": 13,
+      "target": 23
+    },
+    "50": {
+      "eligible_contexts": 60,
+      "eligible_instances": 24,
+      "target": 23
+    }
+  },
+  "generated_instances_by_scale": {
+    "30": 30,
+    "50": 5
+  },
+  "maximum_generated_instances_per_scale": 30,
+  "outcome_blind": true,
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_census_status.v2",
+  "target_reached": false
+}

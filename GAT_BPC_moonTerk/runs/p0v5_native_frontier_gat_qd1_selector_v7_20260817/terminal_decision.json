@@ -1,0 +1,17 @@
+{
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "detail": {
+    "coverage_exhausted": {
+      "30": true,
+      "50": false
+    },
+    "maximum": 20,
+    "required": 8
+  },
+  "development_only": true,
+  "failed_stage": "PILOT_CENSUS",
+  "production_switch_authorized": false,
+  "reason": "NO_FRONTIER_SWITCH_HEADROOM",
+  "schema_version": "lunar_ice_bpc.p0v5_native_frontier_gat_terminal.v7"
+}

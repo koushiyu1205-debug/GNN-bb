@@ -1,0 +1,105 @@
+{
+  "complete": false,
+  "corpus_ready_for_preoutcome_split": false,
+  "corpus_root": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4",
+  "counts_by_scale": {
+    "30": 8,
+    "50": 0
+  },
+  "development_only": true,
+  "development_rows": [
+    {
+      "benchmark_id": "lunar_ice_sp50_real_map_v1",
+      "candidate_pool_policy": "water_ice_hotspot_directional_sampling_v1",
+      "instance_content_hash": "58f3f03af6b2c317",
+      "instance_id": "lunar_ice_sp50_030_001_seed261106001",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_001_logical_graph.json",
+      "scale": 30,
+      "seed": 261106001,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "benchmark_id": "lunar_ice_sp50_real_map_v1",
+      "candidate_pool_policy": "water_ice_hotspot_directional_sampling_v1",
+      "instance_content_hash": "d63157d3221b97c7",
+      "instance_id": "lunar_ice_sp50_030_002_seed261106002",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_002_logical_graph.json",
+      "scale": 30,
+      "seed": 261106002,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "benchmark_id": "lunar_ice_sp50_real_map_v1",
+      "candidate_pool_policy": "water_ice_hotspot_directional_sampling_v1",
+      "instance_content_hash": "94a45cc4d0ec5512",
+      "instance_id": "lunar_ice_sp50_030_003_seed261106003",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_003_logical_graph.json",
+      "scale": 30,
+      "seed": 261106003,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "benchmark_id": "lunar_ice_sp50_real_map_v1",
+      "candidate_pool_policy": "water_ice_hotspot_directional_sampling_v1",
+      "instance_content_hash": "6f17b70d5674dc08",
+      "instance_id": "lunar_ice_sp50_030_004_seed261106004",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_004_logical_graph.json",
+      "scale": 30,
+      "seed": 261106004,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "benchmark_id": "lunar_ice_sp50_real_map_v1",
+      "candidate_pool_policy": "water_ice_hotspot_directional_sampling_v1",
+      "instance_content_hash": "4c3c73ce6756a691",
+      "instance_id": "lunar_ice_sp50_030_005_seed261106005",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_005_logical_graph.json",
+      "scale": 30,
+      "seed": 261106005,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "benchmark_id": "lunar_ice_sp50_real_map_v1",
+      "candidate_pool_policy": "water_ice_hotspot_directional_sampling_v1",
+      "instance_content_hash": "826f72eb7fb1119f",
+      "instance_id": "lunar_ice_sp50_030_006_seed261106006",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_006_logical_graph.json",
+      "scale": 30,
+      "seed": 261106006,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "benchmark_id": "lunar_ice_sp50_real_map_v1",
+      "candidate_pool_policy": "water_ice_hotspot_directional_sampling_v1",
+      "instance_content_hash": "7b3fd2cf86cbcefb",
+      "instance_id": "lunar_ice_sp50_030_007_seed261106007",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_007_logical_graph.json",
+      "scale": 30,
+      "seed": 261106007,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "benchmark_id": "lunar_ice_sp50_real_map_v1",
+      "candidate_pool_policy": "water_ice_hotspot_directional_sampling_v1",
+      "instance_content_hash": "9e28af267ed553c3",
+      "instance_id": "lunar_ice_sp50_030_008_seed261106008",
+      "path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_realmap_development_v4/lunar_ice_sp50_030/instance_008_logical_graph.json",
+      "scale": 30,
+      "seed": 261106008,
+      "time_window_mode": "inner_to_outer"
+    }
+  ],
+  "distribution_audit": null,
+  "duplicate_content_hashes": [],
+  "duplicate_seeds": [],
+  "expected_counts_by_scale": {
+    "30": 20,
+    "50": 20
+  },
+  "formal_content_hash_overlap": [],
+  "formal_content_hash_overlap_count": 0,
+  "formal_root": "/home/kai/work/GAT_BPC_moonTerk/data/instances",
+  "formal_rows_sha256": "7dd1d526168b1ca8623292d9e8f7b1495e0ee32fb8720cad5b77aa3be9e86a89",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_realmap_v4_corpus_audit.v1",
+  "wrong_generator_count": 0
+}

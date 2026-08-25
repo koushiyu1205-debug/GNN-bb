@@ -1,0 +1,19 @@
+{
+  "case_count": 500,
+  "checks": [
+    "disabled_vs_v7_q0",
+    "prefix_no_routes_or_certificate",
+    "base_graph_hash_q0_qd1",
+    "sample_determinism",
+    "migration_integrity",
+    "legal_routes",
+    "minimum_rc",
+    "rc_reconstruction",
+    "certificate"
+  ],
+  "ctest_stdout": "Internal ctest changing into directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8\nTest project /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8\n    Start 1: lunar_spprc_native_tests\n1/2 Test #1: lunar_spprc_native_tests .........   Passed    0.65 sec\n    Start 2: lunar_spprc_patch_queue_check\n2/2 Test #2: lunar_spprc_patch_queue_check ....   Passed    0.02 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   0.67 sec\n",
+  "ctest_stdout_sha256": "aa8e7b657aa35fd72e3828108afc3910e1d285035dcf9437f00a90a32e8d452d",
+  "decision": "PASS",
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_native_differential.v1",
+  "state_size_bytes": 176
+}

@@ -1,0 +1,10 @@
+{
+  "artifact_sha256": {
+    "matched_qd1_execution.freeze.json": "10f1765923def0444b1a46a52dc8bef91d506166c7f1ef214eb8c4cf2a1b8e38",
+    "q0_milestone.freeze.json": "cec04e5c4278fb87b9964279b3260e5941b2a465b2591acbeb85b1c42db0019e",
+    "qgr1_q0_trace_corpus.freeze.json": "0c7f7a3cd00f42169bccdaddedca6779f6688b9bd21b05c225b56a749172a1c2",
+    "qgr1_q0_trace_execution.freeze.json": "fface70398fd765f37cec30b99a545df30b4c3239f0fec04ddc0dbc8360d32b8"
+  },
+  "frozen_before_non_q0_outcome": true,
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_arm_execution_registry.v4"
+}

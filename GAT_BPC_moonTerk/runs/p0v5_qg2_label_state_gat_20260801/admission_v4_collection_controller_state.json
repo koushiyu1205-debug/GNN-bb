@@ -1,0 +1,6 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_collection_controller.v1",
+  "snapshot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v4",
+  "status": "WAITING_FOR_SCALE30_BATCH01",
+  "wait_for_pid": 3737852
+}

@@ -1,0 +1,70 @@
+{
+  "bounded_oracle_context_limit": 300,
+  "bounded_oracle_context_limit_per_scale": 150,
+  "coverage": {
+    "30": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 0,
+      "instance_count": 0,
+      "root_context_count": 0
+    },
+    "50": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 0,
+      "instance_count": 0,
+      "root_context_count": 0
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "duplicate_instance_paths": {},
+  "excluded_count": 9,
+  "exclusions": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/1236f04130e9423e/825209b99811e6283c5cedcab88147d084ca725dd732afad111fa8e27c0797d0.json",
+      "reason": "engine_hash_mismatch"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/1e4aaad70cded214/fcede14635daee81060f206db425a007991805b240dd7e5ca4caaf1bc97e2629.json",
+      "reason": "trajectory_feature_semantics_mismatch"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/23713c59ff20ebb6/4771b9e31b5ae30a77f39bd415d6454931b282cbe756c140ab51e14dc7c6295e.json",
+      "reason": "trajectory_feature_semantics_mismatch"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/4a7cf63a9c0ca6f7/0794e0dc3e67067ab1d49c69840dcbcd2471b2a08f4abbe4329a1157c8931415.json",
+      "reason": "engine_hash_mismatch"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/4a7cf63a9c0ca6f7/db9171d93c13bf624df2b5ea72c1558e26848591dd5af5deba10ad60fc5449c6.json",
+      "reason": "engine_hash_mismatch"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/4a7cf63a9c0ca6f7/ea67ad95a5c222b3ffac1687a1c0ef85e9b1a1f3c7effbc773c8c20c776af99e.json",
+      "reason": "engine_hash_mismatch"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/4f05ecc5f0e916e6/93a920f61f5cc1e424fdee3410650df96a2f749d953dab83350c645d60de868d.json",
+      "reason": "trajectory_feature_semantics_mismatch"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/67f0ec4aa84c13a4/c5dbd631624325989f4e19a56fe22b0493cf3d59a1c316815fc2fab3c583f640.json",
+      "reason": "trajectory_feature_semantics_mismatch"
+    },
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2/scale30/943421f17efc744a/5c1c2f8f7c4bf9d3e4879d4a6d4d293a5383ffed8bc931342adaa9a33127c3ac.json",
+      "reason": "engine_hash_mismatch"
+    }
+  ],
+  "expected_engine_hash": "b43110628bb6a755",
+  "instance_roots": [
+    "/home/kai/work/GAT_BPC_moonTerk/data/gat_p0v2/development_instances"
+  ],
+  "legacy_compatible_escape_binding_count": 0,
+  "native_build_dir": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1",
+  "oracle_preflight_ready": false,
+  "rows": [],
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_fallback_snapshot_index.v2",
+  "snapshot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v2"
+}

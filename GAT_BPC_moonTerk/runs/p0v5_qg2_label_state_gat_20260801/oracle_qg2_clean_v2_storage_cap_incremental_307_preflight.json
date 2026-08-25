@@ -1,0 +1,41 @@
+{
+  "bounded_context_limit": 300,
+  "bounded_context_limit_per_scale": 150,
+  "coverage": {
+    "30": {
+      "context_count": 150,
+      "instance_count": 119,
+      "preaction_stratum_counts": {
+        "root:plain:r10_29:10to60": 1,
+        "root:plain:r10_29:60to300": 2,
+        "root:plain:r10_29:missing": 58,
+        "root:plain:r30_plus:10to60": 3,
+        "root:plain:r30_plus:60to300": 3,
+        "root:plain:r30_plus:missing": 79,
+        "tree:branch_cut:r0_9:missing": 1,
+        "tree:plain:r0_9:missing": 3
+      }
+    },
+    "50": {
+      "context_count": 150,
+      "instance_count": 109,
+      "preaction_stratum_counts": {
+        "root:plain:r30_plus:10to60": 6,
+        "root:plain:r30_plus:60to300": 7,
+        "root:plain:r30_plus:missing": 137
+      }
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "oracle_gate": {
+    "context_count": 300,
+    "passed": false,
+    "reason": "execution_not_requested"
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_bounded_oracle.v4",
+  "source_state_index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_storage_cap_incremental_307_index.json",
+  "source_state_index_sha256": "8063fdbd936c6dfdfb5d71f6ab225e5a2e2ef2b81164b2194411570d3e44e2d4",
+  "status": "PREFLIGHT_ONLY",
+  "training_permitted": false
+}

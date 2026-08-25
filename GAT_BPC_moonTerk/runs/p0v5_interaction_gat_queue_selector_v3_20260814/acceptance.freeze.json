@@ -1,0 +1,92 @@
+{
+  "arm_admission": {
+    "correctness_redline_limit": 0,
+    "minimum_determined_train_context_fraction": 0.75,
+    "minimum_determined_train_instances": 11,
+    "minimum_neutral_or_harm_instances": 4,
+    "minimum_strong_benefit_instances": 3
+  },
+  "base_portfolio_headroom": {
+    "minimum_non_q0_winner_instances_per_scale": 5,
+    "oracle_gm_at_most_per_scale": 0.95,
+    "require_beneficial_neutral_harm_instances": true
+  },
+  "development_e2e_gate": {
+    "exact_count_may_not_decrease": true,
+    "minimum_activation_instances_per_scale": 2,
+    "net_gm_strictly_below": 1.0,
+    "tree_model_calls_required": 0,
+    "worst_instance_median_ratio_at_most": 1.1
+  },
+  "formal_gate": {
+    "instances_per_scale": 20,
+    "large_scale_tail": {
+      "p90_ratio_at_most": 1.05,
+      "worst_ratio_at_most": 1.2
+    },
+    "minimum_activation_instances_per_large_scale": 5,
+    "promotion_requires_bootstrap95_upper_strictly_below": 1.0,
+    "scale30": {
+      "common_exact_gm_strictly_below": 1.0,
+      "exact_required": 20,
+      "par2_may_not_increase": true
+    },
+    "scale50": {
+      "common_exact_gm_strictly_below": 1.0,
+      "exact_count_may_not_decrease": true,
+      "minimum_exact": 15,
+      "par2_may_not_increase": true
+    },
+    "small_scales": {
+      "exact_required": 20,
+      "gm_at_most": 1.01,
+      "scales": [
+        5,
+        10,
+        20
+      ]
+    },
+    "strong_speedup_gm_at_most": 0.95
+  },
+  "gat_calibration_gate": {
+    "harmful_context_activation_limit": 0,
+    "instance_weighted_gm_strictly_below": 1.0,
+    "minimum_activation_instances_per_scale": 2,
+    "minimum_topology_ablation_macro_rank_drop": 0.02
+  },
+  "heldout_gate": {
+    "gat_not_worse_than_topology_controls": true,
+    "gat_strictly_beats_mlp_linear_worst_and_combined_gm": true,
+    "harmful_adverse_censored_activation_limit": 0,
+    "minimum_activation_instances_per_scale": 2,
+    "net_instance_weighted_gm_strictly_below": 1.0,
+    "one_shot_no_reselection": true,
+    "warm_graph_tensorization_inference_p99_ms_at_most": 10.0
+  },
+  "qgr1_force_on": {
+    "contexts_per_scale": 4,
+    "distinct_instances_per_scale": 4,
+    "maximum_ratio_ge_1_05": 0,
+    "maximum_reordered_label_fraction": 0.15,
+    "maximum_scoring_fraction_of_proof_wall": 0.02,
+    "minimum_beneficial_instances_per_scale": 2,
+    "per_scale_gm_strictly_below": 1.0,
+    "q0_complete_qgr1_censor_limit": 0
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_acceptance_freeze.v3",
+  "status": "FROZEN_BEFORE_ANY_V3_ARM_OUTCOME",
+  "stop_reasons": [
+    "V3_PREACTION_CORPUS_HASH_DRIFT",
+    "FREEZE_HASH_DRIFT",
+    "INSTANCE_FEATURE_FOLD_OR_OUTCOME_LEAKAGE",
+    "CORRECTNESS_REDLINE",
+    "NO_SCALE30_GAT_PORTFOLIO_HEADROOM",
+    "NO_SCALE50_GAT_PORTFOLIO_HEADROOM",
+    "NO_SAFE_GAT_CALIBRATION_THRESHOLD",
+    "NO_GAT_ADVANTAGE",
+    "HELDOUT_FRESH_FAILED",
+    "DEVELOPMENT_E2E_EXACT_COUNT_DECREASED",
+    "FORMAL_SMALL_SCALE_MODEL_CALL",
+    "UNDETERMINED_BY_CONTINUOUS_RESOURCE_CENSOR"
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "action_universe": [
+    "Q0",
+    "QGR1",
+    "QD1"
+  ],
+  "execution": {
+    "arm_order": "rotate_by_state_hash",
+    "blocked_fresh_process_repeats": 3,
+    "formal_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "minimum_comparable_blocks": 2,
+    "q0_milestone_screen_before_arm": true,
+    "q0_repeated_in_every_block": true,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "single_native_process": true
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_execution_freeze.v4",
+  "status": "FROZEN_BEFORE_ANY_V5_ARM_OUTCOME",
+  "threshold_grid": {
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "maximum_resource_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "resource_risk_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "risk_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ]
+  },
+  "trace_reservoir": {
+    "bottom_k_hash": "stateless_mix64_v1",
+    "existing_dominator_preference_cap": 12500,
+    "final_label_state_row_cap": 100000,
+    "incoming_dominator_preference_cap": 12500,
+    "mode": "qgr1_stratified_reservoir_v1",
+    "seed": "first_64_bits_sha256_state_hash",
+    "surface_labels_per_bucket": 8,
+    "surface_reservoir_count": 3125,
+    "training_pair_cap_per_context": 50000,
+    "witness_ancestor_cap": 25000,
+    "witness_route_cap": 512
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "candidate_trained": false,
+  "current_stage": "TERMINAL",
+  "deployment_authorized": false,
+  "experiment_id": "p0v5_temporal_gat_production_v1_round1_20260819",
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_state.v1",
+  "status": "TERMINATED_NEGATIVE",
+  "terminal": true,
+  "terminal_decision": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round1_20260819/terminal_decision.json",
+  "terminal_reason": "TEMPORAL_NATIVE_CONTRACT_TESTS_FAILED"
+}

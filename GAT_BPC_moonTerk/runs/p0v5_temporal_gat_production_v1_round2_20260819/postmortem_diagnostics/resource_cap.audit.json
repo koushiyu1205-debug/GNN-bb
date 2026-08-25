@@ -1,0 +1,52 @@
+{
+  "conclusions": {
+    "effective_native_memory_limit_gb_unchanged": 10.867,
+    "memavailable_reserve_gb_unchanged": 2.0,
+    "old_contexts_eligible_for_promotion_evidence": false,
+    "scale30_minimum_observed_completion_seconds": 718.291542625,
+    "scale30_next_round_cap_seconds": 1200,
+    "scale50_next_round_cap_seconds": 3600,
+    "scale50_observed_status_under_3600_seconds": "MEMORY_LIMIT"
+  },
+  "deployment_authorized": false,
+  "production_switch_authorized": false,
+  "rows": [
+    {
+      "backend_solve_wall_sec": 718.291542625,
+      "certificate_blockers": [],
+      "engine_status": "COMPLETE",
+      "frontier_empty": true,
+      "instance_content_hash": "03a03c5919fac98b",
+      "labels_dropped": false,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round2_20260819/postmortem_diagnostics/scale30_instance065_q0_cap1800.json",
+      "policy": "Q0",
+      "scale": 30,
+      "search_exhaustive": true,
+      "sha256": "5f2ce3f9a420038a62aef07c446d70887c125250d01657eab6b624729d46c234",
+      "source_state_hash": "1a986d86d535cffb77bc038089db354d22f7bc934d9ad0765bb156f2e6058f66",
+      "wall_cap_seconds": 1800
+    },
+    {
+      "backend_solve_wall_sec": 2085.117119875,
+      "certificate_blockers": [
+        "native_exact_search_incomplete",
+        "native_frontier_not_empty"
+      ],
+      "engine_status": "MEMORY_LIMIT",
+      "frontier_empty": false,
+      "instance_content_hash": "6ac205bc15f3e936",
+      "labels_dropped": false,
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round2_20260819/postmortem_diagnostics/scale50_instance029_q0_cap3600.json",
+      "policy": "Q0",
+      "scale": 50,
+      "search_exhaustive": false,
+      "sha256": "aa29ea8231ff7b8c93bb0264955aae91751d6ab3d4cf38075d12a3ec9f4f0893",
+      "source_state_hash": "548a5fd7e11045d5f1b1b1be584daf0d9daad8eb5fce6ca77cd2091ed5865ada",
+      "wall_cap_seconds": 3600
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_round2_postmortem_resource_audit.v1",
+  "source_terminal_decision": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round2_20260819/terminal_decision.json",
+  "source_terminal_decision_sha256": "130878cb868c319cd80799936c1e93d3c305193c203a52f4332b1216f24b9bec",
+  "status": "DIAGNOSTIC_ONLY_AFTER_TERMINAL"
+}

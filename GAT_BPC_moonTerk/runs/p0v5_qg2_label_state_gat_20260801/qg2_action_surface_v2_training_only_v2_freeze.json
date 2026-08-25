@@ -1,0 +1,29 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_training_only_v2_freeze.v1",
+  "development_only": true,
+  "deployable": false,
+  "authority": "exploratory_model_fitting_only",
+  "point_geomean_is_report_only": true,
+  "instance_bootstrap_is_report_only": true,
+  "deployment_gate_unchanged": true,
+  "paper_claim_gate_unchanged": true,
+  "literal_q0_remains_final_rejection_action": true,
+  "oracle_execution_freeze": "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_oracle_execution_freeze.json",
+  "oracle_execution_freeze_sha256": "bf09c8242d61cc06975a18a13b0637b7802ea56a52ee74eb064cd9e894d3a679",
+  "thresholds": {
+    "minimum_determined_contexts_per_scale": 20,
+    "minimum_determined_instances_per_scale": 10,
+    "minimum_gain_5pct_contexts_per_scale": 5,
+    "minimum_positive_instances_per_scale": 5,
+    "minimum_nonpositive_contexts_per_scale": 5,
+    "minimum_harmful_instances_per_scale": 3,
+    "harmful_ratio_threshold": 1.05,
+    "maximum_instance_saved_wall_fraction": 0.35
+  },
+  "frozen_file_sha256": {
+    "scripts/evaluate_p0v5_qg2_training_only_gate_v2.py": "0d0830ea02d54e2050a8a16cf6da84d119968d6566ef03b705c53a5bd913baca",
+    "scripts/run_p0v5_qg2_training_only_v2_after_oracle.py": "412eafa539d2e93c076e28f1878350dc3355c3cefa342220b1202c6c4cba2181",
+    "scripts/run_p0v5_qg2_relaxed_training_entry.py": "6ebbbc99b326fa17968f9beebb4120e0bd0ec65954839ccaed176f42d30fe45a",
+    "scripts/train_p0v5_qg2_model_comparison.py": "9b3ea67b883a117efb05e97bb494017f1666e88c342b54b8683f0e4939f569e1"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "arm_outcomes_read": 0,
+  "cohorts": [
+    {
+      "cohort": "v2_generated_scale30",
+      "eligibility": "at_least_one_natural_root_context",
+      "scale": 30,
+      "successes": 13,
+      "trials": 30
+    },
+    {
+      "cohort": "v2_generated_scale50",
+      "eligibility": "at_least_one_natural_root_context",
+      "scale": 50,
+      "successes": 5,
+      "trials": 5
+    },
+    {
+      "cohort": "v4_candidate_scale30",
+      "eligibility": "at_least_one_natural_root_context",
+      "scale": 30,
+      "successes": 1,
+      "trials": 4
+    },
+    {
+      "cohort": "v4_candidate_scale50",
+      "eligibility": "at_least_one_natural_root_context",
+      "scale": 50,
+      "successes": 4,
+      "trials": 4
+    },
+    {
+      "cohort": "v5_repair_scale30",
+      "eligibility": "at_least_one_natural_root_context",
+      "scale": 30,
+      "successes": 3,
+      "trials": 8
+    },
+    {
+      "cohort": "v7_pilot_scale30",
+      "eligibility": "at_least_one_natural_root_context_under_v7_generator_and_engine",
+      "scale": 30,
+      "successes": 4,
+      "trials": 20
+    }
+  ],
+  "outcome_blind": true,
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_coverage_evidence.v1",
+  "source_artifact_sha256": {
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_interaction_gat_queue_selector_v2_20260807/candidate_census.status.json": "6d95de05ebd842e0e7a1077c3cd67c84e1e20509811beb546967bec990b935eb",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_interaction_gat_queue_selector_v2_20260807/root_screen_snapshot_index.current.json": "a52d17b0ed2db46aa065d0124d2a54086e0d9c269c778e95ec43cd1dfe406043",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_001/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_002/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_003/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_004/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_005/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_005/snapshots/scale30/ccc46882b6ddea07/757e876cd797b4ffe7371fe17954fcbea12266bcebf019d4555c3aae4a8584b3.json": "cc73caafd28d14972c1d4f2f150fc6c784a8b9dc711c1b823bfc51cc6eaeaf24",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_006/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_007/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_008/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_008/snapshots/scale30/a4e2b8ac7d788bee/460e098a22c243622daf83286fdcb81376103bb7c5f50e4e76854cf2a5b149bb.json": "506b667f5e14dd2d6fd8a89a3348ac28ba07a110e7d68f776e1a9de2f72c1b40",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_009/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_010/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_011/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_012/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_013/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_014/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_015/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_015/snapshots/scale30/d98da6759cea7192/76105ddc3d12c95d9ae4775d36158a05062799f81554fa4eecd094474c24cacd.json": "404111e44dd4f33eafe5735c02327d0df3654060e165c35e3b1ac6e6e4abce8c",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_016/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_017/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_018/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_018/snapshots/scale30/0e267f2e21b044c4/57088e2a9889bbf2ede22ce959dd04a016fa504354a18bb5515ad9af5d40b429.json": "e0160278bcdc9a82b2b24d5f84f2d4412c689ccefa835d2bf3551de3fb81e4c6",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_019/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_020/root_run.marker.json": "db501f3b3aa7acf2129aae5ecdd491da745a5001804a41c2964e4294409697ee",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/terminal_decision.json": "074b2d2a8f3b193d4b7086623eac11676a0761561ad3204ccdea579bce78fa00",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v4_20260815/instance_census.freeze.json": "6d994b489626eddff5549379bcbe4be385e55357bc155ac7f452421f6a533487",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_census.current.json": "c95596fcc8100312a2cad839ab6a7fb9d78f7713d3ea2e21832cac3b1688bea9",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/instance_census.freeze.json": "7c934e7964ccc879593376433157c5c64b3014d83de22b82e32bd8df2c3822fc"
+  }
+}

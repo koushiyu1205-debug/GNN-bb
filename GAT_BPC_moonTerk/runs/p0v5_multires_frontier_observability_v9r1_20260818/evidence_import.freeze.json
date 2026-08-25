@@ -1,0 +1,37 @@
+{
+  "cell_label_context_exact_match_count": 38,
+  "context_count": 38,
+  "diagnostic_only": true,
+  "heldout_or_formal_outcome_count": 0,
+  "instance_count": 31,
+  "new_arm_outcome_count": 0,
+  "performance_authority": false,
+  "schema_version": "lunar_ice_bpc.p0v5_multires_frontier_evidence_import.v1",
+  "source_artifacts": {
+    "source_v7r2_root": {
+      "source.freeze.json": "4f7b3df244cd496e88c1ad91951491cd32957dc2384e3a5ac024ac1f48aec788",
+      "switch_matrix.execution.freeze.json": "e355e98a9cdca4c5e1efb3b1c52541ad04ae8dbf590586bd3a5c57c4542d279e",
+      "switch_matrix.rows.json": "99431113ae7d86a4b06363f3d81372dd1ff50f23fa2e2ee294c34b3d9aed2619",
+      "switch_oracle.decision.json": "4ed90fe65fd5cf4fcc0708537d72e25ec4ea6506edc103771c59ff17c9d1b502"
+    },
+    "source_v7r3_root": {
+      "source.freeze.json": "706fd3e6f49a32730cb5f3250bec9a8d40791bfadc6e343373e13453b244ea7a",
+      "switch_matrix.collapsed.json": "6e26978e0c2112431dbd396c770591e08b1197285c9c515947c0f197fadfb11a",
+      "switch_oracle.decision.json": "4ed90fe65fd5cf4fcc0708537d72e25ec4ea6506edc103771c59ff17c9d1b502",
+      "terminal_decision.json": "ddc2aab89825d9afa46554b0553ace5ff7e691b042c039dfeed820805d54aab2"
+    },
+    "source_v9r0_root": {
+      "corpus.freeze.json": "2dea1390bb875401dc5b72dde1e53012624f3548b5117fd84c69cfeba6052831",
+      "evidence_import.freeze.json": "28db671262fdf0ced169cb4dc0f3d9844571d3742d534c592bd68420943f55b9",
+      "folds.freeze.json": "f1a6230ffcb6089a90601ec145d27f10e66721b6249b883b37058742052837c9",
+      "freeze.registry.json": "5befd8a950eda7b1b60c83641131db0f3f312133c8cc5d9e20ba0cf2f9d86449",
+      "observability.report.json": "84576815a0179540365667769a3285568cdb2ab2189b0bcd99c0653595f95b2a",
+      "runtime_cost_diagnostic.json": "56014c25f3f41ff3574496079889023374d7f303fabd952d862c9fa1c31a3e86",
+      "source.freeze.json": "2881c9524be1bad5c5127349c23cab13e32868dbb44a58fd39926af03b8484e7",
+      "terminal_decision.json": "194e2ec285b8fc69b3f5de7b50b903336b6435a319c3df316d6d952b793ff24d"
+    }
+  },
+  "source_v7r2_root": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_frontier_observability_root_cause_v7r2_20260818",
+  "source_v7r3_root": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_frontier_observability_root_cause_v7r3_20260818",
+  "source_v9r0_root": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_base_label_frontier_observability_v9r0_20260818"
+}

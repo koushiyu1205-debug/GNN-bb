@@ -1,0 +1,55 @@
+{
+  "bounded_oracle_context_limit": 300,
+  "bounded_oracle_context_limit_per_scale": 150,
+  "coverage": {
+    "30": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 1,
+      "instance_count": 1,
+      "root_context_count": 1
+    },
+    "50": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 0,
+      "instance_count": 0,
+      "root_context_count": 0
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "duplicate_instance_paths": {},
+  "excluded_count": 1,
+  "exclusions": [
+    {
+      "path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/smoke/fallback_snapshots/scale30/cf36ed5190d36140/09d29616ab66f80ab78f30fd0a55fa30659b3d06dc1867e67f80440a763be344.json",
+      "reason": "active_task_sets_missing"
+    }
+  ],
+  "instance_roots": [
+    "/home/kai/work/GAT_BPC_moonTerk/data/instances"
+  ],
+  "oracle_preflight_ready": false,
+  "rows": [
+    {
+      "active_cut_count": 0,
+      "active_task_coverage_count": 3,
+      "active_task_set_count": 2,
+      "branch_pair_count": 0,
+      "instance_content_hash": "cf36ed5190d36140",
+      "instance_hash": "cf36ed5190d36140",
+      "instance_id": "lunar_ice_sp50_030_001_seed929001",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_030/instance_001_logical_graph.json",
+      "previous_q0_wall_stratum": "lt10",
+      "pricing_lifecycle_scope": "root_cg",
+      "round": 1,
+      "scale": 30,
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/smoke/fallback_snapshots/scale30/cf36ed5190d36140/2dbffecff47662fe576e4b8e30d32d30fc33178ce995c3bd1498902ce82e73e7.json",
+      "snapshot_sha256": "eb03702df5d5134b0ad108a64a812b5bef73a2a165584a9638fcf5eb0619cc6b",
+      "source_state_hash": "2dbffecff47662fe576e4b8e30d32d30fc33178ce995c3bd1498902ce82e73e7",
+      "state_hash": "2dbffecff47662fe576e4b8e30d32d30fc33178ce995c3bd1498902ce82e73e7",
+      "v5_midpoint_reason": "smoke_midpoint_no_negative"
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_fallback_snapshot_index.v1",
+  "snapshot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/smoke/fallback_snapshots"
+}

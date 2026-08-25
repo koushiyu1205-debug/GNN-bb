@@ -1,0 +1,22 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_post_oracle_controller_freeze.v1",
+  "status": "FROZEN_POST_TEST_BEFORE_CLEAN_V2_ORACLE_COMPLETION_OR_MODEL_TRAINING",
+  "development_only": true,
+  "deployable": false,
+  "frozen_at_local": "2026-08-01T21:04:18+08:00",
+  "collection_id": "qg2_clean_v2",
+  "frozen_file_sha256": {
+    "scripts/run_p0v5_qg2_training_after_oracle.py": "3ac2d3e13f3ffc6282ab4db55badb9f3f528c89d747135e87f93b63341fd4128",
+    "scripts/run_p0v5_qg2_clean_v2_training_after_oracle.py": "9ddcaf850b56d047b4e8d15069b693009923f5dfaa6ba0999a4b51cf6692486e",
+    "scripts/train_p0v5_qg2_model_comparison.py": "f70b3148e0b8759e5924e521c47e1d5e461c5fa6c668fa9d84d665369bc44ca4",
+    "scripts/calibrate_p0v5_qg2_models.py": "a2d9c3d8583e60681cd979b49c4fdb409aa47733430a0709ff584cc1567563cf",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_oracle_execution_freeze.json": "b774504c64f972f3eca136e200ef77b0e3e42f82f623e5a6d7e52b49da0a57fe"
+  },
+  "training_gate": "bounded_oracle_v4_pass_and_training_permitted",
+  "models": ["linear", "mlp", "gat"],
+  "calibration_repeats": 3,
+  "allowed_exact_engine_hash": "0389484e5f5623f2",
+  "allowed_exact_action_policy_hash": "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+  "inherited_guidance_or_snapshot_environment_permitted": false,
+  "automatic_e2e_after_calibration": false
+}

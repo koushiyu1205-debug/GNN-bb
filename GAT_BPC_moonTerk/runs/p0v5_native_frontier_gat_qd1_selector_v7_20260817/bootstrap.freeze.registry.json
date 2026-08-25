@@ -1,0 +1,16 @@
+{
+  "artifact_sha256": {
+    "acceptance.freeze.json": "2f6a808ac225e9454b4eb40b36a45ed77d5cc5cf72ff8abde41edeb99bb8fef5",
+    "blacklist.freeze.json": "259a45c2bdef9388c3f1b4f444148a027fcb50cf7f6751824cbc76acea22ab02",
+    "config.freeze.json": "44086bdfdfd95a58ef474df3fb645a1a90ecd31dadd52637a455d88f7e4b5f77",
+    "graph.freeze.json": "b9c6b3a2a0f974fc762b91ba5036c3be54756dc177dd2117ec1f69500ff3eb56",
+    "interface.freeze.json": "e82367b3c0363ca5cd9cfa330e5b2d84991eb70cf45457701b8ddce15db468a1",
+    "native_differential.report.json": "37858747a6b063e6d76aeb20a4a22bc5a88664306025c09307e42100953259d6",
+    "probe_diagnostic_contexts.freeze.json": "aa82d8e52d9dc881d18f2212fe92ea9923746848f5435fc065d268698b20b7fc",
+    "source.freeze.json": "8d172dee93e1c29230201ba908132724053e24e253fda56489d13532cf3ce44b",
+    "v6_diagnostic_import.freeze.json": "0689c34062894bcf78c54af7732571e31f5bdfc1553c779df30b211b7c6f4e91"
+  },
+  "frozen_before_wall_outcomes": true,
+  "immutable": true,
+  "schema_version": "lunar_ice_bpc.p0v5_native_frontier_gat_bootstrap_registry.v7"
+}

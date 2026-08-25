@@ -1,0 +1,29 @@
+{
+  "analyzer_bug": {
+    "affected_original_metric": "determined_instances",
+    "gate_thresholds_changed": false,
+    "kind": "expanded_metadata_read_as_nested_metadata",
+    "symptom": "all_collapsed_instance_hash_values_were_null"
+  },
+  "new_wall_outcomes_generated": 0,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_v10_import.v10r1",
+  "source_artifact_sha256": {
+    "bootstrap.freeze.registry.json": "5df3944672faa70cd9b98a469f3a260e1ff132e10a8f71a0b013f2caf0d23ebe",
+    "config.freeze.json": "205e755c2173c2211f56aa52293428e8542326118b52b00d10625f274cf5738a",
+    "late_switch.collapsed.json": "8a59f4b16a4ad4cba42370558482870bf1a59e98a7438428257198bbccc9989a",
+    "late_switch.execution.freeze.json": "623e823f8655295cce8f537d6cce16ba9c3e75d1090b23fc8e055e65c9500c1e",
+    "late_switch.rows.json": "8589080745b43389d2459b3188200e7a850cc7a6f55b5c950598b94d01351482",
+    "late_switch_oracle.decision.json": "1c209b295f4bc49fe7df402113320dffdd1565b4ad193992e1f25b35d584e2b3",
+    "native_differential.import.freeze.json": "fcb90e05bc1ce4da751b5c1b00076a542806168b67d9e4bea258d475138df804",
+    "native_differential.report.json": "1a603a497fdb79c2476f5d2ee70add4a2c0b710decd028a3bb617a9210580c80",
+    "performance.freeze.registry.json": "cf7163eb688188a9f7268bf62f60da68fbd147c9d1905c37341afb69ba1f3080",
+    "pilot_corpus.freeze.json": "5e51f7b2768d976a4f2e1d54200849edfa98a15bd0e6475e03ef654dcf05ca53",
+    "research_contract.freeze.json": "7b04cc88854e1cda1e85c66324d33c67a387f04be83ea1d595d55d70a0df909f",
+    "source.freeze.json": "bc4adb459c9c9ab34b14f72ac34ff96557a40ab84763479d5ffa76c76303b7a8",
+    "state.json": "4873a71b8b1666543ae6be34911e492354b5f2caf9c5e76c13aff550da75384a",
+    "terminal_decision.json": "e63e8e2012675db1fb1c5a9dbee55bc7c4b9642e48c91531b8535510fa3145fb"
+  },
+  "source_run_root": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_frontier_late_switch_oracle_v10_20260818",
+  "source_terminal_immutable": true,
+  "source_wall_outcomes_reused_without_modification": true
+}

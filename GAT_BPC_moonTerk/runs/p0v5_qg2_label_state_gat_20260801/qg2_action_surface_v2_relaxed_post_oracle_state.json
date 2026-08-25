@@ -1,0 +1,31 @@
+{
+  "gate": {
+    "all_exact_safe": true,
+    "contract_errors": [],
+    "maximum_instance_saved_wall_fraction": 0.09146978025460083,
+    "passed": false,
+    "reason": "relaxed_training_gate_failed",
+    "scale30": {
+      "determined_context_count": 47,
+      "determined_instance_count": 43,
+      "gain_5pct_context_count": 29,
+      "instance_bootstrap_95_upper": 0.9113778979321988,
+      "paired_geomean_ratio": 0.8667568313601623,
+      "passed": true,
+      "positive_fraction": 0.7872340425531915,
+      "positive_instance_count": 28
+    },
+    "scale50": {
+      "determined_context_count": 54,
+      "determined_instance_count": 44,
+      "gain_5pct_context_count": 27,
+      "instance_bootstrap_95_upper": 1.034842021912077,
+      "paired_geomean_ratio": 0.9113061461392116,
+      "passed": false,
+      "positive_fraction": 0.6481481481481481,
+      "positive_instance_count": 24
+    }
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_relaxed_post_oracle_state.v1",
+  "status": "NOT_STARTED_RELAXED_TRAINING_GATE_FAILED"
+}

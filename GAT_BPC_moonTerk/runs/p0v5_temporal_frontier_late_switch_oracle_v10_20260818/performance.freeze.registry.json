@@ -1,0 +1,11 @@
+{
+  "artifact_sha256": {
+    "late_switch.execution.freeze.json": "623e823f8655295cce8f537d6cce16ba9c3e75d1090b23fc8e055e65c9500c1e",
+    "native_differential.import.freeze.json": "fcb90e05bc1ce4da751b5c1b00076a542806168b67d9e4bea258d475138df804",
+    "native_differential.report.json": "1a603a497fdb79c2476f5d2ee70add4a2c0b710decd028a3bb617a9210580c80",
+    "pilot_corpus.freeze.json": "5e51f7b2768d976a4f2e1d54200849edfa98a15bd0e6475e03ef654dcf05ca53"
+  },
+  "frozen_before_late_switch_wall_outcomes": true,
+  "immutable": true,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_performance_freeze.v1"
+}

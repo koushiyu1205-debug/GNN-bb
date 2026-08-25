@@ -1,0 +1,1 @@
+B4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0v5_context_queue_portfolio_v1_20260807_r1/context_collection_tree_scale30/scale_030/proofs/scale_030/instance_015/b4_1_report_zh.md

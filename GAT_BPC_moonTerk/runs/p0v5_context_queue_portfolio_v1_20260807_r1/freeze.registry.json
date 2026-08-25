@@ -1,0 +1,12 @@
+{
+  "artifact_sha256": {
+    "acceptance.freeze.json": "6d84c5514fa266ee3de67d652b38a5a9d750ba57c3a964d2fcf327c71dc552a0",
+    "config.freeze.json": "ed3d9d41118eadeb7939e8e309156a1faace6e7be5bf6498db9d2629a9e6ad56",
+    "execution.freeze.json": "b6f676c7f0fb52d3a2b135d4b59e4b35ee871ee5ccffea9cdc2cd8886f601e3e",
+    "instance_split.freeze.json": "99782ecd1e54ee4cebba061fa6ee4a36ff32446a7363acf5a569c7ae4f663703",
+    "source.freeze.json": "f583c58313150d7599fb903120e9497d20c1e8733c1ca5ca044a8e7b6222798f"
+  },
+  "historical_registry_modified": false,
+  "immutable": true,
+  "schema_version": "lunar_ice_bpc.p0v5_context_queue_portfolio_freeze_registry.v1"
+}

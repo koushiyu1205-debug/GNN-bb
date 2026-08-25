@@ -1,27 +1,18 @@
 # PaperSpine Artifact Check
 
-- Output directory: `paper_rewriting_output`
+- Output directory: `/home/kai/work/GAT_BPC_moonTerk/paper_rewriting_output`
 - Workflow: `build_from_materials`
 - Tier: `pro`
-- PDF policy: `always`
+- PDF policy: `auto`
 - TeX engine: `not found`
-- Word policy: `never`
+- Word policy: `auto`
 - Translation package required: yes
 - Status: FAIL
 
-## Stage Interpretation
-
-The stock pro-tier checker evaluates the originally configured final-delivery
-package. The present task synchronizes the English working manuscript, its
-Chinese Introduction review copy, LaTeX source, and PDF; it does not activate
-the full Chinese translation package or DOCX production stage. The missing
-translation artifacts below therefore remain scheduled deliverables rather
-than defects in the revised no-task-wait manuscript. The separate integrity
-audit reports all 99 rationale rows adequate; the matrix messages below are
-retained as stock-parser output rather than silently discarded.
-
 ## Missing
 
+- `final_paper/paper.docx`
+- `word_report.md`
 - `translation_zh/manifest.md`
 - `translation_zh/translation_coverage.md`
 - `translation_zh/paper_spine_config.zh.md`

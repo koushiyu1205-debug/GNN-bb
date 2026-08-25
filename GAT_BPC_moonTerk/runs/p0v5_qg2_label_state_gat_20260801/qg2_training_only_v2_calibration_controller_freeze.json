@@ -1,0 +1,27 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_training_only_v2_calibration_controller_freeze.v1",
+  "development_only": true,
+  "deployable": false,
+  "selector_precedes_calibration": true,
+  "selector_recommended_behavior": "stop_before_calibration_pending_combined_policy_implementation",
+  "selector_not_recommended_behavior": "run_unchanged_qg2_supplemental_calibration_then_risk_veto",
+  "fallback_action": "Q0",
+  "calibration_requirements": {
+    "minimum_calibration_contexts": 52,
+    "minimum_calibration_contexts_per_scale": 20,
+    "minimum_heldout_contexts_per_scale": 10,
+    "blocked_replicates": 3,
+    "scale30_wall_sec": 180,
+    "scale50_wall_sec": 300,
+    "memory_limit_gb": 10.867
+  },
+  "context_selector_freeze_sha256": "18e02ba56156b77dbb62c88fc5e7eae1e82cda780c59bbc1f66a1c6b2028c8ac",
+  "calibration_risk_freeze_sha256": "5a158ea3e4b1e12c21368a1a011943c0c7505ed9ca91313cc4827752bdf79d30",
+  "frozen_file_sha256": {
+    "scripts/run_p0v5_qg2_training_only_v2_calibration_after_selector.py": "62beb7e673f3bc17119d543e67b7b58b5faaa717b0e3c84da32385dd0bf4422e",
+    "scripts/build_p0v5_qg2_supplemental_calibration_manifest.py": "f06b985ff1f7c0e4f67a617ea3ac796cb6f7b6f7674db57973e3dc78bbab728b",
+    "scripts/run_p0v5_qg2_supplemental_calibration.py": "e235c4fc07d025dbc114215609362ccc5d7bb7748e66e9172a815706b9d5d666",
+    "scripts/calibrate_p0v5_qg2_models.py": "633a0d8d62119ffd35456a6349f853823f029b36250837ebf13edc70fed0abb7",
+    "scripts/audit_p0v5_qg2_calibration_risk_v2.py": "598b984c690efff504985760dbf0e9ec84e60ab80f08aa7e16446c38ea4a709b"
+  }
+}

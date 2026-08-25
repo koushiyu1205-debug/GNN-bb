@@ -1,0 +1,8 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_oracle_controller.v2",
+  "status": "CANCELLED_WITH_SUPERSEDED_COLLECTION",
+  "wait_for_pid": 3757994,
+  "cancelled_at_local": "2026-08-01T20:53:52+08:00",
+  "oracle_started": false,
+  "replacement_collection_id": "qg2_clean_v2"
+}

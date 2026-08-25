@@ -1,0 +1,11 @@
+{
+  "artifact_sha256": {
+    "config.freeze.json": "205e755c2173c2211f56aa52293428e8542326118b52b00d10625f274cf5738a",
+    "preaction_source.freeze.json": "a09f1becc922d9cee1ef277c83354a2cd94c15b2fe4ac484948a988f87b7dfcc",
+    "research_contract.freeze.json": "7b04cc88854e1cda1e85c66324d33c67a387f04be83ea1d595d55d70a0df909f",
+    "source.freeze.json": "bc4adb459c9c9ab34b14f72ac34ff96557a40ab84763479d5ffa76c76303b7a8"
+  },
+  "frozen_before_native_differential_and_late_switch_outcomes": true,
+  "immutable": true,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_bootstrap_freeze.v1"
+}

@@ -1,0 +1,352 @@
+{
+  "checks": {
+    "action_surface_contract": {
+      "evidence": {
+        "preflight_coverage": {
+          "scale30_contexts": 150,
+          "scale30_instances": 116,
+          "scale50_contexts": 150,
+          "scale50_instances": 109,
+          "total_contexts": 300
+        },
+        "queue_action_surface": "same_terminal_class_and_reduced_cost_bucket.v1",
+        "supervision_schema_version": "lunar_ice_bpc.p0v5_qg2_action_reachable_supervision.v2"
+      },
+      "note": "same-terminal-class and same-RC-bucket reachable action contract",
+      "status": "PASS"
+    },
+    "action_surface_oracle_execution_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_oracle_execution_freeze.json",
+        "issues": []
+      },
+      "note": "action-reachable Oracle execution freeze",
+      "status": "PASS"
+    },
+    "automated_regression_tests": {
+      "evidence": {
+        "commands": [
+          {
+            "command": [
+              "/home/kai/miniconda3/bin/python",
+              "-m",
+              "pytest",
+              "-q",
+              "tests/test_p0v5_qg2_label_state_gat.py",
+              "tests/test_p0v5_qg2_relaxed_training_gate.py",
+              "tests/test_p0v5_qg2_relaxed_training_controller.py",
+              "tests/test_p0v5_qg2_action_surface_v2_completion_audit.py",
+              "tests/test_p0v5_qg2_action_surface_v2_controllers.py",
+              "tests/test_p0v5_qg2_supplemental_calibration_manifest.py",
+              "tests/test_p0v5_qg2_supplemental_calibration_runner.py",
+              "tests/test_p0v5_qg2_supplemental_calibration_controller.py",
+              "tests/test_p0v5_qg2_supplemental_e2e_controller.py",
+              "tests/test_p0v5_qg2_supplemental_formal_controller.py",
+              "tests/test_p0v5_qg2_supplemental_finalizer.py",
+              "tests/test_p0v5_qg2_live_markdown.py",
+              "tests/test_p0v5_qg2_measured_portfolio_oracle.py"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": "........................................................................ [ 62%]\n...........................................                              [100%]\n115 passed in 9.87s\n"
+          },
+          {
+            "command": [
+              "ctest",
+              "--test-dir",
+              "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1",
+              "--output-on-failure"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": "Internal ctest changing into directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1\nTest project /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1\n    Start 1: lunar_spprc_native_tests\n1/2 Test #1: lunar_spprc_native_tests .........   Passed    0.01 sec\n    Start 2: lunar_spprc_patch_queue_check\n2/2 Test #2: lunar_spprc_patch_queue_check ....   Passed    0.02 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   0.03 sec\n"
+          },
+          {
+            "command": [
+              "git",
+              "diff",
+              "--check"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": ""
+          }
+        ]
+      },
+      "note": "QG2 Python, Native CTest, and diff checks",
+      "status": "PASS"
+    },
+    "bounded_oracle": {
+      "evidence": {
+        "progress": {
+          "action_reachable_training_pair_count": 218108,
+          "by_scale": {
+            "30": {
+              "complete_future_trace_count": 50,
+              "full_initial_arm_context_count": 49,
+              "q0_trace_count": 102,
+              "started_context_count": 102
+            },
+            "50": {
+              "complete_future_trace_count": 23,
+              "full_initial_arm_context_count": 23,
+              "q0_trace_count": 38,
+              "started_context_count": 39
+            }
+          },
+          "complete_future_trace_count": 73,
+          "full_initial_arm_context_count": 72,
+          "initial_screen_metrics_by_bucket": {
+            "0.0001": {
+              "all_exact_safe": true,
+              "by_scale": {
+                "30": {
+                  "context_count": 49,
+                  "determined_context_count": 49,
+                  "gain_5pct_context_count": 23,
+                  "gain_5pct_instance_count": 23,
+                  "instance_bootstrap_95_upper": 0.984381727026541,
+                  "milestone_counts": {
+                    "ADMISSION_BATCH_READY": 22,
+                    "EXACT_PROOF_COMPLETION": 27
+                  },
+                  "paired_geomean_ratio": 0.9461092188646919,
+                  "positive_context_count": 39
+                },
+                "50": {
+                  "context_count": 23,
+                  "determined_context_count": 22,
+                  "gain_5pct_context_count": 5,
+                  "gain_5pct_instance_count": 5,
+                  "instance_bootstrap_95_upper": 1.0402806321830818,
+                  "milestone_counts": {
+                    "ADMISSION_BATCH_READY": 22,
+                    "EXACT_PROOF_COMPLETION": 0
+                  },
+                  "paired_geomean_ratio": 0.9957160879252983,
+                  "positive_context_count": 17
+                }
+              },
+              "context_count": 72
+            },
+            "0.0003": {
+              "all_exact_safe": true,
+              "by_scale": {
+                "30": {
+                  "context_count": 49,
+                  "determined_context_count": 49,
+                  "gain_5pct_context_count": 27,
+                  "gain_5pct_instance_count": 27,
+                  "instance_bootstrap_95_upper": 0.9595570538415544,
+                  "milestone_counts": {
+                    "ADMISSION_BATCH_READY": 22,
+                    "EXACT_PROOF_COMPLETION": 27
+                  },
+                  "paired_geomean_ratio": 0.925703373673572,
+                  "positive_context_count": 43
+                },
+                "50": {
+                  "context_count": 23,
+                  "determined_context_count": 21,
+                  "gain_5pct_context_count": 9,
+                  "gain_5pct_instance_count": 7,
+                  "instance_bootstrap_95_upper": 1.0308007861382757,
+                  "milestone_counts": {
+                    "ADMISSION_BATCH_READY": 21,
+                    "EXACT_PROOF_COMPLETION": 0
+                  },
+                  "paired_geomean_ratio": 0.9806021176656754,
+                  "positive_context_count": 17
+                }
+              },
+              "context_count": 72
+            },
+            "0.001": {
+              "all_exact_safe": true,
+              "by_scale": {
+                "30": {
+                  "context_count": 49,
+                  "determined_context_count": 48,
+                  "gain_5pct_context_count": 31,
+                  "gain_5pct_instance_count": 30,
+                  "instance_bootstrap_95_upper": 0.9063600868008741,
+                  "milestone_counts": {
+                    "ADMISSION_BATCH_READY": 21,
+                    "EXACT_PROOF_COMPLETION": 27
+                  },
+                  "paired_geomean_ratio": 0.8595578304229131,
+                  "positive_context_count": 38
+                },
+                "50": {
+                  "context_count": 23,
+                  "determined_context_count": 21,
+                  "gain_5pct_context_count": 11,
+                  "gain_5pct_instance_count": 9,
+                  "instance_bootstrap_95_upper": 1.017204613343459,
+                  "milestone_counts": {
+                    "ADMISSION_BATCH_READY": 21,
+                    "EXACT_PROOF_COMPLETION": 0
+                  },
+                  "paired_geomean_ratio": 0.7916916991277557,
+                  "positive_context_count": 15
+                }
+              },
+              "context_count": 72
+            }
+          },
+          "q0_trace_count": 140,
+          "relaxed_gate_live_diagnostic": {
+            "bucket_width": 0.001,
+            "by_scale": {
+              "30": {
+                "context_count": 49,
+                "determined_context_count": 48,
+                "gain_5pct_context_count": 31,
+                "gain_5pct_instance_count": 30,
+                "instance_bootstrap_95_upper": 0.9063600868008741,
+                "milestone_counts": {
+                  "ADMISSION_BATCH_READY": 21,
+                  "EXACT_PROOF_COMPLETION": 27
+                },
+                "paired_geomean_ratio": 0.8595578304229131,
+                "positive_context_count": 38
+              },
+              "50": {
+                "context_count": 23,
+                "determined_context_count": 21,
+                "gain_5pct_context_count": 11,
+                "gain_5pct_instance_count": 9,
+                "instance_bootstrap_95_upper": 1.017204613343459,
+                "milestone_counts": {
+                  "ADMISSION_BATCH_READY": 21,
+                  "EXACT_PROOF_COMPLETION": 0
+                },
+                "paired_geomean_ratio": 0.7916916991277557,
+                "positive_context_count": 15
+              }
+            },
+            "maximum_instance_saved_wall_fraction": 0.13018750159487524,
+            "reason": "formal_oracle_summary_and_frozen_gate_are_authoritative",
+            "thresholds": {
+              "maximum_instance_bootstrap_95_upper": 0.98,
+              "maximum_instance_saved_wall_fraction": 0.35,
+              "maximum_paired_geomean_ratio": 0.95,
+              "minimum_determined_contexts_per_scale": 20,
+              "minimum_gain_5pct_contexts_per_scale": 5,
+              "minimum_positive_instances_per_scale": 5
+            },
+            "training_authorized": false,
+            "would_meet_numeric_gate_on_current_initial_screens": false
+          },
+          "right_censored_trace_count": 67,
+          "role": "live_progress_only_not_oracle_gate_evidence",
+          "started_context_count": 141,
+          "training_authorized": false
+        },
+        "summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_stage1.json"
+      },
+      "note": "bounded Oracle is still running or has not emitted its summary",
+      "status": "INCOMPLETE"
+    },
+    "development_e2e_controller_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_e2e_controller_freeze.json",
+        "issues": []
+      },
+      "note": "calibration-pass-only action-surface-v2 E2E freeze",
+      "status": "PASS"
+    },
+    "development_scale30_50_e2e": {
+      "evidence": {
+        "evidence": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/e2e_development_acceptance_qg2_action_surface_v2.json"
+      },
+      "note": "development paired acceptance missing",
+      "status": "INCOMPLETE"
+    },
+    "formal_full20_controller_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_formal_controller_freeze.json",
+        "issues": []
+      },
+      "note": "development-E2E-pass-only action-surface-v2 formal freeze",
+      "status": "PASS"
+    },
+    "formal_scale5_to_50_full20": {
+      "evidence": {
+        "evidence": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/formal_full20_acceptance_qg2_action_surface_v2.json"
+      },
+      "note": "formal paired acceptance missing",
+      "status": "INCOMPLETE"
+    },
+    "fresh_process_calibration": {
+      "evidence": {},
+      "note": "fresh-process calibration report missing",
+      "status": "INCOMPLETE"
+    },
+    "heldout_snapshot_replay": {
+      "evidence": {},
+      "note": "heldout fresh-process replay missing",
+      "status": "INCOMPLETE"
+    },
+    "independent_experiment_candidate_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/P0V5_QG2_ACTION_SURFACE_V2_LABEL_STATE_GAT_candidate_freeze.json"
+      },
+      "note": "independent action-surface-v2 candidate freeze missing",
+      "status": "INCOMPLETE"
+    },
+    "linear_mlp_gat_training": {
+      "evidence": {},
+      "note": "Linear/MLP/TinyGAT report missing",
+      "status": "INCOMPLETE"
+    },
+    "relaxed_training_only_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_relaxed_training_freeze.json",
+        "issues": []
+      },
+      "note": "exploratory-training-only relaxed gate freeze",
+      "status": "PASS"
+    },
+    "strict_post_oracle_controller_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_post_oracle_freeze.json",
+        "issues": []
+      },
+      "note": "strict Oracle-pass-only training controller freeze",
+      "status": "PASS"
+    },
+    "supplemental_calibration_binding": {
+      "evidence": {
+        "used": false
+      },
+      "note": "supplemental calibration path not used",
+      "status": "PASS"
+    },
+    "supplemental_e2e_formal_binding": {
+      "evidence": {
+        "e2e_state": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_supplemental_e2e_controller_state.json",
+        "formal_state": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_supplemental_formal_controller_state.json",
+        "issues": [
+          "e2e_state_not_passed:WAITING_FOR_SUPPLEMENTAL_CALIBRATION",
+          "e2e_result_binding_mismatch",
+          "formal_state_not_passed:WAITING_FOR_SUPPLEMENTAL_DEVELOPMENT_E2E",
+          "formal_result_binding_mismatch"
+        ],
+        "used": true
+      },
+      "note": "hash-bound supplemental E2E and formal controller evidence",
+      "status": "FAIL"
+    }
+  },
+  "complete": false,
+  "completion_rule": "all_required_checks_must_pass",
+  "failed_check_count": 1,
+  "incomplete_check_count": 7,
+  "objective": "P0V5 QG2 Q0-Anchored Label-State Guidance",
+  "passed_check_count": 8,
+  "pre_final_freeze": false,
+  "required_check_count": 16,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_action_surface_v2_completion_audit.v1",
+  "track": "action_surface_v2"
+}

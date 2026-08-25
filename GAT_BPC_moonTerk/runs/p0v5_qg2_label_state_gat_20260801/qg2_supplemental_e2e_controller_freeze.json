@@ -1,0 +1,19 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_supplemental_e2e_controller_freeze.v1",
+  "created_at": "2026-08-04T00:28:00+08:00",
+  "development_only": true,
+  "deployable": false,
+  "purpose": "same_development_e2e_after_hash_bound_supplemental_calibration",
+  "standard_e2e_preferred": true,
+  "supplemental_path_requires_training_rows_added_zero": true,
+  "controller_sha256": "97b551ba746f93d89e345cc0feca6bd5c3b6ca8d052b824a30cd5511e9f70d21",
+  "frozen_file_sha256": {
+    "scripts/run_p0v5_qg2_action_surface_v2_e2e_after_calibration.py": "7d95c8a40abe9231bbb7099dd4f0368d1b28b2956e710fd98c2e5383c68524fd",
+    "scripts/analyze_p0v5_qg2_paired_acceptance.py": "da7bb5faaef695922f995a2f89d22ed88b6f258df34fbc5401bb2a0210e200f8",
+    "scripts/run_lunar_ice_native_spprc_acceptance.py": "ee7c495f410fa011a63051593ecd7083c9c195211eccfb83c70f45ba673ff74f",
+    "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+    "data/p0v5_qg2_oracle_development_v3/manifest.json": "ff37cd88b9fc9fbe6f38a5e8b7e0d9466a1b739fee27119ff7fb4acf267b05eb",
+    "build/native-spprc-bidirectional-feasibility-v1/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so": "272b6bcf4f65052a1321fb35a131d850f5ff80737009065543fc685b5db53a65",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_supplemental_calibration_controller_freeze.json": "1fc53b895e806353606dd0a712d92499ec25c984f5e52036a1b75465ec1fe6a4"
+  }
+}

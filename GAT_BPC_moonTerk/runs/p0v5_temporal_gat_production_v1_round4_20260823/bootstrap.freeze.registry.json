@@ -1,0 +1,10 @@
+{
+  "artifact_sha256": {
+    "config.freeze.json": "3d3904c5fed5a1a6c4b7229c2ee8ea35f5d5c04e2fc11c1e1c14325769b9ce12",
+    "research_contract.freeze.json": "853d6462f75b668ba556e08a5a492833a764748ec8696d58cda3283b1a587e4f",
+    "source.freeze.json": "c7f1923cd30f57c55827d1846586145aebad9ad74119b9e26bc923382958b83a",
+    "state.initial.json": "08eba8e5517a789c8e8e72a9b3f84f2ff7750094e523fc0e6f9ab71396a5b71b"
+  },
+  "immutable": true,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_bootstrap.v1"
+}

@@ -1,0 +1,312 @@
+{
+  "maximum_fraction_of_qpf0": 0.012023505888319578,
+  "rows": [
+    {
+      "combined_wall_seconds": 0.003310911951352179,
+      "context_id": "v5_s30_07318c0416425be5_0",
+      "fraction_of_qpf0": 0.003624264746981318,
+      "graph_build_wall_seconds": 0.000473612,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002837299951352179
+    },
+    {
+      "combined_wall_seconds": 0.008970761933604122,
+      "context_id": "v5_s30_296a3155f2f99afa_0",
+      "fraction_of_qpf0": 5.2170100167540254e-05,
+      "graph_build_wall_seconds": 0.006153069,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002817692933604121
+    },
+    {
+      "combined_wall_seconds": 0.009796103119887115,
+      "context_id": "v5_s30_296a3155f2f99afa_1",
+      "fraction_of_qpf0": 8.368268413978438e-05,
+      "graph_build_wall_seconds": 0.007284945,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0025111581198871136
+    },
+    {
+      "combined_wall_seconds": 0.009474601549497426,
+      "context_id": "v5_s30_36658f9c48a480aa_0",
+      "fraction_of_qpf0": 0.00031033145730261874,
+      "graph_build_wall_seconds": 0.006866508,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0026080935494974256
+    },
+    {
+      "combined_wall_seconds": 0.007331428022262216,
+      "context_id": "v5_s30_36658f9c48a480aa_1",
+      "fraction_of_qpf0": 0.00016951514548924394,
+      "graph_build_wall_seconds": 0.004573031,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0027583970222622156
+    },
+    {
+      "combined_wall_seconds": 0.007021486056915998,
+      "context_id": "v5_s30_4a75319d174fdd19_0",
+      "fraction_of_qpf0": 0.0011656906637888393,
+      "graph_build_wall_seconds": 0.004370298,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0026511880569159985
+    },
+    {
+      "combined_wall_seconds": 0.007277302050655126,
+      "context_id": "v5_s30_4c3e017314d9a3ee_0",
+      "fraction_of_qpf0": 0.004509951628556118,
+      "graph_build_wall_seconds": 0.004805049,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0024722530506551266
+    },
+    {
+      "combined_wall_seconds": 0.004897280953396558,
+      "context_id": "v5_s30_5ac004e434340ddd_0",
+      "fraction_of_qpf0": 1.8876590431821866e-05,
+      "graph_build_wall_seconds": 0.00212102,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0027762609533965588
+    },
+    {
+      "combined_wall_seconds": 0.00467622711846739,
+      "context_id": "v5_s30_6cc232d48d44f2d3_0",
+      "fraction_of_qpf0": 0.012023505888319578,
+      "graph_build_wall_seconds": 0.00183181,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0028444171184673905
+    },
+    {
+      "combined_wall_seconds": 0.004125529512227356,
+      "context_id": "v5_s30_6f17b70d5674dc08_0",
+      "fraction_of_qpf0": 0.005628554166377507,
+      "graph_build_wall_seconds": 0.001356143,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0027693865122273564
+    },
+    {
+      "combined_wall_seconds": 0.003342169545514405,
+      "context_id": "v5_s30_716f194babe1bf7d_0",
+      "fraction_of_qpf0": 0.008280410219933894,
+      "graph_build_wall_seconds": 0.000612137,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0027300325455144048
+    },
+    {
+      "combined_wall_seconds": 0.0033748376124142407,
+      "context_id": "v5_s30_77176536c5b0f521_0",
+      "fraction_of_qpf0": 4.768424881816648e-05,
+      "graph_build_wall_seconds": 0.000652378,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002722459612414241
+    },
+    {
+      "combined_wall_seconds": 0.0030967459375655653,
+      "context_id": "v5_s30_77176536c5b0f521_2",
+      "fraction_of_qpf0": 4.295322454179055e-05,
+      "graph_build_wall_seconds": 0.00022701,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002869735937565565
+    },
+    {
+      "combined_wall_seconds": 0.003688914504666567,
+      "context_id": "v5_s30_9e28af267ed553c3_1",
+      "fraction_of_qpf0": 0.0001958243045621943,
+      "graph_build_wall_seconds": 0.000824814,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002864100504666567
+    },
+    {
+      "combined_wall_seconds": 0.007741772068122327,
+      "context_id": "v5_s30_a7acc5b02e62e549_0",
+      "fraction_of_qpf0": 0.00019151098037734331,
+      "graph_build_wall_seconds": 0.00512183,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0026199420681223273
+    },
+    {
+      "combined_wall_seconds": 0.007230621411342204,
+      "context_id": "v5_s30_a7acc5b02e62e549_1",
+      "fraction_of_qpf0": 0.00016328211640553994,
+      "graph_build_wall_seconds": 0.004416693,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0028139284113422036
+    },
+    {
+      "combined_wall_seconds": 0.0024929588875235915,
+      "context_id": "v5_s30_c3b4e15cc7f5a44f_0",
+      "fraction_of_qpf0": 0.00011487554671694167,
+      "graph_build_wall_seconds": 0.000144258,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0023487008875235915
+    },
+    {
+      "combined_wall_seconds": 0.006586224425906301,
+      "context_id": "v5_s30_e5f80e8bd698b75d_0",
+      "fraction_of_qpf0": 0.00033209541483859536,
+      "graph_build_wall_seconds": 0.003847591,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0027386334259063005
+    },
+    {
+      "combined_wall_seconds": 0.006468757035552204,
+      "context_id": "v5_s30_fbd070417ed00ce5_0",
+      "fraction_of_qpf0": 0.0006238391358352897,
+      "graph_build_wall_seconds": 0.003828019,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0026407380355522037
+    },
+    {
+      "combined_wall_seconds": 0.003691970117033541,
+      "context_id": "v5_s50_0901f02491d45908_2",
+      "fraction_of_qpf0": 0.00019283978004806343,
+      "graph_build_wall_seconds": 0.000810437,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002881533117033541
+    },
+    {
+      "combined_wall_seconds": 0.00517756501752919,
+      "context_id": "v5_s50_125aaef31ef11d35_1",
+      "fraction_of_qpf0": 0.00052916573526874,
+      "graph_build_wall_seconds": 0.002378816,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0027987490175291896
+    },
+    {
+      "combined_wall_seconds": 0.004508142601602078,
+      "context_id": "v5_s50_125aaef31ef11d35_2",
+      "fraction_of_qpf0": 0.0005676721433986779,
+      "graph_build_wall_seconds": 0.001641555,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0028665876016020775
+    },
+    {
+      "combined_wall_seconds": 0.0033679080126567482,
+      "context_id": "v5_s50_14c6262160809d66_1",
+      "fraction_of_qpf0": 7.539549209805677e-05,
+      "graph_build_wall_seconds": 0.000278703,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0030892050126567483
+    },
+    {
+      "combined_wall_seconds": 0.0034720410899474023,
+      "context_id": "v5_s50_16407bf4d988d595_0",
+      "fraction_of_qpf0": 6.909865261087785e-05,
+      "graph_build_wall_seconds": 0.000698028,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0027740130899474025
+    },
+    {
+      "combined_wall_seconds": 0.0031671130909799337,
+      "context_id": "v5_s50_22e4e44594b5766b_0",
+      "fraction_of_qpf0": 0.000165872776404475,
+      "graph_build_wall_seconds": 0.000248028,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0029190850909799337
+    },
+    {
+      "combined_wall_seconds": 0.003395461005097866,
+      "context_id": "v5_s50_22e4e44594b5766b_2",
+      "fraction_of_qpf0": 0.00011636514633059399,
+      "graph_build_wall_seconds": 0.000550644,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002844817005097866
+    },
+    {
+      "combined_wall_seconds": 0.0064066210031268,
+      "context_id": "v5_s50_23cc0c6fee9f1fa0_2",
+      "fraction_of_qpf0": 1.0611049095539002e-05,
+      "graph_build_wall_seconds": 0.003595545,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0028110760031268
+    },
+    {
+      "combined_wall_seconds": 0.003187725508453846,
+      "context_id": "v5_s50_3f257a94c89bf615_0",
+      "fraction_of_qpf0": 6.787424810842418e-05,
+      "graph_build_wall_seconds": 0.00031319,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002874535508453846
+    },
+    {
+      "combined_wall_seconds": 0.0036014900632011294,
+      "context_id": "v5_s50_510dcbb1be8deee5_2",
+      "fraction_of_qpf0": 0.00033885123514524945,
+      "graph_build_wall_seconds": 0.000567719,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0030337710632011294
+    },
+    {
+      "combined_wall_seconds": 0.0036047084334121346,
+      "context_id": "v5_s50_56286c37063f6048_0",
+      "fraction_of_qpf0": 9.448220230063079e-05,
+      "graph_build_wall_seconds": 0.000711897,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0028928114334121346
+    },
+    {
+      "combined_wall_seconds": 0.007816264078914583,
+      "context_id": "v5_s50_665810f5957bfe6b_1",
+      "fraction_of_qpf0": 0.00036095880702665794,
+      "graph_build_wall_seconds": 0.004974901,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0028413630789145827
+    },
+    {
+      "combined_wall_seconds": 0.0044021045475270745,
+      "context_id": "v5_s50_79478c234c73e4f2_1",
+      "fraction_of_qpf0": 0.0003005862351047529,
+      "graph_build_wall_seconds": 0.001466634,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002935470547527075
+    },
+    {
+      "combined_wall_seconds": 0.003736288053144157,
+      "context_id": "v5_s50_7f3230fed387dae8_0",
+      "fraction_of_qpf0": 4.1279357673799475e-05,
+      "graph_build_wall_seconds": 0.000788384,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.002947904053144157
+    },
+    {
+      "combined_wall_seconds": 0.0056015890159398915,
+      "context_id": "v5_s50_7f3230fed387dae8_2",
+      "fraction_of_qpf0": 2.7340090850250048e-05,
+      "graph_build_wall_seconds": 0.002472661,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0031289280159398913
+    },
+    {
+      "combined_wall_seconds": 0.0032809875386152266,
+      "context_id": "v5_s50_8e35efca611548b7_2",
+      "fraction_of_qpf0": 0.00019733443470523643,
+      "graph_build_wall_seconds": 0.000406466,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0028745215386152267
+    },
+    {
+      "combined_wall_seconds": 0.0034837895290153026,
+      "context_id": "v5_s50_9003925e2924006a_1",
+      "fraction_of_qpf0": 0.00030071921398495705,
+      "graph_build_wall_seconds": 0.000409483,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0030743065290153027
+    },
+    {
+      "combined_wall_seconds": 0.0032339716112841964,
+      "context_id": "v5_s50_a21f4ca58f222d77_2",
+      "fraction_of_qpf0": 1.9656931889116844e-05,
+      "graph_build_wall_seconds": 0.000409838,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0028241336112841964
+    },
+    {
+      "combined_wall_seconds": 0.0034134766201730964,
+      "context_id": "v5_s50_ea7975bf0465b1c7_1",
+      "fraction_of_qpf0": 0.0002154740725010653,
+      "graph_build_wall_seconds": 0.000721034,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0026924426201730967
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_base_label_frontier_cost.v1",
+  "torch_inference_is_conservative_for_future_native_forward": true,
+  "warm_p99_ms": 9.796103119887114
+}

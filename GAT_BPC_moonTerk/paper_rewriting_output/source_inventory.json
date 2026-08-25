@@ -1,6 +1,6 @@
 {
   "schema_version": "paperspine.source_inventory.v1",
-  "snapshot_date": "2026-07-23",
+  "snapshot_date": "2026-08-03",
   "timezone": "Asia/Shanghai",
   "materials_dir": "/home/kai/work/GAT_BPC_moonTerk",
   "inventory_method": "curated_emulation",
@@ -329,32 +329,80 @@
       "role": "scale_5_30_no_task_wait_exact_baseline",
       "authority": "A",
       "status": "80_of_80_exact_and_correct"
+    },
+    {
+      "id": "S061",
+      "path": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+      "type": "yaml",
+      "role": "current_p0v4_v5_exact_candidate_binding",
+      "authority": "A/B",
+      "status": "current_candidate_not_production_default"
+    },
+    {
+      "id": "S062",
+      "path": "runs/p0v4_final_acceptance_v2_20260801/official/Exact/",
+      "type": "frozen_run_group",
+      "role": "current_p0v4_v5_fresh_process_acceptance",
+      "authority": "A",
+      "status": "scale5_to_30_80_of_80_exact_scale50_15_of_20_exact"
+    },
+    {
+      "id": "S063",
+      "path": "src/lunar_ice_bpc/exact/bpc/pricing/backends/native_bidirectional_hybrid.py plus live_sri.py and live_sri_solver.py",
+      "type": "python_group",
+      "role": "v5_midpoint_fallback_and_root_sri3_group_screen_contract",
+      "authority": "B",
+      "status": "implemented"
+    },
+    {
+      "id": "S064",
+      "path": "src/lunar_ice_bpc/guidance/proof_queue_label_state_gat.py plus proof_queue_label_state_runtime.py and qg2_admission_supervision.py",
+      "type": "python_group",
+      "role": "qg2_label_state_gat_action_surface_and_fail_closed_runtime",
+      "authority": "B/C",
+      "status": "implemented_development_not_deployable"
+    },
+    {
+      "id": "S065",
+      "path": "runs/p0v5_qg2_label_state_gat_20260801/p0v5_qg2_action_surface_v2_completion_audit.json",
+      "type": "json",
+      "role": "qg2_current_completion_gate",
+      "authority": "A/C",
+      "status": "incomplete_oracle_active_at_snapshot"
+    },
+    {
+      "id": "S066",
+      "path": "paper_rewriting_output/manuscript_zh_trc.md",
+      "type": "markdown",
+      "role": "author_editable_trc_style_chinese_master",
+      "authority": "A/B",
+      "status": "current_master_for_next_author_revision"
     }
   ],
   "missing_evidence": [
     {
       "id": "M001",
-      "material": "frozen_training_dataset_split_manifest_and_leakage_audit",
+      "material": "completed_qg2_oracle_and_frozen_training_split_leakage_audit",
       "status": "TBD"
     },
     {
       "id": "M002",
-      "material": "trained_pricing_guidance_checkpoint_and_inference_record",
+      "material": "selected_qg2_linear_mlp_or_gat_checkpoint_and_inference_record",
       "status": "TBD"
     },
     {
       "id": "M003",
-      "material": "trained_branch_ranking_checkpoint_and_valid_candidate_logs",
+      "material": "qg2_fresh_process_calibration_and_heldout_replay",
       "status": "TBD"
     },
     {
       "id": "M004",
-      "material": "paired_exact_bpc_learning_ablation",
+      "material": "paired_p0v4_p0v4v5_q0_qg2_end_to_end_ablation",
       "status": "TBD"
     },
     {
       "id": "M005",
-      "material": "inference_overhead_fallback_equivalence_and_held_out_results",
+      "material": "formal_scale5_to_50_qg2_acceptance_overhead_fallback_and_equivalence",
       "status": "TBD"
     },
     {

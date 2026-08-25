@@ -1,0 +1,67 @@
+{
+  "bounded_context_limit": 300,
+  "bounded_context_limit_per_scale": 150,
+  "coverage": {
+    "30": {
+      "context_count": 65,
+      "instance_count": 13,
+      "partition_context_counts": {
+        "calibration": 21,
+        "heldout": 8,
+        "train": 36
+      },
+      "partition_instance_counts": {
+        "calibration": 3,
+        "heldout": 2,
+        "train": 8
+      },
+      "preaction_stratum_counts": {
+        "root:plain:r10_29:missing": 23,
+        "root:plain:r30_plus:60to300": 2,
+        "root:plain:r30_plus:missing": 2,
+        "tree:branch_cut:r0_9:lt10": 12,
+        "tree:branch_cut:r0_9:missing": 13,
+        "tree:branch_cut:r10_29:lt10": 1,
+        "tree:plain:r0_9:missing": 12
+      }
+    },
+    "50": {
+      "context_count": 29,
+      "instance_count": 17,
+      "partition_context_counts": {
+        "calibration": 8,
+        "heldout": 6,
+        "train": 15
+      },
+      "partition_instance_counts": {
+        "calibration": 4,
+        "heldout": 4,
+        "train": 9
+      },
+      "preaction_stratum_counts": {
+        "root:plain:r30_plus:10to60": 2,
+        "root:plain:r30_plus:60to300": 2,
+        "root:plain:r30_plus:lt10": 1,
+        "root:plain:r30_plus:missing": 24
+      }
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "execution_freeze": null,
+  "execution_freeze_sha256": null,
+  "instance_split": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_instance_split.json",
+  "instance_split_sha256": "578c049ae1fbb3d6addd1350a88da8dfac0d9c5575483727a51e7c0c6303d53d",
+  "oracle_gate": {
+    "context_count": 94,
+    "passed": false,
+    "reason": "execution_not_requested"
+  },
+  "queue_action_surface": "same_terminal_class_and_reduced_cost_bucket.v1",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_bounded_oracle.v5",
+  "source_state_index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_snapshot_index.json",
+  "source_state_index_sha256": "a53b2ade7ee72427f334baaf1eafa645b8814bccbca565affe284943e07c3b2f",
+  "status": "PREFLIGHT_ONLY",
+  "supervision_schema_version": "lunar_ice_bpc.p0v5_qg2_action_reachable_supervision.v2",
+  "training_permitted": false
+}

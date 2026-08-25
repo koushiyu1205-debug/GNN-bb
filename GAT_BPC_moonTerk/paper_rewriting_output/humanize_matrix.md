@@ -102,3 +102,12 @@ equations, evidence values, technical terms, maturity labels, or proof scope.
 | H5-08 | Section 3.2 and Chinese review | “Waiting” could be misread as including the service itself | D5-Term-Context Matching | High | Distinguished idle loitering from prescribed detection, sampling, and drilling durations | Prevents a semantic contradiction in the time equations | Similar temporal quantities need operational definitions, not stylistic synonyms |
 | H5-09 | Section 4.3 dominance | A long list of state fields could obscure the decisive safety rule | D3-Information Density | Medium | Stated the equality rule first and then isolated why subset dominance and the empty initial label are excluded | Makes the correctness boundary visible before implementation detail | Put the rejection condition next to the operation it controls |
 | H5-10 | Section 7.5 | Depot waiting without resource increments could look physically effortless | D2-Paragraph Structure | Medium | Named the supported-depot standby assumption and stated the model changes required if base support is unavailable | Gives the assumption a concrete limitation and future extension | A physical assumption should be paired with its consequence, not hidden in notation |
+# 2026-08-03 Chinese master-draft additions
+
+| Section | Applied light-humanization decision | Technical content preserved |
+|---|---|---|
+| Abstract and Introduction | Use six connected funnel paragraphs; avoid self-questioning, implementation IDs and stacked transition phrases | Lunar motivation, no-wait semantics, fixed epochs, P0V4+V5, QG2 evidence boundary |
+| Model | Alternate short interpretive sentences with complete mathematical definitions; introduce every symbol before use | Objective, route feasibility, master constraints, fixed-path scope |
+| Algorithm | Use conceptual names in prose and confine P0V4/V5/Q0/QG2 identifiers to one mapping paragraph | Proof authority and exact fallback |
+| Results | Lead with closure counts, then timings and limitations; avoid evaluative adjectives not backed by tests | 80/80, 15/20, five incomplete cases, no GAT result |
+| Discussion | State what follows from evidence and what remains open in separate sentences | Fixed-instance exactness, incomplete GAT and seasonal evidence |

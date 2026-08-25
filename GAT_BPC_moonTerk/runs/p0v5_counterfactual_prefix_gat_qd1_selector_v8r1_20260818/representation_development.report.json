@@ -1,0 +1,81 @@
+{
+  "budget_results": [
+    {
+      "contexts_above_250ms": 0,
+      "contexts_above_two_percent": 5,
+      "cost_gate_passed": false,
+      "gate": {
+        "paired_prefix_fraction": false,
+        "paired_prefix_warm_p99": true,
+        "representation_metrics": false,
+        "taxed_oracle": true
+      },
+      "maximum_paired_prefix_fraction_of_qpf0": 0.1182228568396027,
+      "metrics_status": "NOT_EVALUATED_EARLY_COST_GATE_FAILED",
+      "paired_prefix_median_ms": 60.45268600000001,
+      "paired_prefix_p99_ms": 119.234416,
+      "passed": false,
+      "rollout_budget": 128,
+      "taxed_oracle_gm": {
+        "30": 0.8446684908070594,
+        "50": 0.9522010615663986
+      }
+    },
+    {
+      "contexts_above_250ms": 0,
+      "contexts_above_two_percent": 5,
+      "cost_gate_passed": false,
+      "gate": {
+        "paired_prefix_fraction": false,
+        "paired_prefix_warm_p99": true,
+        "representation_metrics": false,
+        "taxed_oracle": true
+      },
+      "maximum_paired_prefix_fraction_of_qpf0": 0.13850722311231384,
+      "metrics_status": "NOT_EVALUATED_EARLY_COST_GATE_FAILED",
+      "paired_prefix_median_ms": 69.6140205,
+      "paired_prefix_p99_ms": 137.552647,
+      "passed": false,
+      "rollout_budget": 512,
+      "taxed_oracle_gm": {
+        "30": 0.8482600307932354,
+        "50": 0.9525498298350386
+      }
+    },
+    {
+      "contexts_above_250ms": 0,
+      "contexts_above_two_percent": 6,
+      "cost_gate_passed": false,
+      "gate": {
+        "paired_prefix_fraction": false,
+        "paired_prefix_warm_p99": true,
+        "representation_metrics": false,
+        "taxed_oracle": true
+      },
+      "maximum_paired_prefix_fraction_of_qpf0": 0.17848111671038044,
+      "metrics_status": "NOT_EVALUATED_EARLY_COST_GATE_FAILED",
+      "paired_prefix_median_ms": 92.57450499999999,
+      "paired_prefix_p99_ms": 174.28684,
+      "passed": false,
+      "rollout_budget": 2048,
+      "taxed_oracle_gm": {
+        "30": 0.8560564823298692,
+        "50": 0.9535443310273601
+      }
+    }
+  ],
+  "decision": "FAIL",
+  "diagnostic_only": true,
+  "ooF_artifacts_emitted": false,
+  "ooF_training_completed": false,
+  "ooF_training_started": false,
+  "performance_authority": false,
+  "reason": "PREFIX_COST_GATE_FAILED_BEFORE_OOF",
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_representation_report.v1",
+  "smallest_passing_budget": null,
+  "timing_contract": {
+    "budgets_share_one_2048_collection_but_use_endpoint_timestamps": true,
+    "cold_fresh_process_wall_is_diagnostic_only": true,
+    "gate_wall": "native_per_checkpoint_request_elapsed_wall_seconds"
+  }
+}

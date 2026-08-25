@@ -1,0 +1,39 @@
+{
+  "scales": {
+    "30": {
+      "admitted": true,
+      "arm": "QD1",
+      "correctness_redlines": [],
+      "determined_context_fraction": 1.0,
+      "determined_contexts": 19,
+      "determined_instances": 14,
+      "harmful_instances": 2,
+      "mode": "selective",
+      "neutral_or_harm_instances": 5,
+      "resource_censor_contexts": 0,
+      "scale": 30,
+      "schema_version": "lunar_ice_bpc.p0v5_qd1_admission.v4",
+      "strong_benefit_instances": 10,
+      "train_contexts": 19
+    },
+    "50": {
+      "admitted": true,
+      "arm": "QD1",
+      "correctness_redlines": [],
+      "determined_context_fraction": 1.0,
+      "determined_contexts": 38,
+      "determined_instances": 14,
+      "harmful_instances": 8,
+      "mode": "selective",
+      "neutral_or_harm_instances": 13,
+      "resource_censor_contexts": 0,
+      "scale": 50,
+      "schema_version": "lunar_ice_bpc.p0v5_qd1_admission.v4",
+      "strong_benefit_instances": 5,
+      "train_contexts": 38
+    }
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_qd1_admission_decision.v4",
+  "source_matrix": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/matched_qd1_rows.json",
+  "source_matrix_sha256": "ccc9f80c536caeb6ebef34609d1493c48b0b056e0395c60e3ff6fc5fb6a28083"
+}

@@ -1,0 +1,23 @@
+{
+  "correctness_redline_count": 0,
+  "decision": "PASS",
+  "reason": null,
+  "scales": {
+    "30": {
+      "determined_contexts": 19,
+      "gm": 1.0005801065725157,
+      "p90": 1.011192826105033,
+      "warm_p99_ms": 4.390296,
+      "worst": 1.0204383972181315
+    },
+    "50": {
+      "determined_contexts": 19,
+      "gm": 0.9991135431985451,
+      "p90": 1.0020924331426706,
+      "warm_p99_ms": 2.7888919999999997,
+      "worst": 1.017577172587551
+    }
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_probe_gate.v1",
+  "stage": "diagnostic"
+}

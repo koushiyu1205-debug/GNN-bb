@@ -1,0 +1,6 @@
+[33m[2026-08-21 22:04:41.509][WARN ] Memory limit (8614 MB) exceeded (current: 8614 MB). Stopping early.
+[0m[33m[2026-08-21 22:16:18.240][WARN ] Memory limit (8725 MB) exceeded (current: 8725 MB). Stopping early.
+[0m[33m[2026-08-21 22:27:47.002][WARN ] Memory limit (8723 MB) exceeded (current: 8723 MB). Stopping early.
+[0m[33m[2026-08-21 22:40:10.118][WARN ] Memory limit (8705 MB) exceeded (current: 8705 MB). Stopping early.
+[0m{"elapsed_sec": 3191.564999, "algorithm_status": "BPC_INCOMPLETE_PRICING", "certificate_scope": "DIAGNOSTIC_PRICING_FRONTIER", "pricing_state": "INCOMPLETE_LIMIT", "pricing_round_count": 58, "added_column_count": 6472, "active_column_count": 6527}
+report /home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round3_20260821/root_collection/ae4becf2938fcb88/scale_050/pools/scale_050/instance_017/stage_001/probe_report_zh.md

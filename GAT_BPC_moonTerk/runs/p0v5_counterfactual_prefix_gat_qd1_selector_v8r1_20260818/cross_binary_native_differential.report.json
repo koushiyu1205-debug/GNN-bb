@@ -1,0 +1,21 @@
+{
+  "case_count": 500,
+  "checks": [
+    "Q0 pop-derived counters",
+    "legal route payload",
+    "minimum RC",
+    "RC reconstruction inputs",
+    "exact status",
+    "certificate fields"
+  ],
+  "decision": "PASS",
+  "mismatch_case_indices": [],
+  "mismatch_count": 0,
+  "new_build_info_hash": "b3c2357d406864a1385778ebdc2641a2c4e479a08c8bd70dbaedbff2ca0d0ce6",
+  "new_case_hashes_sha256": "7b23752fb9367c2d95e6718066c4dd35a39469662e3c44a4240539ae452a088b",
+  "new_module_path": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8r1/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "old_build_info_hash": "097da65e0d33f0610d0ee07dced41ad65f541ef3eb011d7bc81cc9ce1ae6bc53",
+  "old_case_hashes_sha256": "7b23752fb9367c2d95e6718066c4dd35a39469662e3c44a4240539ae452a088b",
+  "old_module_path": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-frontier-gat-v7/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_native_cross_binary_differential.v1"
+}

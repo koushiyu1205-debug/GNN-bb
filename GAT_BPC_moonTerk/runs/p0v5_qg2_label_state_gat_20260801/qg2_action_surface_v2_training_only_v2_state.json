@@ -1,0 +1,7 @@
+{
+  "calibration_context_count": 22,
+  "deployment_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_training_only_v2_state.v1",
+  "status": "TRAINING_ONLY_V2_COMPLETE_PENDING_STRICT_CALIBRATION",
+  "training_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/training_qg2_action_surface_v2_training_only_v2/training_report.json"
+}

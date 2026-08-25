@@ -37,6 +37,7 @@
   \KOMAoptions{parskip=half}}
 \makeatother
 \usepackage{xcolor}
+\usepackage{graphicx}
 \usepackage[margin=25mm]{geometry}
 \usepackage{longtable,booktabs,array}
 \usepackage{calc} % for calculating minipage widths
@@ -585,13 +586,12 @@ corresponding window-aggregated instance; it does not prove that one
 route is robust or dynamically optimal across all
 \(\zeta\in\mathcal{Q}\).
 
-\begin{quote}
-\textbf{Figure 1 placeholder (FIG01/FIG06, evidence available):} lunar
-south-pole planning layers and one representative fixed task graph with
-three declared path alternatives per directed edge. The final caption
-must distinguish measured inputs, derived proxies, and
-visualization-only layers.
-\end{quote}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{../figures/lunar_water_ice_exploration_schematic_v5.pdf}
+\caption{Exploded representation of the lunar south-pole planning environment and an illustrative logical routing diagram. All five panels use the same $50\,\mathrm{km}\times50\,\mathrm{km}$ mission region and spatially registered task coordinates. Panels (a)--(e) respectively show the logical routing diagram, average solar-visibility map, deterministic traversal-risk map, digital elevation model (DEM), and LOLA-derived shaded-relief map. The DEM color scale is expressed in kilometres and bounded by the 1st and 99th percentiles of the displayed elevation field. The DEM, solar-visibility, and traversal-risk panels respectively display the complete directed low-time, low-energy, and low-risk candidate graphs, each comprising 56 arcs over one depot and seven representative tasks. Panel (a) illustrates three rovers performing four closed depot-to-depot trips. For every directed leg, the selected path, including a depot return, is shown as a solid curve, whereas the two unselected candidate paths are shown as dashed curves. Candidate-path curvature is enhanced consistently for legibility. The LOLA-derived shaded relief, DEM, and solar visibility are map-derived inputs, traversal risk is a deterministic model proxy, and the logical routing diagram is visualization-only rather than solver output or evidence of feasibility or optimality.}
+\label{fig:lunar_environment_route_stack}
+\end{figure}
 
 \hypertarget{multi-trip-route-feasibility}{%
 \subsection{3.2 Multi-trip route

@@ -199,6 +199,8 @@ def solve_b1_root_node_baseline(
             master_view=view,
             node_id="root",
             active_task_sets={frozenset(column.task_set) for column in master_columns},
+            proof_tail_active_column_count=len(master_columns),
+            proof_tail_round_index=round_index,
         )
         last_judge = judge
         added = _add_negative_columns(

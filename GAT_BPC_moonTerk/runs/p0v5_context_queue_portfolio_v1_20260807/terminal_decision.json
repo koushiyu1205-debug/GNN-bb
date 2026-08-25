@@ -1,0 +1,12 @@
+{
+  "decision": "SUPERSEDED_BEFORE_OUTCOMES",
+  "deployment_authorized": false,
+  "details": {
+    "fresh_arm_outcome_count": 0,
+    "reason": "The initial freeze omitted newly required QGR1 trainer and execution-controller source hashes.",
+    "replacement_run_root": "runs/p0v5_context_queue_portfolio_v1_20260807_r1"
+  },
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_context_queue_portfolio_terminal_decision.v1",
+  "terminal": true
+}

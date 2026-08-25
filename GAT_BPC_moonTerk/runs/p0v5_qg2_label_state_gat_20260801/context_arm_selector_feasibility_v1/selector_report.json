@@ -1,0 +1,249 @@
+{
+  "all_arms_rejected_action": "Q0",
+  "calibration_authority": false,
+  "candidate_arms": [
+    "QD1",
+    "QB1"
+  ],
+  "changes_qg2": false,
+  "context_count": 110,
+  "continued_development_recommended": true,
+  "deployable": false,
+  "deployment_authorized": false,
+  "development_only": true,
+  "fallback_action": "Q0",
+  "feature_schema_version": "lunar_ice_bpc.p0v5_qg2_features.v1",
+  "generated_at": "2026-08-05T21:11:37+08:00",
+  "instance_count": 94,
+  "instance_split": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/training_qg2_action_surface_v2_training_only_v2/instance_split.json",
+  "instance_split_sha256": "3120364689ecab2893350b5522897a53c846f9f7f011b792f58b93dc43aedcb5",
+  "model_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/context_arm_selector_feasibility_v1/context_arm_selector_linear.pt",
+  "model_sha256": "ed998ea88bc111855500861f8c514b78c4d9939509dd34789c3ddbc697fb71b4",
+  "normalization": {
+    "fit_partition": "train_instances_only",
+    "mean": [
+      3.7206214510470983,
+      -0.172146978,
+      0.05805723582333333,
+      0.03525614275382025,
+      -0.008334043212121212,
+      0.14354638303030304,
+      8.243083112322122,
+      1.0,
+      8.243083112322122,
+      1.0,
+      1.0,
+      0.20659938159336202,
+      3.7067214071930805,
+      1.0,
+      1.1060867954702256,
+      0.21212121212121213,
+      3.2823056558617947,
+      0.21212121212121213,
+      0.42615308156060605,
+      0.9848484848484849,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.6726477235628029,
+      1.0,
+      0.9848484848484849
+    ],
+    "std": [
+      0.24604542565507234,
+      0.17527956041503803,
+      0.029247600211014635,
+      0.020637529914474734,
+      0.02879350374144035,
+      0.07832240193486248,
+      0.6458233114790527,
+      1e-06,
+      0.6458233114790527,
+      1e-06,
+      1e-06,
+      0.03576824597219991,
+      0.48947346904849665,
+      1e-06,
+      2.176375737278053,
+      0.40881022918884974,
+      6.333468717567761,
+      0.40881022918884974,
+      0.32923686637006855,
+      0.1221554204287659,
+      1e-06,
+      1e-06,
+      1e-06,
+      1e-06,
+      0.17102871855244436,
+      1e-06,
+      0.1221554204287659
+    ]
+  },
+  "oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_training_only_v2_view.json",
+  "oracle_summary_sha256": "5e4fd3a2355d5547db3b3a102bfd524cee148ff6c180403f7cae477f6f47d119",
+  "outcome_semantics": {
+    "beneficial": "same_milestone_and_arm_over_q0_ratio_le_0.95",
+    "harmful": "right_censored_or_arm_over_q0_ratio_ge_1.05",
+    "right_censored_role": "known_not_to_reach_q0_milestone_within_matched_budget"
+  },
+  "partition_counts": {
+    "calibration": {
+      "context_count": 22,
+      "instance_count": 19,
+      "scale30": 10,
+      "scale50": 12
+    },
+    "heldout": {
+      "context_count": 22,
+      "instance_count": 18,
+      "scale30": 10,
+      "scale50": 12
+    },
+    "train": {
+      "context_count": 66,
+      "instance_count": 57,
+      "scale30": 28,
+      "scale50": 38
+    }
+  },
+  "partition_reports": {
+    "calibration": {
+      "activated_count": 15,
+      "beneficial_action_count": 15,
+      "beneficial_precision": 1.0,
+      "beneficial_precision_95_lower": 0.8471922953898599,
+      "context_count": 22,
+      "fallback_action": "Q0",
+      "harmful_action_count": 0,
+      "harmful_rate": 0.0,
+      "harmful_rate_95_upper": 0.15280770461014015,
+      "instance_count": 19,
+      "net_geomean_ratio": 0.2863397854299564,
+      "no_op_count": 7,
+      "per_scale": {
+        "30": {
+          "activated_count": 5,
+          "context_count": 10,
+          "harmful_action_count": 0,
+          "net_geomean_ratio": 0.7513145808385031
+        },
+        "50": {
+          "activated_count": 10,
+          "context_count": 12,
+          "harmful_action_count": 0,
+          "net_geomean_ratio": 0.12816366754546635
+        }
+      }
+    },
+    "heldout": {
+      "activated_count": 8,
+      "beneficial_action_count": 8,
+      "beneficial_precision": 1.0,
+      "beneficial_precision_95_lower": 0.7472764025762368,
+      "context_count": 22,
+      "fallback_action": "Q0",
+      "harmful_action_count": 0,
+      "harmful_rate": 0.0,
+      "harmful_rate_95_upper": 0.25272359742376327,
+      "instance_count": 18,
+      "net_geomean_ratio": 0.5267267261246088,
+      "no_op_count": 14,
+      "per_scale": {
+        "30": {
+          "activated_count": 1,
+          "context_count": 10,
+          "harmful_action_count": 0,
+          "net_geomean_ratio": 0.9752912136782702
+        },
+        "50": {
+          "activated_count": 7,
+          "context_count": 12,
+          "harmful_action_count": 0,
+          "net_geomean_ratio": 0.31523025342185174
+        }
+      }
+    },
+    "train": {
+      "activated_count": 41,
+      "beneficial_action_count": 39,
+      "beneficial_precision": 0.9512195121951219,
+      "beneficial_precision_95_lower": 0.8628504386218248,
+      "context_count": 66,
+      "fallback_action": "Q0",
+      "harmful_action_count": 2,
+      "harmful_rate": 0.04878048780487805,
+      "harmful_rate_95_upper": 0.13714956137817524,
+      "instance_count": 57,
+      "net_geomean_ratio": 0.36866737634438446,
+      "no_op_count": 25,
+      "per_scale": {
+        "30": {
+          "activated_count": 12,
+          "context_count": 28,
+          "harmful_action_count": 0,
+          "net_geomean_ratio": 0.7724905473864453
+        },
+        "50": {
+          "activated_count": 29,
+          "context_count": 38,
+          "harmful_action_count": 2,
+          "net_geomean_ratio": 0.21375581797534607
+        }
+      }
+    }
+  },
+  "recommendation": "evaluate_combined_qg2_plus_context_selector_in_fresh_process",
+  "rejection_counts": {
+    "noncompliant_context": 90
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_context_arm_selector_feasibility.v1",
+  "selector_model": "per_arm_linear_two_head_v1",
+  "starts_solver_process": false,
+  "threshold_authority": "development_only_formal_wilson_bounds_reported_separately",
+  "thresholds": {
+    "benefit_probability": 0.820038080215,
+    "calibration_gate_passed": true,
+    "calibration_report": {
+      "activated_count": 15,
+      "beneficial_action_count": 15,
+      "beneficial_precision": 1.0,
+      "beneficial_precision_95_lower": 0.8471922953898599,
+      "context_count": 22,
+      "fallback_action": "Q0",
+      "harmful_action_count": 0,
+      "harmful_rate": 0.0,
+      "harmful_rate_95_upper": 0.15280770461014015,
+      "instance_count": 19,
+      "net_geomean_ratio": 0.2863397854299564,
+      "no_op_count": 7,
+      "per_scale": {
+        "30": {
+          "activated_count": 5,
+          "context_count": 10,
+          "harmful_action_count": 0,
+          "net_geomean_ratio": 0.7513145808385031
+        },
+        "50": {
+          "activated_count": 10,
+          "context_count": 12,
+          "harmful_action_count": 0,
+          "net_geomean_ratio": 0.12816366754546635
+        }
+      }
+    },
+    "expected_gain": 0.315175379954,
+    "fallback_action": "Q0",
+    "reason": "best_development_only_zero_observed_harm_geomean",
+    "strict_deployment_risk_gate_passed": false
+  },
+  "training_authority": false,
+  "training_metrics": {
+    "epochs": 300,
+    "final_loss": 0.19996237754821777,
+    "learning_rate": 0.01,
+    "train_context_count": 66
+  },
+  "training_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/training_qg2_action_surface_v2_training_only_v2/training_report.json",
+  "training_report_sha256": "b0da69137fa74f13de3b52c3660bad5b67c2df60813c4d5fdc7e9dfcb37e3bc1"
+}

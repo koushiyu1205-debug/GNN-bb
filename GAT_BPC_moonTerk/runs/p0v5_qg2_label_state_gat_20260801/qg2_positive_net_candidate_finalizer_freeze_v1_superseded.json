@@ -1,0 +1,11 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_freeze_supersession.v1",
+  "superseded_freeze": "qg2_positive_net_candidate_finalizer_freeze.json",
+  "superseded_freeze_sha256": "1ce18e52558006eac31f2f83e11c47583b7e0ae4538aa19100320b2bac78730e",
+  "replacement_freeze": "qg2_positive_net_candidate_finalizer_freeze_v2.json",
+  "replacement_freeze_sha256": "049c2254833d44b5c68a00558f5969e5c69bbfcbd888940bcf8b00ef64ca0eee",
+  "reason": "v2 independently recomputes p99, censor, unsafe, per-scale ratio, exact-count, action-count, objective and redline gates before freezing a candidate",
+  "runtime_uses_replacement_only": true,
+  "production_switch_authorized": false,
+  "fallback_action": "Q0"
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_positive_net_finalizer_freeze.v2",
+  "generated_at": "2026-08-05T22:25:00+08:00",
+  "development_only": true,
+  "production_switch_authorized": false,
+  "formal_full20_required": true,
+  "final_regression_and_native_tests_required": true,
+  "independent_metric_recomputation_required": true,
+  "inference_p99_max_ms": 10.0,
+  "selected_censor_or_unsafe_maximum": 0,
+  "scale5_10_20_qg2_inference_maximum": 0,
+  "scale5_10_20_maximum_ratio": 1.01,
+  "scale30_50_maximum_ratio": 1.03,
+  "combined_scale30_50_ratio_must_be_below": 1.0,
+  "exact_count_regression_forbidden": true,
+  "historical_baselines_must_remain_unchanged": true,
+  "fallback_action": "Q0",
+  "frozen_file_sha256": {
+    "scripts/finalize_p0v5_qg2_positive_net_candidate.py": "da3d75608a501c60c99f1ccba5fac52881962a5c7769fd26da0bc2a9625a9891",
+    "scripts/run_p0v5_qg2_positive_net_formal_after_e2e.py": "52db1cd46b72fd1618c3cec2fac1e5f04c6c4c6a4913249082a5049739ae9aa9",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_positive_net_formal_controller_freeze.json": "d6fe02963b09d06974d48d7c9108f6cc7f5fc65d95d604bc94dff305dc14ec0b",
+    "scripts/run_p0v5_qg2_positive_net_e2e_after_calibration.py": "c86cdd02338a2b3b45f888a7b2f5946d62775c4933751c81ebfc571a121faf12",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_positive_net_e2e_controller_freeze_v2.json": "97fa65b3c1399bf09c9556177847b955bfe1b200e2a704cd39ba7c95980fc19b",
+    "scripts/analyze_p0v5_qg2_positive_net_acceptance.py": "313785bbd5f94afbee035ba03936e3d41f8c2348161fb1056782ad60b0f8dc11",
+    "scripts/evaluate_p0v5_qg2_positive_net_calibration.py": "3b5cc9b1167a9818f63d9774260dafefad09612c2554313f437ffd7d93e7d3df",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py": "7b526e1e382175b96e0faaf4b5b9d3d4eeba87f8fb0083d0f31155b338d4a205",
+    "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42"
+  }
+}

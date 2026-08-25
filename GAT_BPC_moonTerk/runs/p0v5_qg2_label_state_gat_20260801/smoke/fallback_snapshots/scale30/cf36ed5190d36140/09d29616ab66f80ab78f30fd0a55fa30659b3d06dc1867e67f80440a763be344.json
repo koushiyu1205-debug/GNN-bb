@@ -1,0 +1,81 @@
+{
+  "active_column_count": 128,
+  "bidirectional_midpoint_fallback_reason": "smoke_midpoint_no_negative",
+  "bidirectional_midpoint_prepass_wall_sec": 0.1,
+  "branch_context": {
+    "note": "Exact branch feasibility context; guidance may rank candidates but cannot change these decisions.",
+    "pair_decision_count": 0,
+    "pair_decisions": [],
+    "schema_version": "lunar_ice_bpc.branch_context.v1"
+  },
+  "can_certify": false,
+  "config_hash": "smoke-exact-config",
+  "cut_context": {
+    "cut_count": 0,
+    "cuts": [],
+    "note": "Exact cut coefficient context. Current runner records no active cuts by default.",
+    "schema_version": "lunar_ice_bpc.cut_context.v2"
+  },
+  "cut_lineage": {
+    "cut_lineage_hash": ""
+  },
+  "deployable": false,
+  "development_only": true,
+  "engine_hash": "smoke-exact-engine",
+  "instance_content_hash": "cf36ed5190d36140",
+  "instance_id": "lunar_ice_sp50_030_001_seed929001",
+  "live_cut_policy_hash": "",
+  "mutates_p0": false,
+  "objective_mode": "official",
+  "pricing_lifecycle_scope": "root_cg",
+  "pricing_mode": "exact_proof",
+  "proof_tail_fallback_context": true,
+  "rmp_iteration_id": "smoke-root-1",
+  "round": 1,
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.p0v5_proof_tail_fallback_snapshot.v1",
+  "separator_policy_version": "",
+  "state_hash": "09d29616ab66f80ab78f30fd0a55fa30659b3d06dc1867e67f80440a763be344",
+  "trajectory_features": {
+    "dual_l1_delta_from_previous": 0.5,
+    "previous_proof_pass_wall_time": 1.0,
+    "previous_proof_processed_labels": 100,
+    "v5_midpoint_wall_sec": 0.1
+  },
+  "true_duals": {
+    "cut_duals": {},
+    "fleet_dual": 0.0,
+    "task_duals": {
+      "ice_site_001": 0.0,
+      "ice_site_002": 0.0,
+      "ice_site_003": 0.0,
+      "ice_site_004": 0.0,
+      "ice_site_005": 0.0,
+      "ice_site_006": 0.0,
+      "ice_site_007": 0.0,
+      "ice_site_008": 0.0,
+      "ice_site_009": 0.0,
+      "ice_site_010": 0.0,
+      "ice_site_011": 0.0,
+      "ice_site_012": 0.0,
+      "ice_site_013": 0.0,
+      "ice_site_014": 0.0,
+      "ice_site_015": 0.0,
+      "ice_site_016": 0.0,
+      "ice_site_017": 0.0,
+      "ice_site_018": 0.0,
+      "ice_site_019": 0.0,
+      "ice_site_020": 0.0,
+      "ice_site_021": 0.0,
+      "ice_site_022": 0.0,
+      "ice_site_023": 0.0,
+      "ice_site_024": 0.0,
+      "ice_site_025": 0.0,
+      "ice_site_026": 0.0,
+      "ice_site_027": 0.0,
+      "ice_site_028": 0.0,
+      "ice_site_029": 0.0,
+      "ice_site_030": 0.0
+    }
+  }
+}

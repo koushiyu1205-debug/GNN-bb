@@ -1,0 +1,12 @@
+{
+  "candidate_trained": false,
+  "current_stage": "COVERAGE_AUDIT",
+  "deployment_authorized": false,
+  "development_only": true,
+  "experiment_id": "p0v5_frontier_observability_root_cause_v7r3_20260818",
+  "manifest_generated": false,
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_state.v1",
+  "status": "READY",
+  "terminal": false
+}

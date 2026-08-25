@@ -1,0 +1,122 @@
+{
+  "authority": "exploratory_model_fitting_only",
+  "deployable": false,
+  "deployment_authorized": false,
+  "development_only": true,
+  "gate": {
+    "all_exact_safe": true,
+    "contract_errors": [],
+    "maximum_instance_saved_wall_fraction": 0.09146978025460083,
+    "passed": true,
+    "reason": "training_only_gate_v2_passed",
+    "scale30": {
+      "determined_context_count": 47,
+      "determined_instance_count": 43,
+      "gain_5pct_context_count": 29,
+      "harmful_context_count": 6,
+      "harmful_instance_count": 6,
+      "instance_bootstrap_95_upper_report_only": 0.9113778979321988,
+      "nonpositive_context_count": 10,
+      "paired_geomean_ratio_report_only": 0.8667568313601623,
+      "passed": true,
+      "positive_fraction": 0.7872340425531915,
+      "positive_instance_count": 28
+    },
+    "scale50": {
+      "determined_context_count": 54,
+      "determined_instance_count": 44,
+      "gain_5pct_context_count": 27,
+      "harmful_context_count": 16,
+      "harmful_instance_count": 15,
+      "instance_bootstrap_95_upper_report_only": 1.034842021912077,
+      "nonpositive_context_count": 19,
+      "paired_geomean_ratio_report_only": 0.9113061461392116,
+      "passed": true,
+      "positive_fraction": 0.6481481481481481,
+      "positive_instance_count": 24
+    }
+  },
+  "instance_bootstrap_is_report_only": true,
+  "oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_stage1.json",
+  "oracle_summary_sha256": "2769079be1409e434ed8cdd3a211ae343391a6bb5910d1486a0e29c35ef60948",
+  "paper_claim_authorized": false,
+  "point_geomean_is_report_only": true,
+  "queue_action_surface": "same_terminal_class_and_reduced_cost_bucket.v1",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_training_only_gate.v2",
+  "strict_oracle_gate": {
+    "all_exact_safe": true,
+    "context_count": 110,
+    "frozen_guidance_bucket_width": 0.001,
+    "max_instance_saved_wall_fraction": 0.09146978025460083,
+    "net_gain_5pct_context_count": 56,
+    "passed": false,
+    "queue_action_headroom": {
+      "assumption": "post_native_pipeline_invariant_under_queue_ordering",
+      "available_admission_context_count": 84,
+      "diagnostic_only": true,
+      "scale30": {
+        "admission_context_count": 22,
+        "fixed_pipeline_dominates_context_count": 0,
+        "instance_count": 17,
+        "maximum_post_native_fixed_pipeline_share": 0.026024258126501245,
+        "median_post_native_fixed_pipeline_share": 0.01547698202610931,
+        "median_queue_visible_native_search_share": 0.9845230179738906,
+        "median_raw_to_native_harvest_share": 0.4992906283741221,
+        "median_required_native_search_reduction_for_target": 0.05078601448726054,
+        "target_feasible_context_count": 22
+      },
+      "scale50": {
+        "admission_context_count": 62,
+        "fixed_pipeline_dominates_context_count": 0,
+        "instance_count": 51,
+        "maximum_post_native_fixed_pipeline_share": 0.05956402153241983,
+        "median_post_native_fixed_pipeline_share": 0.014926474916429684,
+        "median_queue_visible_native_search_share": 0.9850735250835703,
+        "median_raw_to_native_harvest_share": 0.445696775995096,
+        "median_required_native_search_reduction_for_target": 0.050757632597187255,
+        "target_feasible_context_count": 62
+      },
+      "target_end_to_end_gain": 0.05,
+      "training_authority": "none_use_matched_qo2_q0_oracle_gate",
+      "unavailable_context_count": 116,
+      "unavailable_reasons": {
+        "milestone_not_reached": 90,
+        "not_an_admission_milestone": 26
+      }
+    },
+    "queue_action_headroom_role": "mechanism_diagnostic_only_matched_oracle_is_authoritative",
+    "reason": "bounded_oracle_gate_failed",
+    "scale30": {
+      "bootstrap_95_upper": 0.9113778979321988,
+      "context_count": 48,
+      "determined_context_count": 47,
+      "paired_geomean_ratio": 0.8667568313601623,
+      "positive_context_count": 29,
+      "positive_fraction": 0.6170212765957447,
+      "positive_instance_count": 28,
+      "right_censored_or_mismatched_context_count": 1
+    },
+    "scale50": {
+      "bootstrap_95_upper": 1.034842021912077,
+      "context_count": 62,
+      "determined_context_count": 54,
+      "paired_geomean_ratio": 0.9113061461392116,
+      "positive_context_count": 27,
+      "positive_fraction": 0.5,
+      "positive_instance_count": 24,
+      "right_censored_or_mismatched_context_count": 8
+    }
+  },
+  "supervision_schema_version": "lunar_ice_bpc.p0v5_qg2_action_reachable_supervision.v2",
+  "thresholds": {
+    "harmful_ratio_threshold": 1.05,
+    "maximum_instance_saved_wall_fraction": 0.35,
+    "minimum_determined_contexts_per_scale": 20,
+    "minimum_determined_instances_per_scale": 10,
+    "minimum_gain_5pct_contexts_per_scale": 5,
+    "minimum_harmful_instances_per_scale": 3,
+    "minimum_nonpositive_contexts_per_scale": 5,
+    "minimum_positive_instances_per_scale": 5
+  },
+  "training_authorized": true
+}

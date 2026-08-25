@@ -1,0 +1,27 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_e2e_controller_freeze.v1",
+  "status": "FROZEN_AFTER_STORAGE_CAP_NAMESPACE_ALIGNMENT_BEFORE_CALIBRATION_OR_DEVELOPMENT_E2E",
+  "development_only": true,
+  "deployable": false,
+  "frozen_at_local": "2026-08-02T22:36:00+08:00",
+  "collection_id": "qg2_clean_v2",
+  "amendment_id": "storage_cap_downstream_namespace_alignment_v1",
+  "frozen_file_sha256": {
+    "scripts/run_p0v5_qg2_e2e_after_calibration.py": "4e43271d2c84d542feca8adf9c5dc2f7e9c12bd7dc43aab15a03e9af605563a5",
+    "scripts/run_p0v5_qg2_clean_v2_e2e_after_calibration.py": "15490a0a844df4f1092d7a408878df28bbdd254ac9abdc28b60c3b4853168723",
+    "scripts/analyze_p0v5_qg2_paired_acceptance.py": "da7bb5faaef695922f995a2f89d22ed88b6f258df34fbc5401bb2a0210e200f8",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_post_oracle_controller_freeze_storage_cap_v3.json": "af8843502b63897bef72383daf7e00f071b4da566cde2194ea62640b2e17d84d",
+    "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+    "data/p0v5_qg2_oracle_development_v3/manifest.json": "ff37cd88b9fc9fbe6f38a5e8b7e0d9466a1b739fee27119ff7fb4acf267b05eb"
+  },
+  "activation_gate": "calibration_gate_pass_and_deployment_authorized",
+  "heldout_selection": "first_five_instance_split_heldout_content_hashes_per_scale_in_frozen_corpus_order",
+  "scales": [
+    30,
+    50
+  ],
+  "instances_per_scale": 5,
+  "control_mode": "literal_q0_without_manifest_or_collection_environment",
+  "guided_mode": "calibrated_manifest_with_both_scale_specific_action_hashes",
+  "automatic_formal_full20_after_e2e": false
+}

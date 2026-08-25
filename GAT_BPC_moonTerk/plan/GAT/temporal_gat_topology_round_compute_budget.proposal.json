@@ -1,0 +1,56 @@
+{
+  "architecture_budget": {
+    "absolute_maximum_candidates_per_round": 2,
+    "default_primary_candidates_per_round": 1,
+    "second_candidate_requires_preoutcome_mechanistic_difference": true,
+    "selection_must_enter_multiplicity_contract": true
+  },
+  "authority": "plan/GAT/P0V4_V5_Temporal_GAT_Additional_5_Questions_Formal_Response_20260825.md",
+  "cross_validation": {
+    "folds": 5,
+    "group_unit": "INSTANCE",
+    "model_seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "topology_shuffle_seed_count": 10
+  },
+  "default_training_job_budget": {
+    "absolute_maximum_if_two_candidates_predeclared": 420,
+    "maximum_if_one_candidate": 240,
+    "time_budget": "FREEZE_AFTER_PREOUTCOME_PER_FIT_RESOURCE_PILOT",
+    "unit": "MODEL_FIT_JOB"
+  },
+  "early_stopping_proposal": {
+    "maximum_epochs": 120,
+    "minimum_delta": 0.0001,
+    "patience_epochs": 15,
+    "selection_metric": "FROZEN_TRAIN_ONLY_OBJECTIVE"
+  },
+  "maximum_outcome_bearing_rounds": 3,
+  "rounds": [
+    {
+      "id": "T1",
+      "purpose": "CURRENT_TEMPORAL_MULTIRES_BASELINE"
+    },
+    {
+      "id": "T2",
+      "purpose": "ONE_CAUSALLY_JUSTIFIED_REPRESENTATION_REPAIR",
+      "requires": "T1_ROOT_CAUSE_IDENTIFIES_REPRESENTATION_DEFECT"
+    },
+    {
+      "id": "T3",
+      "purpose": "FINAL_SINGLE_TOPOLOGY_HYPOTHESIS_CONFIRMATION",
+      "requires": "TWO_ROUND_ROOT_CAUSE_AUDIT_PASS"
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.temporal_gat_topology_round_budget.proposal.v1",
+  "stopping": {
+    "after_two_failures": "PAUSE_AND_REQUIRE_TOPOLOGY_TWO_ROUND_NEGATIVE_ROOT_CAUSE_AUDIT",
+    "after_three_failures": "CURRENT_TEMPORAL_TOPOLOGY_HYPOTHESIS_TERMINATED_NEGATIVE",
+    "hyperparameter_search_after_three_failures_forbidden": true
+  },
+  "status": "PROPOSAL_REQUIRES_USER_CONFIRMATION",
+  "training_authorized": false
+}

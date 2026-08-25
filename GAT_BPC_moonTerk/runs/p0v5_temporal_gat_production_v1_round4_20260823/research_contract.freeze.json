@@ -1,0 +1,21 @@
+{
+  "action_scope": "scale30_50_root_cg_p0v4_fallback_only",
+  "actions": [
+    "CONTINUE_QD1",
+    "MIGRATE_BACK_TO_Q0"
+  ],
+  "boundary_by_scale": {
+    "30": 4096,
+    "50": 16384
+  },
+  "gat_has_certificate_authority": false,
+  "gat_may_delete_or_prune_labels": false,
+  "old_outcomes_allowed_for_training": false,
+  "production_default_change_before_all_gates": false,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_contract.v1",
+  "trial_k_candidates": [
+    128,
+    512,
+    2048
+  ]
+}

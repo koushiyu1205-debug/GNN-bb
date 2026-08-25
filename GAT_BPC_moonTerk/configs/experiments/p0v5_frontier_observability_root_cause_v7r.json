@@ -1,0 +1,47 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_root_cause_config.v1",
+  "experiment_id": "p0v5_frontier_observability_root_cause_v7r2_20260818",
+  "run_root": "runs/p0v5_frontier_observability_root_cause_v7r2_20260818",
+  "source_v7_run_root": "runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817",
+  "allowed_scales": [30, 50],
+  "actions": ["QPF0", "QPD1"],
+  "probe_boundary": 4096,
+  "execution": {
+    "blocked_fresh_process_repeats": 3,
+    "replay_caps_sec": {"30": 300, "50": 600},
+    "memory_limit_gb": 10.867,
+    "single_native_process": true
+  },
+  "switch_gate": {
+    "minimum_determined_context_fraction": 0.75,
+    "minimum_determined_instances_per_scale": 12,
+    "minimum_winner_instances_per_scale": 5,
+    "minimum_scale50_benefit_instances": 4,
+    "minimum_scale50_neutral_or_harm_instances": 4,
+    "oracle_gm_at_most": 0.95
+  },
+  "coverage_audit": {
+    "confidence": 0.95,
+    "target_eligible_instances": [8, 37],
+    "primary_cohort": "v7_pilot_scale30",
+    "maximum_repaired_candidate_cap": 600
+  },
+  "feature_sufficiency": {
+    "model_kinds": ["gat", "mlp", "linear", "no_message", "shuffled_topology"],
+    "seeds": [61635, 91267, 170141],
+    "fold_count": 5,
+    "maximum_epochs": 200,
+    "patience": 25,
+    "minimum_scale50_balanced_accuracy": 0.65,
+    "minimum_scale50_rank_accuracy": 0.65,
+    "maximum_gat_gap_to_best_control": 0.02,
+    "similar_pair_distance_quantile": 0.10,
+    "maximum_similar_opposite_label_fraction": 0.35
+  },
+  "candidate_training_forbidden": true,
+  "threshold_search_forbidden": true,
+  "manifest_generation_forbidden": true,
+  "development_only": true,
+  "deployment_authorized": false,
+  "production_switch_authorized": false
+}

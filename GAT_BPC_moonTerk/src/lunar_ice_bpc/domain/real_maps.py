@@ -20,6 +20,10 @@ REAL_MAP_SOURCE_CATALOG_SCHEMA_VERSION = "lunar_ice_bpc.real_map_sources.v1"
 REAL_MAP_GENERATOR_ID = "real_lunar_south_pole_raster_preview_v1"
 REAL_MAP_REQUIRED_LOLA_LAYERS = ("lola_slope", "lola_roughness", "lola_psr")
 PATH_TYPES = ("low_time", "low_energy", "low_risk")
+REAL_MAP_EDGE_GENERATION_MODES = (
+    "diversity_penalized_pairwise_v1",
+    "batched_cost_surface_v1",
+)
 DEFAULT_SP50_DEPOT_CENTER_KM = (-9.9, -19.1)
 WONG_BLUE = "#2271B2"
 WONG_CYAN = "#3DB7E9"
@@ -352,9 +356,15 @@ def build_real_map_edge_options(
     output_cells: int = 300,
     allow_remote: bool = False,
     checkpoint_dir: str | Path | None = None,
+    edge_generation_mode: str = "diversity_penalized_pairwise_v1",
 ) -> list[dict[str, Any]]:
     """Build fixed three-path logical edges from real raster cost surfaces."""
 
+    edge_generation_mode = str(edge_generation_mode)
+    if edge_generation_mode not in REAL_MAP_EDGE_GENERATION_MODES:
+        raise ValueError(
+            f"unsupported real-map edge generation mode {edge_generation_mode!r}"
+        )
     context = build_real_map_surface_context(
         raw_map_dir=raw_map_dir,
         center_x_km=center_x_km,
@@ -383,6 +393,7 @@ def build_real_map_edge_options(
         extent_km=extent_km,
         output_cells=output_cells,
         allow_remote=allow_remote,
+        edge_generation_mode=edge_generation_mode,
     )
     source_items = list(node_cells.items())
     for source_index, (source_id, start) in enumerate(source_items):
@@ -408,15 +419,28 @@ def build_real_map_edge_options(
                 status=checkpoint_status,
             )
             continue
-        low_time_paths = _dijkstra_grid_paths_to_goals(
-            cost_surfaces["low_time"],
-            start,
-            [goal for target_id, goal in node_cells.items() if target_id != source_id],
-            elevation=surfaces.get("elevation_m"),
-            elevation_available=bool(surfaces.get("elevation_available", False)),
-            path_type="low_time",
-            extent_km=extent_km,
-        )
+        goals = [
+            goal for target_id, goal in node_cells.items()
+            if target_id != source_id
+        ]
+        batched_paths = {
+            path_type: _dijkstra_grid_paths_to_goals(
+                cost_surfaces[path_type],
+                start,
+                goals,
+                elevation=surfaces.get("elevation_m"),
+                elevation_available=bool(
+                    surfaces.get("elevation_available", False)
+                ),
+                path_type=path_type,
+                extent_km=extent_km,
+            )
+            for path_type in (
+                PATH_TYPES
+                if edge_generation_mode == "batched_cost_surface_v1"
+                else ("low_time",)
+            )
+        }
         source_edges = []
         for target_id, goal in node_cells.items():
             if source_id == target_id:
@@ -428,7 +452,14 @@ def build_real_map_edge_options(
                 start=start,
                 goal=goal,
                 extent_km=extent_km,
-                first_path_override=low_time_paths.get(goal),
+                path_overrides={
+                    path_type: rows.get(goal)
+                    for path_type, rows in batched_paths.items()
+                },
+                apply_diversity_penalty=(
+                    edge_generation_mode
+                    == "diversity_penalized_pairwise_v1"
+                ),
             )
             source_edges.append({"from": source_id, "to": target_id, "path_options": options})
         edges.extend(source_edges)
@@ -458,6 +489,7 @@ def _real_map_edge_checkpoint_fingerprint(
     extent_km: float,
     output_cells: int,
     allow_remote: bool,
+    edge_generation_mode: str = "diversity_penalized_pairwise_v1",
 ) -> str:
     raw_dir = Path(raw_map_dir)
     raw_files: list[list[Any]] = []
@@ -479,6 +511,7 @@ def _real_map_edge_checkpoint_fingerprint(
         "extent_km": float(extent_km),
         "output_cells": int(output_cells),
         "allow_remote": bool(allow_remote),
+        "edge_generation_mode": str(edge_generation_mode),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -1652,14 +1685,25 @@ def _build_directed_path_options(
     goal: tuple[int, int],
     extent_km: float,
     first_path_override: list[tuple[int, int]] | None = None,
+    path_overrides: dict[str, list[tuple[int, int]] | None] | None = None,
+    apply_diversity_penalty: bool = True,
 ) -> list[dict[str, Any]]:
     cells = int(surfaces["resource"].shape[0])
     prior_paths: list[list[tuple[int, int]]] = []
     options: list[dict[str, Any]] = []
+    overrides = dict(path_overrides or {})
+    if first_path_override is not None:
+        overrides.setdefault("low_time", first_path_override)
     for path_type in PATH_TYPES:
-        cost = _cost_with_diversity_penalty(np, cost_surfaces[path_type], prior_paths, path_type=path_type)
-        if path_type == "low_time" and first_path_override is not None:
-            cells_path = first_path_override
+        cost = (
+            _cost_with_diversity_penalty(
+                np, cost_surfaces[path_type], prior_paths,
+                path_type=path_type,
+            )
+            if apply_diversity_penalty else cost_surfaces[path_type]
+        )
+        if overrides.get(path_type) is not None:
+            cells_path = overrides[path_type]
         else:
             cells_path = _dijkstra_grid_path(
                 cost,
@@ -1683,7 +1727,9 @@ def _build_directed_path_options(
             "generalized_cost": round(generalized, 6),
             "path_cells": [],
             "path_xy": points,
-            "diversity_penalty_applied": bool(prior_paths),
+            "diversity_penalty_applied": bool(
+                apply_diversity_penalty and prior_paths
+            ),
         }
         option.update(metrics)
         options.append(option)

@@ -36,7 +36,10 @@ from lunar_ice_bpc.exact.bpc.guidance.contracts import (
     canonical_universe_hash,
     validate_pricing_ordering_hints,
 )
-from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
+from lunar_ice_bpc.exact.bpc.core.column_signature import (
+    column_semantic_signature_hash,
+    column_signature_from_journey,
+)
 from lunar_ice_bpc.exact.core.branching import branch_context_from_payload
 from lunar_ice_bpc.exact.core.cuts import (
     CUT_DUAL_PROJECTION_SCHEMA_VERSION,
@@ -165,6 +168,62 @@ class NativeRcsppInprocessBackend:
                 telemetry={"error": repr(exc)},
             )
         return _audit_native_result(request, raw, backend_id=self.backend_id)
+
+
+def run_native_counterfactual_prefix_raw(
+    request: BackendPricingRequest,
+) -> dict[str, Any]:
+    """Execute one V8 telemetry-only prefix without exact-result auditing.
+
+    Prefix requests deliberately use the exact pricing trajectory but are not
+    exact results.  Feeding them through :func:`_audit_native_result` would
+    correctly create certificate blockers; this narrow entry point instead
+    validates the route/certificate suppression contract and returns the raw
+    diagnostic payload to the V8 experiment controller.
+    """
+
+    mode = str(request.proof_tail_counterfactual_prefix_mode)
+    if mode not in {
+        "counterfactual_q0_prefix",
+        "counterfactual_qd1_prefix",
+    }:
+        raise ValueError("request is not an active V8 counterfactual prefix")
+    capability_blockers = _capability_blockers(request)
+    if capability_blockers:
+        raise RuntimeError(
+            "counterfactual prefix capability blockers: "
+            + ",".join(capability_blockers)
+        )
+    binding_blockers = _binding_blockers(request)
+    if binding_blockers:
+        raise RuntimeError(
+            "counterfactual prefix binding blockers: "
+            + ",".join(binding_blockers)
+        )
+    native = importlib.import_module("lunar_spprc_native")
+    build_blockers = _native_build_capability_blockers(request, native)
+    if build_blockers:
+        raise RuntimeError(
+            "counterfactual prefix build blockers: "
+            + ",".join(build_blockers)
+        )
+    raw = dict(native.solve(_native_request_payload(request)))
+    telemetry = dict(raw.get("telemetry") or {}).get(
+        "proof_queue_counterfactual_prefix"
+    )
+    prefix = dict(telemetry or {})
+    if (
+        raw.get("routes")
+        or raw.get("certificate") is not None
+        or bool(raw.get("search_exhaustive"))
+        or bool(raw.get("frontier_empty"))
+        or not bool(raw.get("truncated_diagnostic"))
+        or bool(raw.get("exact"))
+        or not bool(prefix.get("routes_suppressed"))
+        or not bool(prefix.get("certificate_suppressed"))
+    ):
+        raise RuntimeError("counterfactual prefix public-result redline")
+    return raw
 
 
 class NativeRcsppHostBackend:
@@ -1551,8 +1610,14 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
         and request.guidance_mode == GUIDANCE_MODE_TASK_ARC
         and (
             not request.exact_proof_mode
-            or request.proof_queue_policy_id == "QG1"
+            or request.proof_queue_policy_id in {"QG1", "QG2", "QGR1"}
         )
+    )
+    label_state_effective = bool(
+        guidance_effective
+        and request.proof_queue_policy_id in {"QG2", "QGR1"}
+        and accepted_guidance is not None
+        and accepted_guidance.label_state_coefficients
     )
     task_priorities = (
         accepted_guidance.priorities_for("task")
@@ -1686,10 +1751,101 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
             ).strip().lower()
             in {"1", "true", "yes", "on"}
         ),
+        "proof_queue_label_trace_enabled": bool(
+            request.exact_proof_mode
+            and request.proof_tail_label_trace_enabled
+        ),
+        "proof_queue_label_trace_max_rows": int(
+            request.proof_tail_label_trace_max_rows
+        ),
+        "proof_queue_label_trace_sampling_mode": str(
+            request.proof_tail_label_trace_sampling_mode
+        ),
+        "proof_queue_label_trace_seed": int(
+            request.proof_tail_label_trace_seed
+        ),
+        "proof_queue_preference_cap_per_family": int(
+            request.proof_tail_preference_cap_per_family
+        ),
+        "proof_queue_surface_reservoir_count": int(
+            request.proof_tail_surface_reservoir_count
+        ),
+        "proof_queue_surface_labels_per_bucket": int(
+            request.proof_tail_surface_labels_per_bucket
+        ),
+        "proof_queue_witness_route_cap": int(
+            request.proof_tail_witness_route_cap
+        ),
+        "proof_queue_witness_ancestor_cap": int(
+            request.proof_tail_witness_ancestor_cap
+        ),
         "proof_queue_guidance_bucket_width": float(
             request.proof_queue_guidance_bucket_width
         ),
         "proof_queue_policy_id": request.proof_queue_policy_id,
+        "proof_queue_frontier_probe_mode": str(
+            request.proof_tail_frontier_probe_mode
+        ),
+        "proof_queue_frontier_probe_boundary": int(
+            request.proof_tail_frontier_probe_boundary
+        ),
+        "proof_queue_frontier_trial_pop_budget": int(
+            request.proof_tail_frontier_trial_pop_budget
+        ),
+        "proof_queue_frontier_problem_scale": int(request.data.scale),
+        "proof_queue_frontier_pricing_lifecycle": str(
+            request.pricing_lifecycle_scope
+        ),
+        "proof_queue_frontier_require_root_cg": bool(
+            request.proof_tail_frontier_require_root_cg
+        ),
+        "proof_queue_frontier_fail_closed_on_ood": bool(
+            request.proof_tail_frontier_fail_closed_on_ood
+        ),
+        "proof_queue_frontier_observation_boundaries": list(
+            request.proof_tail_frontier_observation_boundaries
+        ),
+        "proof_queue_frontier_context_features": list(
+            request.proof_tail_frontier_context_features
+        ),
+        "proof_queue_frontier_gat_bundle": (
+            None
+            if request.proof_tail_frontier_gat_bundle is None
+            else dict(request.proof_tail_frontier_gat_bundle)
+        ),
+        "proof_queue_frontier_manifest_sha256": str(
+            request.proof_tail_frontier_manifest_sha256
+        ),
+        "proof_queue_frontier_bundle_sha256": str(
+            request.proof_tail_frontier_bundle_sha256
+        ),
+        "proof_queue_counterfactual_prefix_mode": str(
+            request.proof_tail_counterfactual_prefix_mode
+        ),
+        "proof_queue_counterfactual_prefix_boundary": int(
+            request.proof_tail_counterfactual_prefix_boundary
+        ),
+        "proof_queue_counterfactual_rollout_checkpoints": list(
+            request.proof_tail_counterfactual_rollout_checkpoints
+        ),
+        "proof_queue_counterfactual_max_rollout_budget": int(
+            request.proof_tail_counterfactual_max_rollout_budget
+        ),
+        "proof_queue_counterfactual_label_sample_cap": int(
+            request.proof_tail_counterfactual_label_sample_cap
+        ),
+        "proof_queue_counterfactual_sampling_seed": int(
+            request.proof_tail_counterfactual_sampling_seed
+        ),
+        "proof_queue_counterfactual_telemetry_only": bool(
+            request.proof_tail_counterfactual_telemetry_only
+        ),
+        "proof_queue_counterfactual_public_routes_forbidden": bool(
+            request.proof_tail_counterfactual_public_routes_forbidden
+        ),
+        "proof_queue_counterfactual_certificate_forbidden": bool(
+            request.proof_tail_counterfactual_certificate_forbidden
+        ),
         "dssr_enabled": bool(request.dssr_enabled),
         "dssr_policy_version": str(request.dssr_policy_version),
         "dssr_negative_batch_target": int(
@@ -1736,6 +1892,17 @@ def _native_request_payload(request: BackendPricingRequest) -> dict:
             else accepted_guidance.binding_hash
         ),
         "guidance_task_arc_enabled": guidance_effective,
+        "guidance_label_state_enabled": label_state_effective,
+        "guidance_label_state_coefficients": (
+            list(accepted_guidance.label_state_coefficients)
+            if label_state_effective and accepted_guidance is not None
+            else [0.0] * 15
+        ),
+        "guidance_label_state_schema_version": (
+            accepted_guidance.label_state_schema_version
+            if label_state_effective and accepted_guidance is not None
+            else ""
+        ),
         "legal_task_universe_hash_before_sort": task_universe_hash,
         "legal_arc_universe_hash_before_sort": arc_universe_hash,
         "guidance_native_install_sec": guidance_install_sec,
@@ -1823,6 +1990,7 @@ def _audit_native_result(
     *,
     backend_id: str,
 ) -> BackendResult:
+    audit_started = monotonic()
     blockers = [str(item) for item in raw.get("certificate_blockers", [])]
     raw_bindings = dict(raw.get("request_bindings") or {})
     pricing_cut_context = _pricing_cut_context(request)
@@ -1835,8 +2003,14 @@ def _audit_native_result(
         and request.guidance_mode == GUIDANCE_MODE_TASK_ARC
         and (
             not request.exact_proof_mode
-            or request.proof_queue_policy_id == "QG1"
+            or request.proof_queue_policy_id in {"QG1", "QG2", "QGR1"}
         )
+    )
+    label_state_effective = bool(
+        guidance_effective
+        and request.proof_queue_policy_id in {"QG2", "QGR1"}
+        and accepted_guidance is not None
+        and accepted_guidance.label_state_coefficients
     )
     legal_task_universe_hash = canonical_universe_hash(
         request.data.task_ids,
@@ -1895,9 +2069,64 @@ def _audit_native_result(
             else accepted_guidance.binding_hash
         ),
         "guidance_task_arc_enabled": guidance_effective,
+        "proof_queue_frontier_probe_mode": str(
+            request.proof_tail_frontier_probe_mode
+        ),
+        "proof_queue_frontier_probe_boundary": int(
+            request.proof_tail_frontier_probe_boundary
+        ),
+        "proof_queue_frontier_trial_pop_budget": int(
+            request.proof_tail_frontier_trial_pop_budget
+        ),
+        "proof_queue_frontier_problem_scale": int(request.data.scale),
+        "proof_queue_frontier_pricing_lifecycle": str(
+            request.pricing_lifecycle_scope
+        ),
+        "proof_queue_frontier_require_root_cg": bool(
+            request.proof_tail_frontier_require_root_cg
+        ),
+        "proof_queue_frontier_fail_closed_on_ood": bool(
+            request.proof_tail_frontier_fail_closed_on_ood
+        ),
+        "proof_queue_frontier_observation_boundaries": list(
+            request.proof_tail_frontier_observation_boundaries
+        ),
+        "proof_queue_frontier_manifest_sha256": str(
+            request.proof_tail_frontier_manifest_sha256
+        ),
+        "proof_queue_frontier_bundle_sha256": str(
+            request.proof_tail_frontier_bundle_sha256
+        ),
+        "proof_queue_counterfactual_prefix_mode": str(
+            request.proof_tail_counterfactual_prefix_mode
+        ),
+        "proof_queue_counterfactual_prefix_boundary": int(
+            request.proof_tail_counterfactual_prefix_boundary
+        ),
+        "proof_queue_counterfactual_rollout_checkpoints": list(
+            request.proof_tail_counterfactual_rollout_checkpoints
+        ),
+        "proof_queue_counterfactual_label_sample_cap": int(
+            request.proof_tail_counterfactual_label_sample_cap
+        ),
+        "proof_queue_counterfactual_sampling_seed": int(
+            request.proof_tail_counterfactual_sampling_seed
+        ),
         "legal_task_universe_hash_before_sort": legal_task_universe_hash,
         "legal_arc_universe_hash_before_sort": legal_arc_universe_hash,
     }
+    if request.proof_queue_policy_id in {"QG2", "QGR1"}:
+        expected_bindings.update(
+            {
+                "guidance_label_state_enabled": label_state_effective,
+                "guidance_label_state_schema_version": (
+                    accepted_guidance.label_state_schema_version
+                    if label_state_effective
+                    and accepted_guidance is not None
+                    else ""
+                ),
+            }
+        )
     if request.dssr_enabled:
         expected_bindings.update(
             {
@@ -1967,6 +2196,7 @@ def _audit_native_result(
     columns = []
     audited_rcs = []
     reconstruction_rows = []
+    first_audited_true_negative_wall_time_seconds = None
     collect_native_training_routes = str(
         os.getenv(
             "LUNAR_ICE_DUAL_CENTER_TRAJECTORY_COLLECTION",
@@ -2000,7 +2230,7 @@ def _audit_native_result(
             native_rc = float(route["reduced_cost"])
             rc_delta = abs(native_rc - manual_rc)
             signature = column_signature_from_journey(column)
-            signature_hash = hashlib.sha256(repr(signature).encode("utf-8")).hexdigest()
+            signature_hash = column_semantic_signature_hash(signature)
             cover_contribution = sum(
                 float(request.true_duals.cover.get(str(task_id), 0.0))
                 for task_id in column.task_set
@@ -2052,6 +2282,16 @@ def _audit_native_result(
             if manual_rc < -request.negative_eps:
                 columns.append(column)
                 audited_rcs.append(manual_rc)
+                if first_audited_true_negative_wall_time_seconds is None:
+                    native_wall = float(
+                        (raw.get("telemetry") or {}).get(
+                            "wall_time_seconds"
+                        )
+                        or 0.0
+                    )
+                    first_audited_true_negative_wall_time_seconds = (
+                        native_wall + monotonic() - audit_started
+                    )
         except Exception as exc:
             blockers.append("native_route_reconstruction_failed")
             reconstruction_rows.append({"accepted": False, "error": repr(exc)})
@@ -2228,6 +2468,12 @@ def _audit_native_result(
             "guidance_effective_mode": (
                 GUIDANCE_MODE_TASK_ARC if guidance_effective else "off"
             ),
+            "guidance_label_state_enabled": label_state_effective,
+            "guidance_label_state_schema_version": (
+                accepted_guidance.label_state_schema_version
+                if label_state_effective and accepted_guidance is not None
+                else ""
+            ),
             "guidance_filter_count": 0,
             "guidance_arc_drop_count": 0,
             "guidance_label_drop_count": 0,
@@ -2239,6 +2485,14 @@ def _audit_native_result(
             ],
             "guidance_native_install_sec": float(
                 raw_bindings.get("guidance_native_install_sec") or 0.0
+            ),
+            "first_audited_true_negative_wall_time_seconds": (
+                first_audited_true_negative_wall_time_seconds
+            ),
+            "proof_completion_wall_time_seconds": (
+                float(raw_telemetry.get("wall_time_seconds") or 0.0)
+                if exhaustive and frontier_empty
+                else None
             ),
         }
     )

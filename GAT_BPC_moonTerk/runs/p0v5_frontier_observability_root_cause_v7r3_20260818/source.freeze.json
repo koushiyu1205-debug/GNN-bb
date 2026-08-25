@@ -1,0 +1,25 @@
+{
+  "engine_hashes": {
+    "host": "54acd2b77bee0dad",
+    "inprocess": "ac2b3ab1bc7ded43",
+    "root_partial_hybrid": "743198d7928704a7"
+  },
+  "git_commit": "5453fbcdab4cd5febfea745fdb0a23b91af92c61",
+  "native_binary": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-frontier-gat-v7/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "native_binary_sha256": "814d2ccbad054bb45990bb565277e5e2f39d837ada928816df160241d6ce05ff",
+  "no_native_or_runtime_change_from_v7r2": true,
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_source_freeze.v2",
+  "selected_exact_config": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "selected_exact_config_sha256": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+  "source_sha256": {
+    "configs/experiments/p0v5_frontier_observability_root_cause_v7r3.json": "f3765e2c07ad76c3c165932383ea42b0fe943128ef92aaf0049ba902fe3cc18d",
+    "scripts/analyze_p0v5_frontier_coverage_v7r3.py": "a4b47f3a7db8600e129db712ebce10e464ec9ff6552a3fac27df774e9bdefc2b",
+    "scripts/initialize_p0v5_frontier_observability_v7r3.py": "24d4dec604eb11f1dd1c0d81f3ebe6f3e2172400b9aba940a7c1d949a076c562",
+    "scripts/p0v5_frontier_observability_v7r_common.py": "fe90376ab0d2114e1a8a98f8c3aa7bb2199afbc9e53404a4fe2f9f79526b2ea4",
+    "scripts/run_p0v5_frontier_feature_sufficiency_v7r.py": "dbf6c34cfc99a4af9ed6b9ec9c53ff96785faff077dab296db085333b96a317e",
+    "scripts/train_p0v5_native_frontier_gat_selector_v7.py": "3a3b076bd8397eef1636f50f65f78298baba3ccda96c250ff2fdf6aea5a7f04a",
+    "src/lunar_ice_bpc/guidance/frontier_gat_qd1_v7.py": "11e1ce3f4e8ef1fed02dd3f07eafb54936167fe9f63d4316f53e276925b363e9",
+    "tests/test_p0v5_frontier_observability_v7r3.py": "ca1256f20ec27989fc4cefae444aa52f771b803c70d7fbfb968e601f536b7c8b"
+  },
+  "worktree_may_be_dirty": true
+}

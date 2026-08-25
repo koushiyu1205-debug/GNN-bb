@@ -1,0 +1,171 @@
+{
+  "calibration_context_count": 22,
+  "calibration_view_only": true,
+  "deployable": false,
+  "development_only": true,
+  "feature_envelope": {
+    "context_max": [
+      3.9318256327243257,
+      -0.001476,
+      0.182286025,
+      0.11888029173408275,
+      0.055098,
+      0.49992375,
+      9.140990293841389,
+      1.0,
+      9.140990293841389,
+      1.0,
+      1.0,
+      0.275687893081761,
+      4.343805421853684,
+      1.0,
+      6.97203243159093,
+      1.0,
+      16.719730485803673,
+      1.0,
+      2.0305458,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0,
+      0.9019378644977698,
+      1.0,
+      1.0
+    ],
+    "context_min": [
+      3.4339872044851463,
+      -0.93138425,
+      0.0338975583,
+      0.01455918500604285,
+      -0.178741601,
+      0.070711815,
+      7.053585727193677,
+      1.0,
+      7.053585727193677,
+      1.0,
+      1.0,
+      0.16275850943700598,
+      0.6931471805599453,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0,
+      0.208076591020773,
+      1.0,
+      0.0
+    ],
+    "edge_max_abs": 9.873724,
+    "fit_partition": "train_instances_only",
+    "node_max_abs": 4.375421935020634,
+    "relative_margin": 0.05
+  },
+  "feature_schema_version": "lunar_ice_bpc.p0v5_qg2_features.v1",
+  "label_state_schema_version": "lunar_spprc.qg2_label_state.v1",
+  "loss": "label_rank_plus_0.1_benefit_plus_0.1_positive_gain",
+  "minimum_calibration_contexts_for_harmful_gate": 1,
+  "models": [
+    {
+      "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/training_qg2_action_surface_v2_training_only_v2/qg2_linear.pt",
+      "checkpoint_sha256": "16bbe40845693d24a35e40a720d007edb3937b798b9e2affd0b08859de0a4552",
+      "model_kind": "linear",
+      "partition_metrics": {
+        "calibration": {
+          "context_count": 22,
+          "instance_count": 19,
+          "mean_benefit_probability": 0.8497931090268221,
+          "mean_pair_accuracy": 0.7070341338336239
+        },
+        "heldout": {
+          "context_count": 22,
+          "instance_count": 18,
+          "mean_benefit_probability": 0.765736656432802,
+          "mean_pair_accuracy": 0.6439939864329036
+        },
+        "train": {
+          "context_count": 66,
+          "instance_count": 57,
+          "mean_benefit_probability": 0.8395513738646652,
+          "mean_pair_accuracy": 0.6945077818935935
+        }
+      }
+    },
+    {
+      "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/training_qg2_action_surface_v2_training_only_v2/qg2_mlp.pt",
+      "checkpoint_sha256": "bbe7188bf0b095a358bdb5663ec327e6558585745d4e2c5b53fb2551cb5f9ab3",
+      "model_kind": "mlp",
+      "partition_metrics": {
+        "calibration": {
+          "context_count": 22,
+          "instance_count": 19,
+          "mean_benefit_probability": 0.6950999958948656,
+          "mean_pair_accuracy": 0.7183339867070262
+        },
+        "heldout": {
+          "context_count": 22,
+          "instance_count": 18,
+          "mean_benefit_probability": 0.6404714218594811,
+          "mean_pair_accuracy": 0.6622099097180181
+        },
+        "train": {
+          "context_count": 66,
+          "instance_count": 57,
+          "mean_benefit_probability": 0.6858562375559951,
+          "mean_pair_accuracy": 0.7079010395184593
+        }
+      }
+    },
+    {
+      "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/training_qg2_action_surface_v2_training_only_v2/qg2_gat.pt",
+      "checkpoint_sha256": "9aa5237aee6993368cb8b7751b88f64be5c55bf0a5098f3e134737d07f41d694",
+      "model_kind": "gat",
+      "partition_metrics": {
+        "calibration": {
+          "context_count": 22,
+          "instance_count": 19,
+          "mean_benefit_probability": 0.7556851939721541,
+          "mean_pair_accuracy": 0.7131809794514418
+        },
+        "heldout": {
+          "context_count": 22,
+          "instance_count": 18,
+          "mean_benefit_probability": 0.6840771680528467,
+          "mean_pair_accuracy": 0.6676909246623268
+        },
+        "train": {
+          "context_count": 66,
+          "instance_count": 57,
+          "mean_benefit_probability": 0.7257792471033154,
+          "mean_pair_accuracy": 0.7109031680950483
+        }
+      }
+    }
+  ],
+  "next_gate": {
+    "deployment_authorized": false,
+    "requires_fresh_process_calibration": true,
+    "thresholds_frozen": false
+  },
+  "oracle_gate_passed": true,
+  "oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/calibration_qg2_combined_v1_base/authorized_views/oracle_calibration_view.json",
+  "oracle_summary_sha256": "ae10f39d1fb118489857231ab68f3fcdae93126ad0fa5b84fd5595dfe3328ded",
+  "queue_action_surface": "same_terminal_class_and_reduced_cost_bucket.v1",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_model_comparison.v3",
+  "source_oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_training_only_v2_view.json",
+  "source_oracle_summary_sha256": "5e4fd3a2355d5547db3b3a102bfd524cee148ff6c180403f7cae477f6f47d119",
+  "source_training_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/training_qg2_action_surface_v2_training_only_v2/training_report.json",
+  "source_training_report_sha256": "b0da69137fa74f13de3b52c3660bad5b67c2df60813c4d5fdc7e9dfcb37e3bc1",
+  "split_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/calibration_qg2_combined_v1_base/authorized_views/instance_split_calibration_view.json",
+  "split_sha256": "14d6f7cef8e006e7135477aeb6981d5242e02600e2d15b34de05e904ca3bb2d8",
+  "supervision_schema_version": "lunar_ice_bpc.p0v5_qg2_action_reachable_supervision.v2",
+  "supplemental_manifest_sha256": "c30c7442627c7b0aed3889d7d34282eb7e4feb99b70e27209b6ce4bebbb4a39d",
+  "training_data_hash": "9c66cd3fe1820cab053f2cb6922beb824d27a0897a3bcd9f7dfecd93b337dee5",
+  "training_rows_added": 0
+}

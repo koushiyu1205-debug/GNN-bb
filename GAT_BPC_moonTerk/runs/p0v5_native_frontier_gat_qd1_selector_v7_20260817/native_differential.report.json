@@ -1,0 +1,28 @@
+{
+  "case_count": 500,
+  "comparisons": [
+    "status",
+    "search_exhaustive",
+    "frontier_empty",
+    "legal_route_reduced_cost_multiset",
+    "migration_count",
+    "creation_id_hash",
+    "no_negative_certificate"
+  ],
+  "ctest_command": [
+    "ctest",
+    "--test-dir",
+    "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-frontier-gat-v7",
+    "--output-on-failure"
+  ],
+  "ctest_stdout": "Internal ctest changing into directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-frontier-gat-v7\nTest project /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-frontier-gat-v7\n    Start 1: lunar_spprc_native_tests\n1/2 Test #1: lunar_spprc_native_tests .........   Passed    0.08 sec\n    Start 2: lunar_spprc_patch_queue_check\n2/2 Test #2: lunar_spprc_patch_queue_check ....   Passed    0.02 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   0.10 sec\n",
+  "ctest_stdout_sha256": "62c58ad4d4e32432bdb9cada823a8465559b33e56362587612097aef82b6b12a",
+  "policies": [
+    "Q0",
+    "QPF0",
+    "QPD1"
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_native_differential.v7",
+  "state_size_bytes": 176,
+  "status": "PASS"
+}

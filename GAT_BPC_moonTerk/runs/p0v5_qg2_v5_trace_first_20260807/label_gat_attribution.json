@@ -1,0 +1,725 @@
+{
+  "baseline_instance_balanced_pair_accuracy": 0.8745388454861112,
+  "baseline_raw_context_pair_accuracy": 0.8715533088235294,
+  "baseline_weighted_pair_accuracy": 0.8745388454861112,
+  "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat/qg2_v3_gat.pt",
+  "context_count": 17,
+  "deployable": false,
+  "development_only": true,
+  "group_ablations": [
+    {
+      "ablation": "node_to_train_mean",
+      "accuracy_drop": 0.013115776909722321,
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.002642463235294046,
+      "raw_context_weighted_pair_accuracy": 0.8741957720588235,
+      "weighted_pair_accuracy": 0.8614230685763888
+    },
+    {
+      "ablation": "edge_to_train_mean",
+      "accuracy_drop": 0.04216851128472232,
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.03297334558823528,
+      "raw_context_weighted_pair_accuracy": 0.8385799632352942,
+      "weighted_pair_accuracy": 0.8323703342013888
+    },
+    {
+      "ablation": "context_to_train_mean",
+      "accuracy_drop": -0.0033908420138888395,
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.014131433823529438,
+      "raw_context_weighted_pair_accuracy": 0.857421875,
+      "weighted_pair_accuracy": 0.8779296875
+    },
+    {
+      "ablation": "no_message_passing",
+      "accuracy_drop": 0.02023654513888895,
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0011488970588235947,
+      "raw_context_weighted_pair_accuracy": 0.8704044117647058,
+      "weighted_pair_accuracy": 0.8543023003472222
+    },
+    {
+      "ablation": "shuffled_message_topology",
+      "accuracy_drop": -0.0002577039930554692,
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.00011488970588235947,
+      "raw_context_weighted_pair_accuracy": 0.8714384191176471,
+      "weighted_pair_accuracy": 0.8747965494791666
+    }
+  ],
+  "headline_accuracy_unit": "instance",
+  "instance_balanced_wrapper_schema_version": "lunar_ice_bpc.p0v5_qg2_v4_instance_balanced_label_attribution.v1",
+  "instance_balancing_policy": "uniform_instance_steps_rotating_contexts.v1",
+  "instance_count": 6,
+  "interpretation_boundary": "pair-ranking diagnostic only; fresh-process admission/proof wall remains the performance authority",
+  "maximum_context_fraction_by_instance": 0.47058823529411764,
+  "maximum_pairs_per_context": 512,
+  "partitions": [
+    "calibration"
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v3_gat_attribution.v1",
+  "single_feature_ablations": [
+    {
+      "accuracy_drop": 0.01643880208333337,
+      "feature": "is_low_time",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.00011488970588235947,
+      "raw_context_weighted_pair_accuracy": 0.8716681985294118,
+      "weighted_pair_accuracy": 0.8581000434027778
+    },
+    {
+      "accuracy_drop": 0.01474338107638895,
+      "feature": "shadow_over_limit",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.002182904411764719,
+      "raw_context_weighted_pair_accuracy": 0.8737362132352942,
+      "weighted_pair_accuracy": 0.8597954644097222
+    },
+    {
+      "accuracy_drop": 0.01228841145833337,
+      "feature": "service_cost",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.006204044117647078,
+      "raw_context_weighted_pair_accuracy": 0.8653492647058824,
+      "weighted_pair_accuracy": 0.8622504340277778
+    },
+    {
+      "accuracy_drop": 0.01204427083333337,
+      "feature": "cover_dual_over_maxabs_within_request",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.004710477941176405,
+      "raw_context_weighted_pair_accuracy": 0.8762637867647058,
+      "weighted_pair_accuracy": 0.8624945746527778
+    },
+    {
+      "accuracy_drop": 0.00999620225694453,
+      "feature": "is_low_energy",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.002182904411764719,
+      "raw_context_weighted_pair_accuracy": 0.8737362132352942,
+      "weighted_pair_accuracy": 0.8645426432291666
+    },
+    {
+      "accuracy_drop": 0.009331597222222321,
+      "feature": "cover_dual_rank_within_request",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0016084558823529216,
+      "raw_context_weighted_pair_accuracy": 0.8699448529411765,
+      "weighted_pair_accuracy": 0.8652072482638888
+    },
+    {
+      "accuracy_drop": 0.00712076822916663,
+      "feature": "x_over_extent",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.004710477941176405,
+      "raw_context_weighted_pair_accuracy": 0.8762637867647058,
+      "weighted_pair_accuracy": 0.8674180772569445
+    },
+    {
+      "accuracy_drop": 0.00678168402777779,
+      "feature": "is_low_risk",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.001723345588235281,
+      "raw_context_weighted_pair_accuracy": 0.8732766544117647,
+      "weighted_pair_accuracy": 0.8677571614583334
+    },
+    {
+      "accuracy_drop": 0.00651041666666663,
+      "feature": "demand",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.007352941176470562,
+      "raw_context_weighted_pair_accuracy": 0.8642003676470589,
+      "weighted_pair_accuracy": 0.8680284288194445
+    },
+    {
+      "accuracy_drop": 0.005995008680555691,
+      "feature": "ready_over_horizon",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.004825367647058765,
+      "raw_context_weighted_pair_accuracy": 0.8763786764705882,
+      "weighted_pair_accuracy": 0.8685438368055555
+    },
+    {
+      "accuracy_drop": 0.00590006510416663,
+      "feature": "local_shadow_score",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0003446691176470784,
+      "raw_context_weighted_pair_accuracy": 0.8718979779411765,
+      "weighted_pair_accuracy": 0.8686387803819445
+    },
+    {
+      "accuracy_drop": 0.004570855034722321,
+      "feature": "service_energy_over_limit",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0003446691176470784,
+      "raw_context_weighted_pair_accuracy": 0.8718979779411765,
+      "weighted_pair_accuracy": 0.8699679904513888
+    },
+    {
+      "accuracy_drop": 0.0044216579861111605,
+      "feature": "window_width_over_horizon",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.004710477941176516,
+      "raw_context_weighted_pair_accuracy": 0.8668428308823529,
+      "weighted_pair_accuracy": 0.8701171875
+    },
+    {
+      "accuracy_drop": 0.00360785590277779,
+      "feature": "energy_over_limit",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0009191176470588758,
+      "raw_context_weighted_pair_accuracy": 0.8706341911764706,
+      "weighted_pair_accuracy": 0.8709309895833334
+    },
+    {
+      "accuracy_drop": 0.0023600260416666297,
+      "feature": "cover_dual",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0006893382352941568,
+      "raw_context_weighted_pair_accuracy": 0.8708639705882353,
+      "weighted_pair_accuracy": 0.8721788194444445
+    },
+    {
+      "accuracy_drop": 0.0022379557291666297,
+      "feature": "active_cut_dual_abs_sum",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.001723345588235281,
+      "raw_context_weighted_pair_accuracy": 0.8732766544117647,
+      "weighted_pair_accuracy": 0.8723008897569445
+    },
+    {
+      "accuracy_drop": 0.0016682942708333703,
+      "feature": "mode_drill",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0012637867647059542,
+      "raw_context_weighted_pair_accuracy": 0.8702895220588235,
+      "weighted_pair_accuracy": 0.8728705512152778
+    },
+    {
+      "accuracy_drop": 0.001397026909722321,
+      "feature": "cover_dual_positive",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0029871323529412352,
+      "raw_context_weighted_pair_accuracy": 0.8685661764705882,
+      "weighted_pair_accuracy": 0.8731418185763888
+    },
+    {
+      "accuracy_drop": 0.0009765625,
+      "feature": "local_thermal_risk",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0005744485294116863,
+      "raw_context_weighted_pair_accuracy": 0.8721277573529411,
+      "weighted_pair_accuracy": 0.8735622829861112
+    },
+    {
+      "accuracy_drop": 0.0008951822916666297,
+      "feature": "mode_detect",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.008501838235294157,
+      "raw_context_weighted_pair_accuracy": 0.8630514705882353,
+      "weighted_pair_accuracy": 0.8736436631944445
+    },
+    {
+      "accuracy_drop": 0.0007595486111111605,
+      "feature": "cover_dual_z_within_request",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0033318014705883137,
+      "raw_context_weighted_pair_accuracy": 0.8682215073529411,
+      "weighted_pair_accuracy": 0.873779296875
+    },
+    {
+      "accuracy_drop": 0.0006374782986111605,
+      "feature": "fleet_dual",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.006548713235294157,
+      "raw_context_weighted_pair_accuracy": 0.8650045955882353,
+      "weighted_pair_accuracy": 0.8739013671875
+    },
+    {
+      "accuracy_drop": 0.0005289713541666297,
+      "feature": "is_task",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.005859375,
+      "raw_context_weighted_pair_accuracy": 0.8774126838235294,
+      "weighted_pair_accuracy": 0.8740098741319445
+    },
+    {
+      "accuracy_drop": 0.00046115451388895057,
+      "feature": "round_present",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.004940257352941235,
+      "raw_context_weighted_pair_accuracy": 0.8666130514705882,
+      "weighted_pair_accuracy": 0.8740776909722222
+    },
+    {
+      "accuracy_drop": 0.0004340277777777901,
+      "feature": "log1p_round",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.010684742647058765,
+      "raw_context_weighted_pair_accuracy": 0.8822380514705882,
+      "weighted_pair_accuracy": 0.8741048177083334
+    },
+    {
+      "accuracy_drop": 0.00037977430555569125,
+      "feature": "due_over_horizon",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.008386948529411686,
+      "raw_context_weighted_pair_accuracy": 0.8799402573529411,
+      "weighted_pair_accuracy": 0.8741590711805555
+    },
+    {
+      "accuracy_drop": 0.0003662109375,
+      "feature": "active_cut_count",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.024816176470588314,
+      "raw_context_weighted_pair_accuracy": 0.8467371323529411,
+      "weighted_pair_accuracy": 0.8741726345486112
+    },
+    {
+      "accuracy_drop": 0.0002983940972223209,
+      "feature": "previous_processed_labels_present",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.01378676470588236,
+      "raw_context_weighted_pair_accuracy": 0.8577665441176471,
+      "weighted_pair_accuracy": 0.8742404513888888
+    },
+    {
+      "accuracy_drop": 0.00021701388888895057,
+      "feature": "previous_proof_wall_present",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.007582720588235281,
+      "raw_context_weighted_pair_accuracy": 0.8639705882352942,
+      "weighted_pair_accuracy": 0.8743218315972222
+    },
+    {
+      "accuracy_drop": 6.781684027779011e-05,
+      "feature": "v5_midpoint_wall_present",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0033318014705883137,
+      "raw_context_weighted_pair_accuracy": 0.8682215073529411,
+      "weighted_pair_accuracy": 0.8744710286458334
+    },
+    {
+      "accuracy_drop": 4.069010416662966e-05,
+      "feature": "log1p_active_task_set_count",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0014935661764705621,
+      "raw_context_weighted_pair_accuracy": 0.8700597426470589,
+      "weighted_pair_accuracy": 0.8744981553819445
+    },
+    {
+      "accuracy_drop": 4.069010416662966e-05,
+      "feature": "log1p_scale",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.002642463235294157,
+      "raw_context_weighted_pair_accuracy": 0.8689108455882353,
+      "weighted_pair_accuracy": 0.8744981553819445
+    },
+    {
+      "accuracy_drop": 0.0,
+      "feature": "active_task_coverage_fraction",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0013786764705882026,
+      "raw_context_weighted_pair_accuracy": 0.8729319852941176,
+      "weighted_pair_accuracy": 0.8745388454861112
+    },
+    {
+      "accuracy_drop": 0.0,
+      "feature": "is_depot",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0006893382352940458,
+      "raw_context_weighted_pair_accuracy": 0.8722426470588235,
+      "weighted_pair_accuracy": 0.8745388454861112
+    },
+    {
+      "accuracy_drop": -4.069010416662966e-05,
+      "feature": "branch_decision_count",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0008042279411764053,
+      "raw_context_weighted_pair_accuracy": 0.8723575367647058,
+      "weighted_pair_accuracy": 0.8745795355902778
+    },
+    {
+      "accuracy_drop": -4.069010416662966e-05,
+      "feature": "log1p_v5_midpoint_wall",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0008042279411764053,
+      "raw_context_weighted_pair_accuracy": 0.8723575367647058,
+      "weighted_pair_accuracy": 0.8745795355902778
+    },
+    {
+      "accuracy_drop": -4.069010416662966e-05,
+      "feature": "same_journey_branch_fraction",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0003446691176470784,
+      "raw_context_weighted_pair_accuracy": 0.8712086397058824,
+      "weighted_pair_accuracy": 0.8745795355902778
+    },
+    {
+      "accuracy_drop": -0.00016276041666662966,
+      "feature": "root_lifecycle_scope",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0011488970588235947,
+      "raw_context_weighted_pair_accuracy": 0.8704044117647058,
+      "weighted_pair_accuracy": 0.8747016059027778
+    },
+    {
+      "accuracy_drop": -0.00033908420138883955,
+      "feature": "dual_l1_delta_present",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0006893382352941568,
+      "raw_context_weighted_pair_accuracy": 0.8708639705882353,
+      "weighted_pair_accuracy": 0.8748779296875
+    },
+    {
+      "accuracy_drop": -0.0004204644097222099,
+      "feature": "active_task_sets_present",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0008042279411765163,
+      "raw_context_weighted_pair_accuracy": 0.8707490808823529,
+      "weighted_pair_accuracy": 0.8749593098958334
+    },
+    {
+      "accuracy_drop": -0.0005832248263888395,
+      "feature": "active_column_count_present",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0,
+      "raw_context_weighted_pair_accuracy": 0.8715533088235294,
+      "weighted_pair_accuracy": 0.8751220703125
+    },
+    {
+      "accuracy_drop": -0.0006103515625,
+      "feature": "log1p_active_column_count",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0003446691176470784,
+      "raw_context_weighted_pair_accuracy": 0.8712086397058824,
+      "weighted_pair_accuracy": 0.8751491970486112
+    },
+    {
+      "accuracy_drop": -0.0007052951388888395,
+      "feature": "dual_l1_delta_from_previous",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0016084558823529216,
+      "raw_context_weighted_pair_accuracy": 0.8699448529411765,
+      "weighted_pair_accuracy": 0.875244140625
+    },
+    {
+      "accuracy_drop": -0.0007866753472222099,
+      "feature": "cover_dual_min",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0028722426470588758,
+      "raw_context_weighted_pair_accuracy": 0.8686810661764706,
+      "weighted_pair_accuracy": 0.8753255208333334
+    },
+    {
+      "accuracy_drop": -0.0008273654513888395,
+      "feature": "log1p_previous_processed_labels",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.00022977941176471894,
+      "raw_context_weighted_pair_accuracy": 0.8713235294117647,
+      "weighted_pair_accuracy": 0.8753662109375
+    },
+    {
+      "accuracy_drop": -0.0009629991319443088,
+      "feature": "active_task_set_mean_cardinality_fraction",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.00022977941176471894,
+      "raw_context_weighted_pair_accuracy": 0.8713235294117647,
+      "weighted_pair_accuracy": 0.8755018446180555
+    },
+    {
+      "accuracy_drop": -0.001044379340277679,
+      "feature": "log1p_previous_proof_wall",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0003446691176470784,
+      "raw_context_weighted_pair_accuracy": 0.8718979779411765,
+      "weighted_pair_accuracy": 0.8755832248263888
+    },
+    {
+      "accuracy_drop": -0.0016682942708333703,
+      "feature": "y_over_extent",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0004595588235294379,
+      "raw_context_weighted_pair_accuracy": 0.87109375,
+      "weighted_pair_accuracy": 0.8762071397569445
+    },
+    {
+      "accuracy_drop": -0.0020751953125,
+      "feature": "mode_sample",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.00022977941176471894,
+      "raw_context_weighted_pair_accuracy": 0.8713235294117647,
+      "weighted_pair_accuracy": 0.8766140407986112
+    },
+    {
+      "accuracy_drop": -0.0021158854166666297,
+      "feature": "service_time_over_horizon",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.00022977941176471894,
+      "raw_context_weighted_pair_accuracy": 0.8713235294117647,
+      "weighted_pair_accuracy": 0.8766547309027778
+    },
+    {
+      "accuracy_drop": -0.0021701388888888395,
+      "feature": "cover_dual_std",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0003446691176470784,
+      "raw_context_weighted_pair_accuracy": 0.8718979779411765,
+      "weighted_pair_accuracy": 0.876708984375
+    },
+    {
+      "accuracy_drop": -0.002699110243055469,
+      "feature": "distance",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.00011488970588235947,
+      "raw_context_weighted_pair_accuracy": 0.8716681985294118,
+      "weighted_pair_accuracy": 0.8772379557291666
+    },
+    {
+      "accuracy_drop": -0.0029703776041666297,
+      "feature": "travel_time_over_horizon",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0009191176470587648,
+      "raw_context_weighted_pair_accuracy": 0.8724724264705882,
+      "weighted_pair_accuracy": 0.8775092230902778
+    },
+    {
+      "accuracy_drop": -0.0030110677083333703,
+      "feature": "risk",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.006318933823529438,
+      "raw_context_weighted_pair_accuracy": 0.865234375,
+      "weighted_pair_accuracy": 0.8775499131944445
+    },
+    {
+      "accuracy_drop": -0.0032552083333333703,
+      "feature": "science_weight",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0010340073529412352,
+      "raw_context_weighted_pair_accuracy": 0.8705193014705882,
+      "weighted_pair_accuracy": 0.8777940538194445
+    },
+    {
+      "accuracy_drop": -0.0036349826388888395,
+      "feature": "cover_dual_max",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0,
+      "raw_context_weighted_pair_accuracy": 0.8715533088235294,
+      "weighted_pair_accuracy": 0.878173828125
+    },
+    {
+      "accuracy_drop": -0.0037027994791666297,
+      "feature": "cover_dual_mean",
+      "group": "context",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.00011488970588235947,
+      "raw_context_weighted_pair_accuracy": 0.8714384191176471,
+      "weighted_pair_accuracy": 0.8782416449652778
+    }
+  ],
+  "single_feature_dominance_diagnostic": {
+    "candidate": {
+      "feature": "is_low_time",
+      "group": "edge",
+      "instance_balanced_accuracy_drop": 0.01643880208333337,
+      "share_of_all_positive_single_feature_drop": 0.12312068264932895,
+      "share_of_positive_group_accuracy_drop": 0.3898359601157928
+    },
+    "interpretation": "large shares identify a feature-dominance candidate only; ablation drops are non-additive and fresh wall remains authority"
+  },
+  "top_positive_contributors": [
+    {
+      "accuracy_drop": 0.01643880208333337,
+      "feature": "is_low_time",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.00011488970588235947,
+      "raw_context_weighted_pair_accuracy": 0.8716681985294118,
+      "weighted_pair_accuracy": 0.8581000434027778
+    },
+    {
+      "accuracy_drop": 0.01474338107638895,
+      "feature": "shadow_over_limit",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.002182904411764719,
+      "raw_context_weighted_pair_accuracy": 0.8737362132352942,
+      "weighted_pair_accuracy": 0.8597954644097222
+    },
+    {
+      "accuracy_drop": 0.01228841145833337,
+      "feature": "service_cost",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.006204044117647078,
+      "raw_context_weighted_pair_accuracy": 0.8653492647058824,
+      "weighted_pair_accuracy": 0.8622504340277778
+    },
+    {
+      "accuracy_drop": 0.01204427083333337,
+      "feature": "cover_dual_over_maxabs_within_request",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.004710477941176405,
+      "raw_context_weighted_pair_accuracy": 0.8762637867647058,
+      "weighted_pair_accuracy": 0.8624945746527778
+    },
+    {
+      "accuracy_drop": 0.00999620225694453,
+      "feature": "is_low_energy",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.002182904411764719,
+      "raw_context_weighted_pair_accuracy": 0.8737362132352942,
+      "weighted_pair_accuracy": 0.8645426432291666
+    },
+    {
+      "accuracy_drop": 0.009331597222222321,
+      "feature": "cover_dual_rank_within_request",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0016084558823529216,
+      "raw_context_weighted_pair_accuracy": 0.8699448529411765,
+      "weighted_pair_accuracy": 0.8652072482638888
+    },
+    {
+      "accuracy_drop": 0.00712076822916663,
+      "feature": "x_over_extent",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.004710477941176405,
+      "raw_context_weighted_pair_accuracy": 0.8762637867647058,
+      "weighted_pair_accuracy": 0.8674180772569445
+    },
+    {
+      "accuracy_drop": 0.00678168402777779,
+      "feature": "is_low_risk",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.001723345588235281,
+      "raw_context_weighted_pair_accuracy": 0.8732766544117647,
+      "weighted_pair_accuracy": 0.8677571614583334
+    },
+    {
+      "accuracy_drop": 0.00651041666666663,
+      "feature": "demand",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.007352941176470562,
+      "raw_context_weighted_pair_accuracy": 0.8642003676470589,
+      "weighted_pair_accuracy": 0.8680284288194445
+    },
+    {
+      "accuracy_drop": 0.005995008680555691,
+      "feature": "ready_over_horizon",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.004825367647058765,
+      "raw_context_weighted_pair_accuracy": 0.8763786764705882,
+      "weighted_pair_accuracy": 0.8685438368055555
+    },
+    {
+      "accuracy_drop": 0.00590006510416663,
+      "feature": "local_shadow_score",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0003446691176470784,
+      "raw_context_weighted_pair_accuracy": 0.8718979779411765,
+      "weighted_pair_accuracy": 0.8686387803819445
+    },
+    {
+      "accuracy_drop": 0.004570855034722321,
+      "feature": "service_energy_over_limit",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": -0.0003446691176470784,
+      "raw_context_weighted_pair_accuracy": 0.8718979779411765,
+      "weighted_pair_accuracy": 0.8699679904513888
+    },
+    {
+      "accuracy_drop": 0.0044216579861111605,
+      "feature": "window_width_over_horizon",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.004710477941176516,
+      "raw_context_weighted_pair_accuracy": 0.8668428308823529,
+      "weighted_pair_accuracy": 0.8701171875
+    },
+    {
+      "accuracy_drop": 0.00360785590277779,
+      "feature": "energy_over_limit",
+      "group": "edge",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0009191176470588758,
+      "raw_context_weighted_pair_accuracy": 0.8706341911764706,
+      "weighted_pair_accuracy": 0.8709309895833334
+    },
+    {
+      "accuracy_drop": 0.0023600260416666297,
+      "feature": "cover_dual",
+      "group": "node",
+      "instance_count": 6,
+      "raw_context_accuracy_drop": 0.0006893382352941568,
+      "raw_context_weighted_pair_accuracy": 0.8708639705882353,
+      "weighted_pair_accuracy": 0.8721788194444445
+    }
+  ],
+  "training_data_hash": "2f629ead49f6ce9e0f38114425bcf61c4a1ed86f14379ae597c0dd923097b119"
+}

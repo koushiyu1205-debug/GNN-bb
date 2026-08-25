@@ -1,0 +1,20 @@
+{
+  "invalidated_measurement_claims": [
+    "fresh_process_wall_was_reported_as_warm_prefix_wall",
+    "all_three_budgets_used_the_same_2048_pop_request_wall",
+    "native_endpoint_elapsed_wall_was_not_recorded",
+    "static_preaction_context_features_were_not_bound_into_native_graphs"
+  ],
+  "repair_contract": {
+    "fresh_exact_request_after_probes": true,
+    "selected_budget_stops_native_request": true,
+    "static_preaction_context_bound_into_graph": true,
+    "warm_wall_source": "native_per_checkpoint_request_elapsed_wall_seconds"
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_measurement_repair.v1",
+  "source_remains_read_only": true,
+  "source_report_sha256": "9432044f89493c948505484e0848597188cc7c94c45b072f3660f070484e934f",
+  "source_run_root": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_counterfactual_prefix_gat_qd1_selector_v8_20260818",
+  "source_terminal_performance_authority": false,
+  "source_terminal_sha256": "7b2e054c0223767de9245d23b50bd651235a425273716b3fb0615450b6c2deee"
+}

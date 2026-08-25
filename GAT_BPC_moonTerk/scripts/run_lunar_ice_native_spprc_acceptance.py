@@ -45,6 +45,7 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true", default=False)
     parser.add_argument("--no-resume", action="store_false", dest="resume")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--effective-memory-cap-gb", type=float, default=0.0)
     parser.add_argument(
         "--route-opportunity-collection-only-root-pool",
         action="store_true",
@@ -90,6 +91,7 @@ def main() -> int:
         route_opportunity_collection_root_pool_time_cap_sec=float(
             args.route_opportunity_collection_root_pool_time_cap_sec
         ),
+        effective_memory_cap_gb=float(args.effective_memory_cap_gb),
     )
     print(
         f"native SPPRC acceptance rows={len(summary['rows'])} "

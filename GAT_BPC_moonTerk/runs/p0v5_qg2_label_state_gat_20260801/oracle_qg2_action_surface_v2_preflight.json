@@ -1,0 +1,46 @@
+{
+  "bounded_context_limit": 300,
+  "bounded_context_limit_per_scale": 150,
+  "coverage": {
+    "30": {
+      "context_count": 150,
+      "instance_count": 116,
+      "preaction_stratum_counts": {
+        "root:plain:r10_29:10to60": 1,
+        "root:plain:r10_29:60to300": 2,
+        "root:plain:r10_29:missing": 59,
+        "root:plain:r30_plus:10to60": 3,
+        "root:plain:r30_plus:60to300": 5,
+        "root:plain:r30_plus:missing": 74,
+        "tree:branch_cut:r0_9:missing": 2,
+        "tree:plain:r0_9:missing": 4
+      }
+    },
+    "50": {
+      "context_count": 150,
+      "instance_count": 109,
+      "preaction_stratum_counts": {
+        "root:plain:r30_plus:10to60": 6,
+        "root:plain:r30_plus:60to300": 12,
+        "root:plain:r30_plus:ge300": 11,
+        "root:plain:r30_plus:missing": 121
+      }
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "execution_freeze": null,
+  "execution_freeze_sha256": null,
+  "oracle_gate": {
+    "context_count": 300,
+    "passed": false,
+    "reason": "execution_not_requested"
+  },
+  "queue_action_surface": "same_terminal_class_and_reduced_cost_bucket.v1",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_bounded_oracle.v5",
+  "source_state_index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_live_snapshot_index.json",
+  "source_state_index_sha256": "9012907fb976ed6b5865d19328cf256c4d441b51d8c907d6161cf636fdfecfd7",
+  "status": "PREFLIGHT_ONLY",
+  "supervision_schema_version": "lunar_ice_bpc.p0v5_qg2_action_reachable_supervision.v2",
+  "training_permitted": false
+}

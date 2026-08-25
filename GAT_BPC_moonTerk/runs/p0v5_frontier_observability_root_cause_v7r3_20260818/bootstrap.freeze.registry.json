@@ -1,0 +1,15 @@
+{
+  "artifact_sha256": {
+    "config.freeze.json": "d1aa7e99de0b81610151e5a6822140e6fb6ab6b11c3b05a8d70c55215f1cb59c",
+    "coverage_evidence.freeze.json": "b33a0bdf34cc2d65842c2f9882a11895d259f24516fb98ca4a541e4bd4b6f8ec",
+    "research_contract.freeze.json": "395f60543599d16ac269fea043a8e0e10eb824d4c5d7df3b52f034edd7b7a6d8",
+    "source.freeze.json": "706fd3e6f49a32730cb5f3250bec9a8d40791bfadc6e343373e13453b244ea7a",
+    "switch_matrix.collapsed.json": "6e26978e0c2112431dbd396c770591e08b1197285c9c515947c0f197fadfb11a",
+    "switch_oracle.decision.json": "4ed90fe65fd5cf4fcc0708537d72e25ec4ea6506edc103771c59ff17c9d1b502",
+    "v7_preaction_import.freeze.json": "80bb0541318caacba7edca6d247d89bb942ac19897c5993334595514ec4841fa",
+    "v7r2_switch_evidence_import.freeze.json": "b9d589a31dcab80230d8dbea145aa7635b98448ae1ac8e001ad5bd9dd286cdeb"
+  },
+  "immutable": true,
+  "repair_scope": "stable coverage arithmetic only; switch evidence imported read-only",
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_bootstrap.v2"
+}

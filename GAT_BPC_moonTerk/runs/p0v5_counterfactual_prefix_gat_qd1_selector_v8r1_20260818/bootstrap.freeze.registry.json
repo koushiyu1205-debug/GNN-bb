@@ -1,0 +1,16 @@
+{
+  "artifact_sha256": {
+    "config.freeze.json": "087d4681f4a4992b862c77120b8521433505da7014c9fd5eca0dfa1c6fc8f278",
+    "cross_binary_native_differential.report.json": "20b260cef9a27c75678593502a6ea28fbd5d1f6e7296cfe1b7a3d0a11ebf8356",
+    "interface.freeze.json": "4f6e2e8911a570c79251bc1d45ba16eb4211c53fc2f2e369b6b959f4e88cbbe1",
+    "native_differential.report.json": "7e4341cd5ee0d17857c38c81f49bc45ca1aa6323bfcd37b1ba6dd83da95ca3b6",
+    "representation_execution.freeze.json": "8c0c638d99f423ed1cc4ac40f6f5a77f3a8eddc3b14e2a3ba604c2871c954e0c",
+    "source.freeze.json": "863deb2ace32d435220c035158287e95e362d3bc6cc6aa9c418176e8b085c336",
+    "state.initial.json": "6289342488dc5e57e018248385d4b0b56e7c04bcf267f225db3d72dedad344cb",
+    "v7r3_collapsed_labels.freeze.json": "c762665c9b19b7a5f5fc5c326b23fc006471d4cbec1e345ea57e63fd2cd42a6a",
+    "v7r3_representation_import.freeze.json": "236ec005941d0a3e3c8c1a4491b568efa86f25753e9c7118604caeca411987a9",
+    "v8_measurement_repair.freeze.json": "342bb7176989f3f1f4cbda24d34164788e48c8f19c34a219adb1456c843f8cc0"
+  },
+  "frozen_before_any_v8_prefix_wall": true,
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_bootstrap_freeze.v1"
+}

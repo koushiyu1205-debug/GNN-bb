@@ -1,0 +1,8 @@
+{
+  "case_count": 500,
+  "decision": "PASS",
+  "mismatch_count": 0,
+  "report_sha256": "1a603a497fdb79c2476f5d2ee70add4a2c0b710decd028a3bb617a9210580c80",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_differential_import.v1",
+  "temporal_native_binary_sha256": "25d91f99f62c91595012476bc5884fd5a4c0dd6f70eaf1182b4fb4ff2829c251"
+}

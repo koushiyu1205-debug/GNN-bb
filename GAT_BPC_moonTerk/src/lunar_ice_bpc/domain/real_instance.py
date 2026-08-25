@@ -59,6 +59,7 @@ def generate_real_map_instance(
     output_cells: int | None = None,
     time_window_mode: str | None = None,
     edge_checkpoint_dir: str | Path | None = None,
+    edge_generation_mode: str = "diversity_penalized_pairwise_v1",
 ) -> dict[str, Any]:
     """Generate one fixed three-path logical graph from real LOLA raster layers."""
 
@@ -139,6 +140,7 @@ def generate_real_map_instance(
             center_y_km=center_y,
             extent_km=extent,
             output_cells=cells,
+            edge_generation_mode=edge_generation_mode,
         )
         checkpoint_status = "recovered" if sampled_targets is not None else "generated"
         if sampled_targets is None:
@@ -192,6 +194,7 @@ def generate_real_map_instance(
         extent_km=extent,
         output_cells=cells,
         checkpoint_dir=edge_checkpoint_dir,
+        edge_generation_mode=edge_generation_mode,
     )
     task_order = _task_order_for_time_window_mode(tasks, depot_xy, time_mode)
     reference = _build_reference_solution(tasks, _edge_lookup(edges), config, scale, task_order=task_order)
@@ -221,6 +224,7 @@ def generate_real_map_instance(
             "sampled_target_count": len(sampled_targets),
             "sampled_hotspot_count": len({str(target.get("hotspot_id", target["id"])) for target in sampled_targets}),
             "sampled_direction_sector_count": len({int(target.get("direction_sector", -1)) for target in sampled_targets}),
+            "edge_generation_mode": str(edge_generation_mode),
             "preview": _downsample_matrix(preview["preview_layers"]["resource_index"], cells=180),
             "risk_preview": _downsample_matrix(preview["preview_layers"]["risk_index"], cells=180),
             "dem_preview": _downsample_matrix(preview["preview_layers"].get("elevation_index", []), cells=180),
@@ -435,6 +439,7 @@ def _recover_targets_from_edge_checkpoints(
     center_y_km: float,
     extent_km: float,
     output_cells: int,
+    edge_generation_mode: str,
 ) -> list[dict[str, Any]] | None:
     if checkpoint_root is None or not checkpoint_root.is_dir():
         return None
@@ -492,6 +497,7 @@ def _recover_targets_from_edge_checkpoints(
         extent_km=extent_km,
         output_cells=output_cells,
         allow_remote=False,
+        edge_generation_mode=edge_generation_mode,
     )
     return recovered if recovered_fingerprint == fingerprint else None
 

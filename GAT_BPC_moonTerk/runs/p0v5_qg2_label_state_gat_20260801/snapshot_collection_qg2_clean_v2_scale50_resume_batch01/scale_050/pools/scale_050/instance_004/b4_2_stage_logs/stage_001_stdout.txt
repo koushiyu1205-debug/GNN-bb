@@ -1,0 +1,2 @@
+{"stage_count": 1, "latest_stage": 1, "latest_scope": "DIAGNOSTIC_PRICING_FRONTIER", "latest_state": "INCOMPLETE_LIMIT", "latest_compact_final_judge_profile": "V4SH", "latest_compact_final_judge_phase_mode": "harvest_then_proof", "latest_final_best_reduced_cost": null, "latest_final_dual_bound": null, "latest_active_column_count": 6508, "latest_added_column_count": 6453}
+report /home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/snapshot_collection_qg2_clean_v2_scale50_resume_batch01/scale_050/pools/scale_050/instance_004/staged_resume_report_zh.md

@@ -1,0 +1,12 @@
+{
+  "arm_outcomes_imported": 0,
+  "artifact_sha256": {
+    "state.json": "92484fb166b4c61ed806af5a3b11386f132c6ae40bcfa810078716293660aae9",
+    "terminal_decision.json": "bebc43d1a636701cbf4cbb946cb128ecb418c0bd069cced2054cc50afef02920"
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_v6_diagnostic_import.v7",
+  "training_rows_imported": 0,
+  "v6_outcomes_diagnostic_only": true,
+  "v6_run_root": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_minimal_interaction_gat_qd1_selector_v6_20260817",
+  "v6_terminal_reason": "NO_SAFE_GAT_CALIBRATION_THRESHOLD"
+}

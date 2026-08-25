@@ -1,0 +1,489 @@
+{
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "detail": {
+    "gat_candidates": [
+      {
+        "best_threshold_pair": null,
+        "calibration_metrics": {
+          "classification": {
+            "adverse": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": null,
+                  "brier": 0.009390044871490469,
+                  "context_count": 6,
+                  "precision": null,
+                  "recall": null,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.009390044871490469,
+                  "instance_count": 3
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.25956137149794745,
+                  "context_count": 11,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.2521035164252978,
+                  "instance_count": 4
+                }
+              }
+            },
+            "benefit": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.14581798372049867,
+                  "context_count": 6,
+                  "precision": 0.8333333333333334,
+                  "recall": 1.0,
+                  "specificity": 0.0
+                },
+                "instance_level": {
+                  "brier": 0.14581798372049867,
+                  "instance_count": 3
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.1590611471306797,
+                  "context_count": 11,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.15143173027532966,
+                  "instance_count": 4
+                }
+              }
+            }
+          },
+          "context_count": 17,
+          "instance_count": 7,
+          "macro_instance_rank_accuracy": 0.5476190476190476,
+          "scale_macro_instance_rank_accuracy": {
+            "30": 0.3333333333333333,
+            "50": 0.7083333333333333
+          }
+        },
+        "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_minimal_interaction_gat_qd1_selector_v6_20260817/selector_training/gat_seed61635.pt",
+        "checkpoint_sha256": "3c412209739e665bf9d8970b4eefdbaadd85403b6cf2217e3bf1c3924f67515e",
+        "degenerate_scales": [],
+        "fold_best_epochs": [
+          4,
+          1,
+          11,
+          23,
+          41
+        ],
+        "model_kind": "gat",
+        "oof_metrics": {
+          "classification": {
+            "adverse": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.13520843102720004,
+                  "context_count": 19,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.0945933371319466,
+                  "instance_count": 14
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.6862745098039216,
+                  "brier": 0.23142235377278353,
+                  "context_count": 38,
+                  "precision": 0.631578947368421,
+                  "recall": 0.7058823529411765,
+                  "specificity": 0.6666666666666666
+                },
+                "instance_level": {
+                  "brier": 0.24099356063787214,
+                  "instance_count": 14
+                }
+              }
+            },
+            "benefit": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.19408138082361184,
+                  "context_count": 19,
+                  "precision": 0.7368421052631579,
+                  "recall": 1.0,
+                  "specificity": 0.0
+                },
+                "instance_level": {
+                  "brier": 0.18750000849136914,
+                  "instance_count": 14
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.2156503311283194,
+                  "context_count": 38,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.20336280216514654,
+                  "instance_count": 14
+                }
+              }
+            }
+          },
+          "context_count": 57,
+          "instance_count": 28,
+          "macro_instance_rank_accuracy": 0.7083333333333333,
+          "scale_macro_instance_rank_accuracy": {
+            "30": 0.8214285714285714,
+            "50": 0.5952380952380952
+          }
+        },
+        "parameter_count": 6212,
+        "refit_epoch": 11,
+        "seed": 61635
+      },
+      {
+        "best_threshold_pair": null,
+        "calibration_metrics": {
+          "classification": {
+            "adverse": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": null,
+                  "brier": 0.005167848097495471,
+                  "context_count": 6,
+                  "precision": null,
+                  "recall": null,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.005167848097495472,
+                  "instance_count": 3
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.2468971946695486,
+                  "context_count": 11,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.24617623556067425,
+                  "instance_count": 4
+                }
+              }
+            },
+            "benefit": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.13769042976357745,
+                  "context_count": 6,
+                  "precision": 0.8333333333333334,
+                  "recall": 1.0,
+                  "specificity": 0.0
+                },
+                "instance_level": {
+                  "brier": 0.13769042976357745,
+                  "instance_count": 3
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.15955446438986295,
+                  "context_count": 11,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.1530609190179065,
+                  "instance_count": 4
+                }
+              }
+            }
+          },
+          "context_count": 17,
+          "instance_count": 7,
+          "macro_instance_rank_accuracy": 0.7619047619047619,
+          "scale_macro_instance_rank_accuracy": {
+            "30": 0.8333333333333334,
+            "50": 0.7083333333333333
+          }
+        },
+        "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_minimal_interaction_gat_qd1_selector_v6_20260817/selector_training/gat_seed91267.pt",
+        "checkpoint_sha256": "c217b9f30b8afafa864670df835b39d55fef129bd98df1acaafcaf7a649216a9",
+        "degenerate_scales": [],
+        "fold_best_epochs": [
+          20,
+          105,
+          8,
+          45,
+          32
+        ],
+        "model_kind": "gat",
+        "oof_metrics": {
+          "classification": {
+            "adverse": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.12067337518865208,
+                  "context_count": 19,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.0873903469018231,
+                  "instance_count": 14
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.24888931852301718,
+                  "context_count": 38,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.24985827672385394,
+                  "instance_count": 14
+                }
+              }
+            },
+            "benefit": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.4642857142857143,
+                  "brier": 0.1728451307217935,
+                  "context_count": 19,
+                  "precision": 0.7222222222222222,
+                  "recall": 0.9285714285714286,
+                  "specificity": 0.0
+                },
+                "instance_level": {
+                  "brier": 0.17300766129684073,
+                  "instance_count": 14
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.21697107609979382,
+                  "context_count": 38,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.20408163265470727,
+                  "instance_count": 14
+                }
+              }
+            }
+          },
+          "context_count": 57,
+          "instance_count": 28,
+          "macro_instance_rank_accuracy": 0.6011904761904762,
+          "scale_macro_instance_rank_accuracy": {
+            "30": 0.6071428571428571,
+            "50": 0.5952380952380952
+          }
+        },
+        "parameter_count": 6212,
+        "refit_epoch": 32,
+        "seed": 91267
+      },
+      {
+        "best_threshold_pair": null,
+        "calibration_metrics": {
+          "classification": {
+            "adverse": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": null,
+                  "brier": 1.1160830497692641e-06,
+                  "context_count": 6,
+                  "precision": null,
+                  "recall": null,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 1.1160830497692641e-06,
+                  "instance_count": 3
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.35714285714285715,
+                  "brier": 0.24568556204693265,
+                  "context_count": 11,
+                  "precision": 0.0,
+                  "recall": 0.0,
+                  "specificity": 0.7142857142857143
+                },
+                "instance_level": {
+                  "brier": 0.24483743603412714,
+                  "instance_count": 4
+                }
+              }
+            },
+            "benefit": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.1333865393437541,
+                  "context_count": 6,
+                  "precision": 0.8333333333333334,
+                  "recall": 1.0,
+                  "specificity": 0.0
+                },
+                "instance_level": {
+                  "brier": 0.13338653934375408,
+                  "instance_count": 3
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.1619317722848057,
+                  "context_count": 11,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.1521455874756051,
+                  "instance_count": 4
+                }
+              }
+            }
+          },
+          "context_count": 17,
+          "instance_count": 7,
+          "macro_instance_rank_accuracy": 0.7619047619047619,
+          "scale_macro_instance_rank_accuracy": {
+            "30": 0.8333333333333334,
+            "50": 0.7083333333333333
+          }
+        },
+        "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_minimal_interaction_gat_qd1_selector_v6_20260817/selector_training/gat_seed170141.pt",
+        "checkpoint_sha256": "c326d2bc272ffbbd17d215c9364d9a2317d925d5dbe03ab43ba0db740a901bbc",
+        "degenerate_scales": [],
+        "fold_best_epochs": [
+          7,
+          135,
+          10,
+          40,
+          36
+        ],
+        "model_kind": "gat",
+        "oof_metrics": {
+          "classification": {
+            "adverse": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.10828310677194315,
+                  "context_count": 19,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.08374256706410445,
+                  "instance_count": 14
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5462184873949579,
+                  "brier": 0.24755723646237773,
+                  "context_count": 38,
+                  "precision": 0.5714285714285714,
+                  "recall": 0.23529411764705882,
+                  "specificity": 0.8571428571428571
+                },
+                "instance_level": {
+                  "brier": 0.24943773987022735,
+                  "instance_count": 14
+                }
+              }
+            },
+            "benefit": {
+              "30": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.18169692930540823,
+                  "context_count": 19,
+                  "precision": 0.7368421052631579,
+                  "recall": 1.0,
+                  "specificity": 0.0
+                },
+                "instance_level": {
+                  "brier": 0.18170354416761997,
+                  "instance_count": 14
+                }
+              },
+              "50": {
+                "context_level": {
+                  "balanced_accuracy": 0.5,
+                  "brier": 0.21077810411991071,
+                  "context_count": 38,
+                  "precision": null,
+                  "recall": 0.0,
+                  "specificity": 1.0
+                },
+                "instance_level": {
+                  "brier": 0.19864824330884523,
+                  "instance_count": 14
+                }
+              }
+            }
+          },
+          "context_count": 57,
+          "instance_count": 28,
+          "macro_instance_rank_accuracy": 0.6726190476190476,
+          "scale_macro_instance_rank_accuracy": {
+            "30": 0.75,
+            "50": 0.5952380952380952
+          }
+        },
+        "parameter_count": 6212,
+        "refit_epoch": 36,
+        "seed": 170141
+      }
+    ]
+  },
+  "development_only": true,
+  "production_switch_authorized": false,
+  "reason": "NO_SAFE_GAT_CALIBRATION_THRESHOLD",
+  "schema_version": "lunar_ice_bpc.p0v5_minimal_interaction_gat_terminal.v6"
+}

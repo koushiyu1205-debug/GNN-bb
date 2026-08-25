@@ -1,0 +1,167 @@
+{
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "detail": {
+    "correctness_redlines": [],
+    "freeze_verification": "PASS",
+    "interpretation": "All three matched repeats are undetermined because Q0 and both non-Q0 arms are resource-censored in every block.",
+    "later_stage_flags": {
+      "context_gat": false,
+      "development_e2e": false,
+      "formal_full100": false,
+      "heldout": false,
+      "qgr1": false
+    },
+    "later_stages_started": false,
+    "progress": {
+      "completed_contexts": 62,
+      "completed_raw_tasks": 558,
+      "scheduled_tasks": 639,
+      "skipped_contexts_after_stop": 9,
+      "skipped_tasks_after_stop": 81
+    },
+    "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_resource_censor_stop.v3",
+    "stage": "QD1_QB1_MATCHED_MATRIX",
+    "stop_rule": "resource censor导致预冻结样本不可判定",
+    "trigger_context": {
+      "block_statuses": {
+        "0": {
+          "Q0": "TIMEOUT",
+          "QB1": "TIMEOUT",
+          "QD1": "MEMORY_LIMIT"
+        },
+        "1": {
+          "Q0": "TIMEOUT",
+          "QB1": "TIMEOUT",
+          "QD1": "MEMORY_LIMIT"
+        },
+        "2": {
+          "Q0": "TIMEOUT",
+          "QB1": "TIMEOUT",
+          "QD1": "MEMORY_LIMIT"
+        }
+      },
+      "cap_sec": 600.0,
+      "context_id": "6a52e09ff51b0fdbede0008d",
+      "instance_hash": "7f3230fed387dae8",
+      "memory_limit_gb": 10.867,
+      "partition": "train",
+      "raw_evidence": [
+        {
+          "block": 0,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "MEMORY_LIMIT",
+          "labels_dropped": false,
+          "policy": "QD1",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b0_0_QD1.json",
+          "raw_sha256": "268f646387360c49d07caedd0e1dbf60a40b1faff3b5979b522da612729fcb1f",
+          "total_fresh_process_wall_sec": 557.388118532
+        },
+        {
+          "block": 0,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "TIMEOUT",
+          "labels_dropped": false,
+          "policy": "QB1",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b0_1_QB1.json",
+          "raw_sha256": "12df7ee7ed16be0b3c3897f6e323a3705a5f2b57c15cf34321e1e5a49e89d799",
+          "total_fresh_process_wall_sec": 603.494290549
+        },
+        {
+          "block": 0,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "TIMEOUT",
+          "labels_dropped": false,
+          "policy": "Q0",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b0_2_Q0.json",
+          "raw_sha256": "670f1710c97d87b89fbd436342c9f15831d9e20ecf97049d2ddb37863afa95b2",
+          "total_fresh_process_wall_sec": 605.691485774
+        },
+        {
+          "block": 1,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "TIMEOUT",
+          "labels_dropped": false,
+          "policy": "Q0",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b1_0_Q0.json",
+          "raw_sha256": "de3bc2d383f7df6c3241c477a504c7e40f0c9c4dc0f6711c4247ab38a87f1683",
+          "total_fresh_process_wall_sec": 604.691689264
+        },
+        {
+          "block": 1,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "MEMORY_LIMIT",
+          "labels_dropped": false,
+          "policy": "QD1",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b1_1_QD1.json",
+          "raw_sha256": "5394aa7ef1a47c1964d9993b87790863b6d021e41ca37138b1e8b6e3b0a80a01",
+          "total_fresh_process_wall_sec": 532.87679675
+        },
+        {
+          "block": 1,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "TIMEOUT",
+          "labels_dropped": false,
+          "policy": "QB1",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b1_2_QB1.json",
+          "raw_sha256": "7b32aead83e2df37fc72af126c3ee9a77aec21b11c6125015a27b180fca71389",
+          "total_fresh_process_wall_sec": 603.884909581
+        },
+        {
+          "block": 2,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "MEMORY_LIMIT",
+          "labels_dropped": false,
+          "policy": "QD1",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b2_0_QD1.json",
+          "raw_sha256": "46441e1e64b2d4d07bbd03759e5c1e17ddaf19c2fabccafc510fb5c994a166b2",
+          "total_fresh_process_wall_sec": 550.706078937
+        },
+        {
+          "block": 2,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "TIMEOUT",
+          "labels_dropped": false,
+          "policy": "QB1",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b2_1_QB1.json",
+          "raw_sha256": "3377b810ee709bb0977c44ad35b9d92ac3a450ade5d225c77033600859e790ba",
+          "total_fresh_process_wall_sec": 603.645683829
+        },
+        {
+          "block": 2,
+          "can_change_reduced_cost": false,
+          "can_filter": false,
+          "can_prune": false,
+          "engine_status": "TIMEOUT",
+          "labels_dropped": false,
+          "policy": "Q0",
+          "raw_file": "matched_qd1_qb1_execution.freeze_raw/6a52e09ff51b0fdbede0008d_b2_2_Q0.json",
+          "raw_sha256": "36aa56e059b080f6b0c1da5acd76cbe53fffd0ffa2ef79da75b75119e8906f9a",
+          "total_fresh_process_wall_sec": 605.001334182
+        }
+      ],
+      "scale": 50,
+      "state_hash": "8f29fb14ddc07235bbb6873bba85b2336569fb9b293d8ee1262399884d7a853e"
+    }
+  },
+  "development_only": true,
+  "production_switch_authorized": false,
+  "reason": "RESOURCE_CENSOR_UNDETERMINED",
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_terminal.v3"
+}

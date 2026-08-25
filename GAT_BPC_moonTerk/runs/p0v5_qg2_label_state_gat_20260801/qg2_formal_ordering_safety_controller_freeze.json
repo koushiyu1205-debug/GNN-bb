@@ -1,0 +1,12 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_formal_ordering_safety_freeze.v1",
+  "created_at": "2026-08-04T00:55:00+08:00",
+  "development_only": true,
+  "production_default": false,
+  "starts_solver_process": false,
+  "purpose": "recursive_formal_tree_ordering_only_redline_audit_after_candidate_freeze",
+  "controller_sha256": "f27ee20fcf750a431508bb9d8a6dc5727c5af0381b70263ec0ce2e11e73f69ae",
+  "frozen_file_sha256": {
+    "scripts/audit_p0v5_qg2_formal_ordering_safety.py": "f27ee20fcf750a431508bb9d8a6dc5727c5af0381b70263ec0ce2e11e73f69ae"
+  }
+}

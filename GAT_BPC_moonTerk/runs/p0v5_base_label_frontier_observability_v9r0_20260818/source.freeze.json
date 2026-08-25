@@ -1,0 +1,15 @@
+{
+  "no_native_change": true,
+  "schema_version": "lunar_ice_bpc.p0v5_base_label_frontier_source_freeze.v1",
+  "source_sha256": {
+    "configs/experiments/p0v5_base_label_frontier_observability_v9r0.json": "7def105e24fc3ba05698f838f8ab1bd97536189a33e56617e23efd2aa6ba2e28",
+    "plan/GAT/P0V5_BASE_LABEL_FRONTIER_OBSERVABILITY_V9R0_20260818_ZH.md": "891e0ae630e8471bd7a6b8aa967c0efc041cdc8e9bdbae6c03cbd45c067e4736",
+    "scripts/initialize_p0v5_base_label_frontier_observability_v9r0.py": "cbcd588aee0b5bbcab52520de16ee01a1b8abc50972e884dc6a01e0bb32d79e8",
+    "scripts/p0v5_base_label_frontier_v9r0_common.py": "83eb1c01d01736143917b04d9e63302cf8537313909a65d09d7d018a69d7df6f",
+    "scripts/train_p0v5_base_label_frontier_observability_v9r0.py": "3526fbd57d8c2c2db3a0e2ed074e3e5ae4a01ac1f38439bebea826444678b3dc",
+    "src/lunar_ice_bpc/guidance/base_frontier_gat_qd1_v9.py": "24eabd47c53330c04cae4e36d884ecc14db5b637804cfb0e7cd3191ddcb98cd7",
+    "src/lunar_ice_bpc/guidance/counterfactual_prefix_gat_qd1_v8.py": "28d31edffedcb943b0128644720b617f5a611d3beb2cdac642cd444e8a3a07f6",
+    "tests/test_p0v5_base_label_frontier_observability_v9r0.py": "8a5d1c479a40d486275cf631351b780b65a724f01d6fac4a34baaf2fc64a7d7d"
+  },
+  "worktree_may_be_dirty": true
+}

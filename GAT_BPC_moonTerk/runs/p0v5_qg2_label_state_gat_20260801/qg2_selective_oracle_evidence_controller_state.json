@@ -1,0 +1,9 @@
+{
+  "context_count": 110,
+  "deployment_authorized": false,
+  "evidence": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_training_only_v2_selective_oracle_evidence.json",
+  "evidence_sha256": "c499417fe3e130cb1e76bd66be091f4c0795e03cc83028df7b35e74fe79d7bb3",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_selective_oracle_evidence_controller_state.v1",
+  "status": "SELECTIVE_ORACLE_EVIDENCE_FROZEN",
+  "updated_at": "2026-08-05T21:11:23+08:00"
+}

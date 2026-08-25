@@ -1,0 +1,208 @@
+model_id: "P0V5_QG2_LABEL_STATE_GAT"
+status: "development_collecting_final_qg2_clean_v2"
+production_default: false
+deployable: false
+
+exact_control:
+  freeze_id: "P0V4_V5_BIDIRECTIONAL_EXACT_FINAL_CANDIDATE"
+  selected_config: "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml"
+  selected_config_sha256: "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42"
+  gat_closeout: "runs/p0v5_gat_closeout_20260801/closeout.json"
+  gat_closeout_sha256: "3c405079bb36cab27a531bb92fe60941dfd5368348dadf421374e79e4d70997d"
+  p0v4_changed: false
+  p0v5_exact_control_changed: false
+
+action:
+  policy_id: "p0v5_q0_anchored_qg2_label_state_v1"
+  native_queue_policy_id: "QG2"
+  location: "after_v5_midpoint_before_p0v4_exhaustive_fallback"
+  allowed_scales: [30, 50]
+  bypass_scales: [5, 10, 20]
+  interventions_per_request: 1
+  inference_calls_per_request: 1
+  label_state_schema_version: "lunar_spprc.qg2_label_state.v1"
+  label_state_feature_count: 15
+  precall_active_master_features: "column_count_plus_active_task_set_incidence"
+  state_size_bytes: 176
+  bucket_candidates: [0.0001, 0.0003, 0.001]
+  frozen_bucket: null
+  queue_key:
+    - "terminal_first"
+    - "floor_partial_rc_over_frozen_bucket"
+    - "negative_label_state_potential"
+    - "partial_rc"
+    - "creation_id"
+  can_filter: false
+  can_prune: false
+  can_change_dominance: false
+  can_change_bound: false
+  can_stop_proof: false
+  can_certify: false
+  failure_action: "literal_Q0"
+  optimization_objective: "min_time_to_master_ready_frozen_admission_batch"
+  raw_negative_time_role: "diagnostic_only"
+  admission_milestone_components:
+    - "native_search"
+    - "backend_reconstruction_and_true_rc_audit"
+    - "frozen_diversity_selector"
+    - "master_entry_audit"
+  action_headroom_analysis:
+    target_end_to_end_gain: 0.05
+    fixed_pipeline_definition: "T_admission_minus_native_search"
+    queue_visible_definition: "native_search_over_T_admission"
+    raw_to_admission_harvest_definition: "native_search_minus_T_raw"
+    amdahl_assumption: "post_native_pipeline_invariant_under_queue_ordering"
+    authority: "diagnostic_only_matched_QO2_Q0_oracle_remains_authoritative"
+    risk_condition: "post_native_fixed_pipeline_share_at_least_0.95"
+
+snapshot_collection:
+  schema_version: "lunar_ice_bpc.p0v5_proof_tail_fallback_snapshot.v2"
+  trajectory_feature_semantics_version: "p0v5_qg2_preaction_trajectory_missingness.v2"
+  opt_in_environment: "LUNAR_ICE_P0V5_QG2_FALLBACK_SNAPSHOT_DIR"
+  maximum_contexts: 300
+  maximum_contexts_per_scale: 150
+  default_maximum_contexts_per_instance: 15
+  index_builder: "scripts/build_p0v5_qg2_fallback_snapshot_index.py"
+  development_trace_max_pair_rows_per_context: 50000
+  preserve_all_negative_route_ancestors: true
+  active_master_binding: "semantic_signature_hashes"
+  source_backend_id: "native_rcspp_bidirectional_root_partial_hybrid_v3"
+  source_engine_binding: "snapshot_composite_engine_hash_must_match_current_source_backend"
+  fallback_replay_backend_id: "native_rcspp_inprocess"
+  fallback_engine_binding: "same_build_recorded_separately_in_each_replay"
+  source_config_binding: "dynamic_snapshot_config_hash_retained_in_each_canonical_request_binding"
+  source_config_manifest_role: "diagnostic_only_not_heldout_allowlist"
+  exact_action_policy_schema: "lunar_ice_bpc.p0v5_qg2_exact_action_policy.v1"
+  exact_action_policy_binding: "instance_invariant_escape_admission_selector_and_Q0_hash"
+  v1_snapshot_use: "timing_diagnostic_only_not_oracle_eligible"
+  extend_native_search_for_collection: false
+  frozen_candidate_instance_count_per_scale: 200
+  total_frozen_candidate_instance_count: 400
+  development_corpus_manifest: "data/p0v5_qg2_oracle_development_v3/manifest.json"
+  development_corpus_status: "frozen_before_any_QO2_outcome"
+  collection_strategy: "fresh_namespace_30_instance_prefix_then_10_instance_extensions_to_150_contexts_per_scale"
+  current_clean_collection_freeze: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_collection_freeze.json"
+  current_clean_snapshot_dir: "runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_qg2_clean_v2"
+  staged_collection_controller: "scripts/continue_p0v5_qg2_clean_v2_collection.py"
+  post_collection_oracle_controller: "scripts/run_p0v5_qg2_clean_v2_oracle_after_collection.py"
+  collection_controller_pid: 3787562
+  collection_exec_session_id: 14103
+  post_collection_oracle_controller_status: "waiting_for_clean_v2_collection_pid_3787562"
+  final_prestart_attestation: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_final_prestart_attestation.json"
+  rejected_pretest_collection_archive: "runs/p0v5_qg2_label_state_gat_20260801/diagnostic_interrupted_qg2_clean_v2_pre_final_tests_20260801T213424"
+  clean_v1_diagnostic_marker: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v1_diagnostic_only.json"
+  admission_v3_v4_role: "diagnostic_only_not_oracle_eligible_due_metadata_and_corpus_transition"
+  bounded_tree_supplement_freeze: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_tree_supplement_freeze.json"
+  bounded_tree_supplement_runner: "scripts/run_p0v5_qg2_clean_v2_tree_supplement.py"
+  bounded_tree_supplement_policy: "first5_per_scale_no_expansion_if_natural_branch_cut_opportunity_absent"
+
+supervision:
+  schema_version: "lunar_ice_bpc.p0v5_qg2_action_reachable_supervision.v2"
+  queue_action_surface: "same_terminal_class_and_reduced_cost_bucket.v1"
+  positive: "ancestor_of_frozen_selector_selected_master_ready_column"
+  hard_negative: "ancestor_of_raw_negative_omitted_or_master_rejected_column"
+  same_terminal_class_only: true
+  same_reduced_cost_bucket_only: true
+  selector_policy_id: "p0v4_diverse_selector_v1"
+  fail_closed_without_master_binding: true
+  admission_milestone: "ADMISSION_BATCH_READY"
+  proof_milestone: "EXACT_PROOF_COMPLETION"
+
+oracle:
+  schema_version: "lunar_ice_bpc.p0v5_qg2_bounded_oracle.v5"
+  runner: "scripts/run_p0v5_qg2_bounded_oracle.py"
+  execution_freeze: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_oracle_execution_freeze.json"
+  execution_freeze_status: "frozen_and_waiting_for_collection"
+  controller: "scripts/run_p0v5_qg2_clean_v2_oracle_after_collection.py"
+  controller_pid: 3787723
+  controller_exec_session_id: 73192
+  current_preflight: "runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_clean_v2_preflight.json"
+  current_training_permitted: false
+  required_contexts_per_scale: 20
+  required_instances_per_scale: 10
+  required_geomean_ratio_per_scale: 0.85
+  required_bootstrap_95_upper_per_scale: 0.90
+  required_positive_fraction_per_scale: 0.20
+  required_total_five_percent_wins: 50
+  required_five_percent_wins_per_scale: 20
+  required_positive_instances_per_scale: 5
+  maximum_single_instance_saved_wall_fraction: 0.35
+  failure_action_at_300_contexts: "terminate_proof_tail_gat"
+
+development_arms:
+  - "Q0"
+  - "Random_seed61635"
+  - "Random_seed91267"
+  - "Random_seed170141"
+  - "QD1"
+  - "QB1"
+  - "QO2_LEAKED"
+
+models_after_oracle_pass:
+  shared_feature_schema: "lunar_ice_bpc.p0v5_qg2_features.v1"
+  shared_loss: "label_rank_plus_0.1_benefit_plus_0.1_positive_gain"
+  instance_split: [60, 20, 20]
+  candidates:
+    - "Linear"
+    - "MLP_2layer"
+    - "TinyGAT_2layer_hidden32_heads2"
+  activation_heads:
+    - "P_delta_time_positive"
+    - "E_delta_time_given_positive"
+  censor_mask_enabled: true
+  potential_normalization: "global_maxabs_rank_preserving.v2"
+  training_script: "scripts/train_p0v5_qg2_model_comparison.py"
+  calibration_script: "scripts/calibrate_p0v5_qg2_models.py"
+  post_oracle_controller: "scripts/run_p0v5_qg2_clean_v2_training_after_oracle.py"
+  post_oracle_controller_freeze: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_post_oracle_controller_freeze.json"
+  post_oracle_controller_status: "waiting_for_oracle_pid_3787723"
+  post_oracle_controller_pid: 3787834
+  post_oracle_exec_session_id: 98449
+
+development_e2e:
+  controller: "scripts/run_p0v5_qg2_clean_v2_e2e_after_calibration.py"
+  controller_freeze: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_e2e_controller_freeze.json"
+  controller_status: "waiting_for_calibration_pid_3787834"
+  controller_pid: 3787946
+  controller_exec_session_id: 11033
+  scales: [30, 50]
+  heldout_instances_per_scale: 5
+  automatic_formal_full20: false
+
+deployment_gate:
+  harmful_action_rate_95_upper: 0.05
+  harmful_rate_bound: "one_sided_95pct_Wilson"
+  minimum_zero_harm_calibration_activations: 52
+  beneficial_precision_95_lower: 0.80
+  gat_heldout_tail_ratio: 0.90
+  gat_vs_best_linear_or_mlp_ratio: 0.98
+  inference_p99_ms: 10.0
+  manifest: null
+  checkpoint: null
+  authorized: false
+
+formal_acceptance:
+  controller: "scripts/run_p0v5_qg2_clean_v2_formal_after_e2e.py"
+  controller_freeze: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_formal_controller_freeze.json"
+  controller_status: "waiting_for_development_e2e_pid_3787946"
+  controller_pid: 3788057
+  controller_exec_session_id: 94653
+  automatic_production_switch: false
+  scale5_10_20_exact: "20/20_each"
+  scale5_10_20_gat_call_count: 0
+  scale5_10_20_time_ratio_max: 1.01
+  scale30_exact: "20/20"
+  scale30_common_exact_speedup_min: 0.05
+  scale50_exact_min: "15/20"
+  scale50_common_exact_speedup_min: 0.05
+  certificate_redlines: 0
+
+candidate_finalization:
+  controller: "scripts/finalize_p0v5_qg2_clean_v2_candidate.py"
+  controller_freeze: "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_candidate_finalizer_freeze.json"
+  controller_status: "waiting_for_formal_full20_pid_3788057"
+  controller_pid: 3788180
+  controller_exec_session_id: 28546
+  output: "runs/p0v5_qg2_label_state_gat_20260801/P0V5_QG2_LABEL_STATE_GAT_candidate_freeze.json"
+  production_default: false
+  historical_baselines_unchanged: true

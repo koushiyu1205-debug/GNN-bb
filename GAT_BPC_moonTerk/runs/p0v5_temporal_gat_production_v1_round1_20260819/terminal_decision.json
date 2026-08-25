@@ -1,0 +1,20 @@
+{
+  "deployment_authorized": false,
+  "detail": {
+    "native_ctest_output": "Internal ctest changing into directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-temporal-frontier-v10\nTest project /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-temporal-frontier-v10\n    Start 1: lunar_spprc_native_tests\n1/2 Test #1: lunar_spprc_native_tests .........   Passed    0.81 sec\n    Start 2: lunar_spprc_patch_queue_check\n2/2 Test #2: lunar_spprc_patch_queue_check ....   Passed    0.03 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   0.86 sec\n",
+    "native_ctest_returncode": 0,
+    "python_contract_output": ".................                                                        [100%]\n17 passed in 2.39s\n",
+    "python_contract_returncode": 0,
+    "python_contract_test_count": 17,
+    "randomized_exact_case_count": 500,
+    "randomized_exact_mismatch_count": 0,
+    "randomized_exact_output": "\u001b[32m[2026-08-19 23:26:06.872][INFO ] Memory pressure: 4 MB / 1024000000000 MB. Trimming label queues.\n\u001b[0m\u001b[32m[2026-08-19 23:26:06.872][INFO ] Memory pressure: 4 MB / 1024000000000 MB. Trimming label queues.\n\u001b[0mTEMPORAL_ACTION_RANDOMIZED_EXACT cases=500 mismatches=0\nnative lunar SPPRC smoke passed\n",
+    "randomized_exact_returncode": 0
+  },
+  "development_only": true,
+  "production_switch_authorized": false,
+  "reason": "TEMPORAL_NATIVE_CONTRACT_TESTS_FAILED",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_terminal.v1",
+  "stage": "NATIVE_CONTRACT_TESTS",
+  "status": "TERMINATED_NEGATIVE"
+}

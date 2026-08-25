@@ -1,0 +1,18 @@
+{
+  "candidate_trained": false,
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "detail": {
+    "blocker": "frozen V7 replay only authorizes diagnostic engine rebind for Q0/QPF0",
+    "completed_qpd1_tasks": 0,
+    "completed_qpf0_tasks": 1,
+    "performance_conclusion": null,
+    "repair_boundary": "new V7R2 chain must freeze rebound snapshots before any arm outcome"
+  },
+  "development_only": true,
+  "manifest_generated": false,
+  "production_switch_authorized": false,
+  "reason": "V7R_QPD1_REBIND_CONTRACT_BLOCKED",
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_terminal.v1",
+  "stage": "SWITCH_MATRIX"
+}

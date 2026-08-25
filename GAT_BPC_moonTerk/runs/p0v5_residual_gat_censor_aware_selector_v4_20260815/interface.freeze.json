@@ -1,0 +1,17 @@
+{
+  "action_universe": [
+    "Q0",
+    "QGR1",
+    "QD1"
+  ],
+  "checkpoint_schema": "lunar_ice_bpc.p0v5_interaction_gat_checkpoint.v3",
+  "corpus_schema": "lunar_ice_bpc.p0v5_interaction_gat_corpus_freeze.v4",
+  "dataset_schema": "lunar_ice_bpc.p0v5_interaction_gat_training_dataset.v4",
+  "manifest_schema": "lunar_ice_bpc.p0v5_root_interaction_gat_runtime_manifest.v3",
+  "permanent_forced_veto_arms": [
+    "QB1"
+  ],
+  "root_only_authority": true,
+  "runtime_policy": "P0V5_ROOT_INTERACTION_GAT_SELECTOR_V4",
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_interface_freeze.v4"
+}

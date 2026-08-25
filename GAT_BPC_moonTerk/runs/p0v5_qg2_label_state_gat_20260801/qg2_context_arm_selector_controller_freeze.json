@@ -1,0 +1,21 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_context_arm_selector_controller_freeze.v1",
+  "development_only": true,
+  "deployable": false,
+  "starts_solver_process": false,
+  "execution_order": "after_qg2_model_comparison_before_new_calibration_decision",
+  "candidate_arms": [
+    "QD1",
+    "QB1"
+  ],
+  "fallback_action": "Q0",
+  "all_arms_rejected_action": "Q0",
+  "changes_qg2": false,
+  "matched_outcomes_only": true,
+  "instance_split_reused_from_qg2_trainer": true,
+  "training_only_v2_freeze_sha256": "8510ffdf3d57b43f60137a90c0f3254d6ef2ea35126fa36dc8b4f54abb1a7407",
+  "frozen_file_sha256": {
+    "scripts/evaluate_p0v5_qg2_context_arm_selector.py": "d64509b9f1f410e9fb33daaf75b9a91b39424c13e0c0f8a1b6850decc1d874e8",
+    "scripts/run_p0v5_qg2_context_arm_selector_after_training.py": "99b4f1734601f325ba96c47f83c8bef2634f7c8abb388bc1a15b1c5b8d7bc4cf"
+  }
+}

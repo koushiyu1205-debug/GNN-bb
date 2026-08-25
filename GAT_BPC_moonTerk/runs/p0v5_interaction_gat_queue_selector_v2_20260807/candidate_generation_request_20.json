@@ -1,0 +1,9 @@
+{
+  "maximum_per_scale": 30,
+  "next_per_scale_target": {
+    "30": 20
+  },
+  "outcome_blind": true,
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_candidate_generation_request.v2",
+  "seed_base": 260807000
+}

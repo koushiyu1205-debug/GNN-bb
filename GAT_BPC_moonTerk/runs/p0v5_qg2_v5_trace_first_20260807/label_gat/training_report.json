@@ -1,0 +1,330 @@
+{
+  "activation_authority": false,
+  "calibration_aggregation_unit": "instance",
+  "checkpoint_selection_metric": "mean_instance_pair_accuracy",
+  "context_count": 45,
+  "deployable": false,
+  "deployment_authorized": false,
+  "development_only": true,
+  "feature_envelope_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat/feature_envelope.json",
+  "feature_envelope_sha256": "acd7bfe4e679b6aaa774d8317e36cae80589ac11cd61db3e60db3047ab43b0d1",
+  "instance_balanced_wrapper_schema_version": "lunar_ice_bpc.p0v5_qg2_v4_instance_balanced_ranker_wrapper.v1",
+  "instance_balancing_policy": "uniform_instance_steps_rotating_contexts.v1",
+  "instance_count": 19,
+  "loss": "context_normalized_route_balanced_weighted_pairwise_logistic",
+  "mlp_or_linear_control_started": false,
+  "model_execution_order": [
+    "gat",
+    "mlp",
+    "linear"
+  ],
+  "model_role": "label_state_queue_ordering_only",
+  "models": [
+    {
+      "best_epoch": 19,
+      "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat/qg2_v3_gat.pt",
+      "checkpoint_selection_metric": "mean_instance_pair_accuracy",
+      "checkpoint_selection_partition": "calibration",
+      "checkpoint_sha256": "c283fa1fcecc70f67cd9540ff92b24253d692b9e9e8fdb0bdf53e98dea1c4836",
+      "early_stopping_patience": 8,
+      "epochs_completed": 27,
+      "instance_balancing_policy": "uniform_instance_steps_rotating_contexts.v1",
+      "latest_checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat/qg2_v3_gat_latest.pt",
+      "model_kind": "gat",
+      "parameter_count": 24337,
+      "partition_metrics": {
+        "calibration": {
+          "context_count": 17,
+          "instance_count": 6,
+          "maximum_context_fraction_by_instance": 0.47058823529411764,
+          "mean_context_pair_accuracy": 0.8746201415203272,
+          "mean_instance_pair_accuracy": 0.8746201415203272,
+          "per_instance_context_count": {
+            "0901f02491d45908": 1,
+            "16407bf4d988d595": 1,
+            "296a3155f2f99afa": 2,
+            "3f257a94c89bf615": 3,
+            "7ad0c8d59c88bbe1": 8,
+            "da4d44d7b526f0d1": 2
+          },
+          "per_instance_mean_context_pair_accuracy": {
+            "0901f02491d45908": 0.917724609375,
+            "16407bf4d988d595": 0.87548828125,
+            "296a3155f2f99afa": 0.8402099609375,
+            "3f257a94c89bf615": 0.7985026041666666,
+            "7ad0c8d59c88bbe1": 0.8861078933927963,
+            "da4d44d7b526f0d1": 0.9296875
+          },
+          "per_kind_weighted_pair_accuracy": {
+            "existing_dominator": 0.9997876850203141,
+            "incoming_dominator": 0.49253592890336967,
+            "proof_terminal_parent_progress": 0.7601273234544662
+          },
+          "per_milestone_instance_balanced_accuracy": {
+            "EXACT_PROOF_COMPLETION": {
+              "context_count": 17,
+              "instance_count": 6,
+              "maximum_context_fraction_by_instance": 0.47058823529411764,
+              "mean_context_value": 0.8716105160083748,
+              "mean_instance_value": 0.8746201415203272,
+              "per_instance_context_count": {
+                "0901f02491d45908": 1,
+                "16407bf4d988d595": 1,
+                "296a3155f2f99afa": 2,
+                "3f257a94c89bf615": 3,
+                "7ad0c8d59c88bbe1": 8,
+                "da4d44d7b526f0d1": 2
+              },
+              "per_instance_mean": {
+                "0901f02491d45908": 0.917724609375,
+                "16407bf4d988d595": 0.87548828125,
+                "296a3155f2f99afa": 0.8402099609375,
+                "3f257a94c89bf615": 0.7985026041666666,
+                "7ad0c8d59c88bbe1": 0.8861078933927963,
+                "da4d44d7b526f0d1": 0.9296875
+              }
+            }
+          },
+          "raw_mean_context_pair_accuracy": 0.8716105160083748,
+          "weighted_pair_accuracy": 0.8424681528602354
+        },
+        "heldout": {
+          "context_count": 10,
+          "instance_count": 4,
+          "maximum_context_fraction_by_instance": 0.5,
+          "mean_context_pair_accuracy": 0.8790742574607338,
+          "mean_instance_pair_accuracy": 0.8790742574607338,
+          "per_instance_context_count": {
+            "125aaef31ef11d35": 1,
+            "39a7a6d009dfabc5": 1,
+            "58f3f03af6b2c317": 3,
+            "a7acc5b02e62e549": 5
+          },
+          "per_instance_mean_context_pair_accuracy": {
+            "125aaef31ef11d35": 0.838623046875,
+            "39a7a6d009dfabc5": 0.940673828125,
+            "58f3f03af6b2c317": 0.8548224204679348,
+            "a7acc5b02e62e549": 0.882177734375
+          },
+          "per_kind_weighted_pair_accuracy": {
+            "existing_dominator": 1.0,
+            "incoming_dominator": 0.5454545454545454,
+            "proof_terminal_parent_progress": 0.7296300479230838
+          },
+          "per_milestone_instance_balanced_accuracy": {
+            "EXACT_PROOF_COMPLETION": {
+              "context_count": 10,
+              "instance_count": 4,
+              "maximum_context_fraction_by_instance": 0.5,
+              "mean_context_value": 0.8754652808278804,
+              "mean_instance_value": 0.8790742574607338,
+              "per_instance_context_count": {
+                "125aaef31ef11d35": 1,
+                "39a7a6d009dfabc5": 1,
+                "58f3f03af6b2c317": 3,
+                "a7acc5b02e62e549": 5
+              },
+              "per_instance_mean": {
+                "125aaef31ef11d35": 0.838623046875,
+                "39a7a6d009dfabc5": 0.940673828125,
+                "58f3f03af6b2c317": 0.8548224204679348,
+                "a7acc5b02e62e549": 0.882177734375
+              }
+            }
+          },
+          "raw_mean_context_pair_accuracy": 0.8754652808278804,
+          "weighted_pair_accuracy": 0.8843091357371021
+        },
+        "train": {
+          "context_count": 18,
+          "instance_count": 9,
+          "maximum_context_fraction_by_instance": 0.3333333333333333,
+          "mean_context_pair_accuracy": 0.8605160821752821,
+          "mean_instance_pair_accuracy": 0.8605160821752821,
+          "per_instance_context_count": {
+            "23cc0c6fee9f1fa0": 2,
+            "4082eed14fe91216": 1,
+            "4a75319d174fdd19": 2,
+            "4c3e017314d9a3ee": 2,
+            "5ac004e434340ddd": 2,
+            "665810f5957bfe6b": 1,
+            "6cc232d48d44f2d3": 6,
+            "7b3fd2cf86cbcefb": 1,
+            "ea7975bf0465b1c7": 1
+          },
+          "per_instance_mean_context_pair_accuracy": {
+            "23cc0c6fee9f1fa0": 0.6185302734375,
+            "4082eed14fe91216": 0.9326171875,
+            "4a75319d174fdd19": 0.982421875,
+            "4c3e017314d9a3ee": 0.894775390625,
+            "5ac004e434340ddd": 0.9711665494733724,
+            "665810f5957bfe6b": 0.67919921875,
+            "6cc232d48d44f2d3": 0.8666178385416666,
+            "7b3fd2cf86cbcefb": 0.94482421875,
+            "ea7975bf0465b1c7": 0.8544921875
+          },
+          "per_kind_weighted_pair_accuracy": {
+            "admission_selected_vs_background": 0.9019607843137255,
+            "admission_selected_vs_omitted": 0.602710027100271,
+            "existing_dominator": 0.9981999947668947,
+            "incoming_dominator": 0.3333333333333333,
+            "proof_terminal_parent_progress": 0.845144238929771
+          },
+          "per_milestone_instance_balanced_accuracy": {
+            "ADMISSION_BATCH_READY": {
+              "context_count": 3,
+              "instance_count": 2,
+              "maximum_context_fraction_by_instance": 0.6666666666666666,
+              "mean_context_value": 0.6387532552083334,
+              "mean_instance_value": 0.64886474609375,
+              "per_instance_context_count": {
+                "23cc0c6fee9f1fa0": 2,
+                "665810f5957bfe6b": 1
+              },
+              "per_instance_mean": {
+                "23cc0c6fee9f1fa0": 0.6185302734375,
+                "665810f5957bfe6b": 0.67919921875
+              }
+            },
+            "EXACT_PROOF_COMPLETION": {
+              "context_count": 15,
+              "instance_count": 7,
+              "maximum_context_fraction_by_instance": 0.4,
+              "mean_context_value": 0.9085578836797831,
+              "mean_instance_value": 0.9209878924842912,
+              "per_instance_context_count": {
+                "4082eed14fe91216": 1,
+                "4a75319d174fdd19": 2,
+                "4c3e017314d9a3ee": 2,
+                "5ac004e434340ddd": 2,
+                "6cc232d48d44f2d3": 6,
+                "7b3fd2cf86cbcefb": 1,
+                "ea7975bf0465b1c7": 1
+              },
+              "per_instance_mean": {
+                "4082eed14fe91216": 0.9326171875,
+                "4a75319d174fdd19": 0.982421875,
+                "4c3e017314d9a3ee": 0.894775390625,
+                "5ac004e434340ddd": 0.9711665494733724,
+                "6cc232d48d44f2d3": 0.8666178385416666,
+                "7b3fd2cf86cbcefb": 0.94482421875,
+                "ea7975bf0465b1c7": 0.8544921875
+              }
+            }
+          },
+          "raw_mean_context_pair_accuracy": 0.8635904456012081,
+          "weighted_pair_accuracy": 0.8501471258369029
+        }
+      }
+    }
+  ],
+  "next_gate": {
+    "action": "force_on_fresh_process_q0_vs_gat",
+    "requires_actual_gat_outcomes": true,
+    "selector_training_permitted": false
+  },
+  "next_performance_authority": "fresh_process_q0_vs_qg2_force_on",
+  "normalization_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat/train_normalization.json",
+  "normalization_sampling_unit": "instance",
+  "normalization_sha256": "7787bf28c085d84597dd64fcc0ea773e97e03c2f6216d7baadadf21a23c1db0f",
+  "optimizer_sampling_unit": "instance",
+  "oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/trace_training_view.json",
+  "oracle_summary_sha256": "2bb8ab76ce25fc16fcb8596d0fa80f82afac0c19f10ba7f4ae7ae3ab45c13dd1",
+  "partition_context_counts": {
+    "calibration": 17,
+    "heldout": 10,
+    "train": 18
+  },
+  "partition_instance_balance": {
+    "calibration": {
+      "context_count": 17,
+      "instance_count": 6,
+      "maximum_context_fraction_by_instance": 0.47058823529411764,
+      "mean_context_value": 1.0,
+      "mean_instance_value": 1.0,
+      "per_instance_context_count": {
+        "0901f02491d45908": 1,
+        "16407bf4d988d595": 1,
+        "296a3155f2f99afa": 2,
+        "3f257a94c89bf615": 3,
+        "7ad0c8d59c88bbe1": 8,
+        "da4d44d7b526f0d1": 2
+      },
+      "per_instance_mean": {
+        "0901f02491d45908": 1.0,
+        "16407bf4d988d595": 1.0,
+        "296a3155f2f99afa": 1.0,
+        "3f257a94c89bf615": 1.0,
+        "7ad0c8d59c88bbe1": 1.0,
+        "da4d44d7b526f0d1": 1.0
+      }
+    },
+    "heldout": {
+      "context_count": 10,
+      "instance_count": 4,
+      "maximum_context_fraction_by_instance": 0.5,
+      "mean_context_value": 1.0,
+      "mean_instance_value": 1.0,
+      "per_instance_context_count": {
+        "125aaef31ef11d35": 1,
+        "39a7a6d009dfabc5": 1,
+        "58f3f03af6b2c317": 3,
+        "a7acc5b02e62e549": 5
+      },
+      "per_instance_mean": {
+        "125aaef31ef11d35": 1.0,
+        "39a7a6d009dfabc5": 1.0,
+        "58f3f03af6b2c317": 1.0,
+        "a7acc5b02e62e549": 1.0
+      }
+    },
+    "train": {
+      "context_count": 18,
+      "instance_count": 9,
+      "maximum_context_fraction_by_instance": 0.3333333333333333,
+      "mean_context_value": 1.0,
+      "mean_instance_value": 1.0,
+      "per_instance_context_count": {
+        "23cc0c6fee9f1fa0": 2,
+        "4082eed14fe91216": 1,
+        "4a75319d174fdd19": 2,
+        "4c3e017314d9a3ee": 2,
+        "5ac004e434340ddd": 2,
+        "665810f5957bfe6b": 1,
+        "6cc232d48d44f2d3": 6,
+        "7b3fd2cf86cbcefb": 1,
+        "ea7975bf0465b1c7": 1
+      },
+      "per_instance_mean": {
+        "23cc0c6fee9f1fa0": 1.0,
+        "4082eed14fe91216": 1.0,
+        "4a75319d174fdd19": 1.0,
+        "4c3e017314d9a3ee": 1.0,
+        "5ac004e434340ddd": 1.0,
+        "665810f5957bfe6b": 1.0,
+        "6cc232d48d44f2d3": 1.0,
+        "7b3fd2cf86cbcefb": 1.0,
+        "ea7975bf0465b1c7": 1.0
+      }
+    }
+  },
+  "performance_oracle_gate_used": false,
+  "random_or_leaked_qo2_outcomes_used": false,
+  "ranker_only": true,
+  "ranker_schema_version": "lunar_ice_bpc.p0v5_qg2_admission_ranker.v3_1",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v3_ranker_training.v1",
+  "source_trace_corpus": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/trace_supervision_corpus.json",
+  "source_trace_corpus_sha256": "78010eccb3eea87ff37321a6a30782ad8041a4881e8ae0ff18b6c68b9f986054",
+  "source_training_view": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/trace_training_view.json",
+  "source_training_view_sha256": "2bb8ab76ce25fc16fcb8596d0fa80f82afac0c19f10ba7f4ae7ae3ab45c13dd1",
+  "split_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_instance_split.json",
+  "split_sha256": "578c049ae1fbb3d6addd1350a88da8dfac0d9c5575483727a51e7c0c6303d53d",
+  "supervision_schema_version": "lunar_ice_bpc.p0v5_qg2_route_balanced_admission_supervision.v3",
+  "trained_models_in_this_stage": [
+    "gat"
+  ],
+  "training_authority_kind": "action_reachable_q0_future_trace_only",
+  "training_curve_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat/training_curve.jsonl",
+  "training_curve_sha256": "1faee6cb63c42e4a2ca857f2a3ad83454f91c22b17175cac5e0e57d9d7397474",
+  "training_data_hash": "2f629ead49f6ce9e0f38114425bcf61c4a1ed86f14379ae597c0dd923097b119"
+}

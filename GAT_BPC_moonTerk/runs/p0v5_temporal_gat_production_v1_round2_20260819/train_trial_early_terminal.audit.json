@@ -1,0 +1,135 @@
+{
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "differential_redlines": [
+    "nondeterministic_frontier_telemetry:temporal_s30_03a03c5919fac98b_0:30:128:CONTINUE_QD1",
+    "nondeterministic_frontier_telemetry:temporal_s30_03a03c5919fac98b_0:30:128:MIGRATE_BACK_TO_Q0"
+  ],
+  "gate_is_monotone_after_complete_three_repeats": true,
+  "partial_file_count": 0,
+  "production_switch_authorized": false,
+  "published_correctness_redline_row_count": 0,
+  "published_resource_censor_count": 14,
+  "published_status_counts": {
+    "COMPLETE": 27,
+    "TIMEOUT": 14
+  },
+  "published_task_count": 41,
+  "reason": "TEMPORAL_TRIAL_EXACT_DIFFERENTIAL_REDLINE",
+  "scheduled_task_count": 3186,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_trial_early_terminal_audit.v1",
+  "source_config_freeze_sha256": "00760b6cacb45903099403a3aebf932fe3757014ca46a5ef345094fb2e62a0fb",
+  "source_contexts_sha256": "8a55f1263df0ca0d065cdad9955c909bc4e1447470c42f6d7fbe89787605838b",
+  "source_freeze_sha256": "8e79971ae042c66b8261d95da24ae38e1b587b34074950495fe963fba997aa9c",
+  "source_schedule": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round2_20260819/train_trial_schedule.freeze.json",
+  "source_schedule_sha256": "ef83d000244963ee2bab6323ce7b56f97d7e7b2e6dd5cd321e3fe1bc26ddb668",
+  "stage": "TRAIN_TRIALS",
+  "terminal_gate": "repeated_telemetry_hash_must_be_identical",
+  "terminal_negative": true,
+  "three_repeat_evidence": [
+    {
+      "arm": "CONTINUE_QD1",
+      "context_id": "temporal_s30_03a03c5919fac98b_0",
+      "correctness_redlines": [],
+      "deterministic_frontier_telemetry_hash_by_repeat": [
+        "9cc8f17128d5d43962cde1a0cd78f3b81b8b1a16f111300994759c97852d00fc",
+        "65f557bad3290b8f347207af498e4a89dc8665794c72e02ba68ec529473a1601",
+        "e85a57f4593035c10e8d5d18f9622f4f1b588428cb22f886af83a242fc6bf8f6"
+      ],
+      "k": 128,
+      "raw_sha256_by_repeat": [
+        "783bc005bb3e118e287c669dae9fc5ad8b78c4afa526f1358b565449036d8cb8",
+        "a261e3a4508cdcd805b9fbef5b809e2a68bd13196449054981f88f0bf9c576b9",
+        "98f39546d2981f7b0291984db0b20678b7683fd6eb95626a1aeb255761a6ab63"
+      ],
+      "repeat_coverage": [
+        0,
+        1,
+        2
+      ],
+      "resource_censor_count": 3,
+      "scale": 30,
+      "status_by_repeat": [
+        "TIMEOUT",
+        "TIMEOUT",
+        "TIMEOUT"
+      ],
+      "unique_deterministic_hash_count": 3,
+      "wall_seconds_by_repeat": [
+        301.891166162,
+        301.588167188,
+        301.751767084
+      ]
+    },
+    {
+      "arm": "MIGRATE_BACK_TO_Q0",
+      "context_id": "temporal_s30_03a03c5919fac98b_0",
+      "correctness_redlines": [],
+      "deterministic_frontier_telemetry_hash_by_repeat": [
+        "615437d19c8130fdedc80732f4f1f6c0e8138b94501f236b3083daadea671bee",
+        "afe60e6ad73fc34b57c51ee9403923618d93c1a670fc1e8ebffca8c6b1e36b68",
+        "308bea26f9a3dc2faad72a459d7b5bd5c10da98e23dc947cec315757d8f330e5"
+      ],
+      "k": 128,
+      "raw_sha256_by_repeat": [
+        "cda844042a5dc8800e9efb169d4498ca27fbae7236185b0497e52e7a6aeb76ac",
+        "8033e0fac5729c4c42f865760b773c3ccf9411cf662a5d8e38de5e4bef46fc44",
+        "cb71e6eb626386fb134e8798d03100a99e117647bc6ef054cbec7d0d6a352164"
+      ],
+      "repeat_coverage": [
+        0,
+        1,
+        2
+      ],
+      "resource_censor_count": 3,
+      "scale": 30,
+      "status_by_repeat": [
+        "TIMEOUT",
+        "TIMEOUT",
+        "TIMEOUT"
+      ],
+      "unique_deterministic_hash_count": 3,
+      "wall_seconds_by_repeat": [
+        301.717888785,
+        301.791113179,
+        301.656466248
+      ]
+    },
+    {
+      "arm": "Q0",
+      "context_id": "temporal_s30_03a03c5919fac98b_0",
+      "correctness_redlines": [],
+      "deterministic_frontier_telemetry_hash_by_repeat": [
+        "95afdb9fa73cf58cb1afb94ee878c42864db74f163f1e422290fd8602bf19a8a",
+        "95afdb9fa73cf58cb1afb94ee878c42864db74f163f1e422290fd8602bf19a8a",
+        "95afdb9fa73cf58cb1afb94ee878c42864db74f163f1e422290fd8602bf19a8a"
+      ],
+      "k": 128,
+      "raw_sha256_by_repeat": [
+        "1916f1023df1de64f350488755a849a671f1884ca920b8bfa8f4dda99030830d",
+        "5b97eb7a6e8a3be45393263a7a4aa62f1918408393126648ef19aca72e5f28b2",
+        "f5b7c99ae3e4fecdf0a51db1f59e5804108d51e1b98906b7f350a152ce4f0545"
+      ],
+      "repeat_coverage": [
+        0,
+        1,
+        2
+      ],
+      "resource_censor_count": 3,
+      "scale": 30,
+      "status_by_repeat": [
+        "TIMEOUT",
+        "TIMEOUT",
+        "TIMEOUT"
+      ],
+      "unique_deterministic_hash_count": 1,
+      "wall_seconds_by_repeat": [
+        301.07769453,
+        301.243631529,
+        301.189893072
+      ]
+    }
+  ],
+  "unexecuted_task_count": 3145,
+  "unexecuted_tasks_not_treated_as_outcomes": true
+}

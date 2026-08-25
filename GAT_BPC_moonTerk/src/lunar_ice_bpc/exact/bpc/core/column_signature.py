@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 
 from lunar_ice_bpc.exact.core.journey import JourneyColumn
 
@@ -54,3 +55,11 @@ def column_signature_from_journey(column: JourneyColumn) -> ColumnSemanticSignat
             ),
         ),
     )
+
+
+def column_semantic_signature_hash(
+    signature: ColumnSemanticSignature,
+) -> str:
+    """Return the stable hash used by Native/Python route audit bindings."""
+
+    return hashlib.sha256(repr(signature).encode("utf-8")).hexdigest()

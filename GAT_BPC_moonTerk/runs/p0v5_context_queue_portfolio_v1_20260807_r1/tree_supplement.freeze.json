@@ -1,0 +1,69 @@
+{
+  "full_fixed_eligible_instance_set": true,
+  "root_coverage": {
+    "by_scale": {
+      "30": {
+        "calibration": {
+          "context_count": 3,
+          "instance_count": 3,
+          "minimum_contexts": 8,
+          "minimum_instances": 4,
+          "passed": false
+        },
+        "selector_heldout": {
+          "context_count": 2,
+          "instance_count": 2,
+          "minimum_contexts": 6,
+          "minimum_instances": 3,
+          "passed": false
+        },
+        "train": {
+          "context_count": 6,
+          "instance_count": 6,
+          "minimum_contexts": 20,
+          "minimum_instances": 8,
+          "passed": false
+        }
+      },
+      "50": {
+        "calibration": {
+          "context_count": 8,
+          "instance_count": 4,
+          "minimum_contexts": 8,
+          "minimum_instances": 4,
+          "passed": true
+        },
+        "selector_heldout": {
+          "context_count": 7,
+          "instance_count": 3,
+          "minimum_contexts": 6,
+          "minimum_instances": 3,
+          "passed": true
+        },
+        "train": {
+          "context_count": 23,
+          "instance_count": 10,
+          "minimum_contexts": 20,
+          "minimum_instances": 8,
+          "passed": true
+        }
+      }
+    },
+    "passed": false,
+    "violations": [
+      "SCALE30_TRAIN_COVERAGE",
+      "SCALE30_CALIBRATION_COVERAGE",
+      "SCALE30_SELECTOR_HELDOUT_COVERAGE"
+    ]
+  },
+  "root_index_sha256": "de8b4656d82a13a55038cf08e0d7f2ef9e8ddc625079b0c5c161e25ee16e23e2",
+  "row_cap_sec": 3600.0,
+  "schema_version": "lunar_ice_bpc.p0v5_context_queue_portfolio_tree_supplement_freeze.v1",
+  "selected_scales": [
+    30
+  ],
+  "selection_input": "root_context_coverage_only",
+  "selection_uses_arm_outcomes": false,
+  "snapshot_cap_after_supplement": 6,
+  "status": "FROZEN_BEFORE_TREE_SUPPLEMENT_CONTEXTS"
+}

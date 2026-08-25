@@ -1,0 +1,13 @@
+{
+  "artifact_sha256": {
+    "acceptance.freeze.json": "16c56592f8ad14e3bb1a98f3f94b5b5e8112ebecc2dbd7439755c5a5af78f36c",
+    "config.freeze.json": "cfa87e02c0ab175823dd6e9ea2c7c62cf179d948c836b03339a560bb64f8a358",
+    "corpus.freeze.json": "13db147ca7bac0e91aab3743312e28ed79b7e367435bad49344365bbe8666496",
+    "evidence_import.freeze.json": "32e99aaae73eae57c7ad4e0bb85c353d2a5768673ed41d81177bfccfd29fe89e",
+    "folds.freeze.json": "fb473184a8f8c820650216b242d47d59f6b4c68d0ca6f59822b02fe9108fff3c",
+    "interface.freeze.json": "e4bfc9ea9d08da131c1e23f60dd958defd235b4d058a2a2f324d4e13cd2315ae",
+    "source.freeze.json": "48799b7799eba856c5ae3faa7ecefc63acc9def02cc80272afc5018d58543512",
+    "state.initial.json": "414131ace4aa7df908cb87353c8dc611f86b7161835b1e0dc755121af3bb4476"
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_multires_frontier_registry.v1"
+}

@@ -1,0 +1,33 @@
+{
+  "arm_outcome_artifact_count": 0,
+  "binding_hash_status": {
+    "issues": [],
+    "status": "PASS"
+  },
+  "boundary_reached_count": 31,
+  "child_count": 1,
+  "current_child_pid": 159868,
+  "current_rss_gib": 3.0686,
+  "current_scale": 50,
+  "current_state_hash": "950a46ea74957d8b2803dfe6a8f07333f16ad8751a1aef668eca3fea580610f5",
+  "current_wall_sec": 668,
+  "duplicate_count": 0,
+  "engine_status_counts": {
+    "COMPLETE": 5,
+    "FOUND_NEGATIVE_PARTIAL": 24,
+    "MEMORY_LIMIT": 2
+  },
+  "graph_built_count": 31,
+  "label_drop_count": 0,
+  "mem_available_gib": 9.803429,
+  "missing_count": 243,
+  "model_called_count": 0,
+  "orphan_partial_count": 0,
+  "partial_count": 0,
+  "redlines": [],
+  "schema_version": "lunar_ice_bpc.d5_eligibility_heartbeat.v1",
+  "target": 274,
+  "timestamp": "2026-08-25T17:37:05.421385+08:00",
+  "valid_completed": 31,
+  "writer_count": 1
+}

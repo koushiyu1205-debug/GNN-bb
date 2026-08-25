@@ -144,6 +144,17 @@ class LabelingPricingConfig:
     cut_lineage_hash: str = ""
     live_cut_policy_hash: str = ""
     separator_policy_version: str = ""
+    proof_tail_active_column_count: int | None = None
+    proof_tail_active_column_signature_hashes: tuple[str, ...] | None = None
+    proof_tail_round_index: int | None = None
+    proof_tail_previous_proof_wall_sec: float | None = None
+    proof_tail_previous_processed_labels: int | None = None
+    proof_tail_previous_queue_policy_id: str = ""
+    proof_tail_previous_dominance_candidate_checks: int | None = None
+    proof_tail_previous_dominance_wall_sec: float | None = None
+    proof_tail_previous_max_visited_bucket_size: int | None = None
+    proof_tail_dual_delta_l1: float | None = None
+    proof_tail_label_trace_enabled: bool = False
 
     def __post_init__(self) -> None:
         mode = str(self.mode)
@@ -607,6 +618,41 @@ def _run_native_exact_backend(
             live_cut_policy_hash=cfg.live_cut_policy_hash,
             rmp_iteration_id=cfg.rmp_iteration_id,
             separator_policy_version=cfg.separator_policy_version,
+            proof_tail_active_column_count=(
+                cfg.proof_tail_active_column_count
+            ),
+            proof_tail_active_task_sets=(
+                cfg.active_task_sets_for_exact_harvest
+                if cfg.active_task_sets_for_exact_harvest
+                or cfg.proof_tail_active_column_count == 0
+                else None
+            ),
+            proof_tail_active_column_signature_hashes=(
+                cfg.proof_tail_active_column_signature_hashes
+            ),
+            proof_tail_round_index=cfg.proof_tail_round_index,
+            proof_tail_previous_proof_wall_sec=(
+                cfg.proof_tail_previous_proof_wall_sec
+            ),
+            proof_tail_previous_processed_labels=(
+                cfg.proof_tail_previous_processed_labels
+            ),
+            proof_tail_previous_queue_policy_id=(
+                cfg.proof_tail_previous_queue_policy_id
+            ),
+            proof_tail_previous_dominance_candidate_checks=(
+                cfg.proof_tail_previous_dominance_candidate_checks
+            ),
+            proof_tail_previous_dominance_wall_sec=(
+                cfg.proof_tail_previous_dominance_wall_sec
+            ),
+            proof_tail_previous_max_visited_bucket_size=(
+                cfg.proof_tail_previous_max_visited_bucket_size
+            ),
+            proof_tail_dual_delta_l1=cfg.proof_tail_dual_delta_l1,
+            proof_tail_label_trace_enabled=bool(
+                cfg.proof_tail_label_trace_enabled
+            ),
         )
     )
 

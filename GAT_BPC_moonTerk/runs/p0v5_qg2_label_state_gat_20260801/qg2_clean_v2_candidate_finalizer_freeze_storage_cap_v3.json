@@ -1,0 +1,30 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_candidate_finalizer_freeze.v1",
+  "status": "FROZEN_AFTER_STORAGE_CAP_NAMESPACE_ALIGNMENT_BEFORE_FORMAL_FULL20",
+  "development_only": true,
+  "production_default": false,
+  "deployable": false,
+  "frozen_at_local": "2026-08-02T22:38:00+08:00",
+  "collection_id": "qg2_clean_v2",
+  "amendment_id": "storage_cap_downstream_namespace_alignment_v1",
+  "frozen_file_sha256": {
+    "scripts/finalize_p0v5_qg2_clean_v2_candidate.py": "0d636422cb83864e2a80c920aa8dc1f279628f9bdbfa47679daf91c1204d6a82",
+    "scripts/audit_p0v5_qg2_v2_completion.py": "116aa1d735b74390d6e1d2d9181ddc0225937e72b45793c1ef4b7c72a8271cdd",
+    "tests/test_p0v5_qg2_label_state_gat.py": "290007bbd95f770c4203775ef07ccd6768b8badbcfe096fecc0ac760810bbcf1",
+    "tests/test_p0v5_bidirectional_gate_gat.py": "018eab20835200d71416314aa73afca36cef5dd64c41f9f0b19a91b2ba9851ce",
+    "native/lunar_spprc/tests/test_native_pricer.cpp": "f2b88693fdbfea4722fb81a4c2cc41b3ebbf281500e37dd1ebe659cb2b300184",
+    "scripts/check_rcspp_patch_queue.py": "c4a56881930149a4be628ac24a3f7a4decd8abd89d1f08cc5f99e29a8936626c",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_formal_controller_freeze_storage_cap_v3.json": "ab5faf4fc4c8c498292e6d20b3d8861ae953641074acff91f66012b96954fbb8",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_collection_freeze_storage_cap_v4.json": "132cb81be9ea0a45cd4b9755847c4552978c6b05fefd2b1b169a006c6b057a0c",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py": "8ee8c4f493479035c5af5b20259b22b11bdf384dbaa88208a65f2143f77aa9b1",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_gat.py": "018d39c8688f7fb0cedff5fdde29f5fe037253a6fe75fbc21f7c93645f7a5db8",
+    "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42"
+  },
+  "activation_gate": "formal_full20_pass_with_bound_result_hash",
+  "pre_freeze_audit_requirement": "all_non_candidate_requirements_pass",
+  "post_freeze_audit_requirement": "all_requirements_including_candidate_pass",
+  "candidate_model_id": "P0V5_QG2_LABEL_STATE_GAT",
+  "candidate_role": "independent_experiment_candidate",
+  "historical_baseline_mutation_permitted": false,
+  "automatic_production_switch": false
+}

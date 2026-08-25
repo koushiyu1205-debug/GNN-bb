@@ -212,3 +212,41 @@ def test_hybrid_skip_uses_unchanged_exact_fallback_without_midpoint(
     ] == "gat_predicted_midpoint_failure"
     assert result.telemetry["bidirectional_gate_gat_action"] == "SKIP"
     assert not result.telemetry.get("can_certify_no_negative", False)
+
+
+def test_qg2_exception_in_hybrid_restores_literal_q0(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _request()
+    backend = NativeBidirectionalRootPartialHybridBackend()
+
+    def fail_qg2(_request):
+        raise ValueError("manifest drift")
+
+    monkeypatch.setenv(
+        "LUNAR_ICE_PROOF_TAIL_GAT_MANIFEST", "/invalid/manifest.json"
+    )
+
+    monkeypatch.setattr(
+        "lunar_ice_bpc.guidance.proof_queue_label_state_runtime."
+        "prepare_qg2_request_from_environment",
+        fail_qg2,
+    )
+    monkeypatch.setattr(
+        backend,
+        "_p0v4_fallback_backend",
+        lambda _request: (
+            NativeRcsppInprocessBackend(),
+            "native_rcspp_inprocess",
+        ),
+    )
+    result = backend._fallback(
+        request,
+        attempted=True,
+        reason="midpoint_no_audited_negative",
+    )
+    assert result.telemetry["proof_tail_gat_action"] == "Q0"
+    assert result.telemetry[
+        "proof_tail_gat_fallback_reason"
+    ].startswith("qg2_fail_closed:")
+    assert result.telemetry["proof_queue_policy_id"] == "Q0"

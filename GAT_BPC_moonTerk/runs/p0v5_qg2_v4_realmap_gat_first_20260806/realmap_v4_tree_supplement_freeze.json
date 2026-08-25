@@ -1,0 +1,81 @@
+{
+  "candidate_instance_count_per_scale": 20,
+  "deployable": false,
+  "development_only": true,
+  "formal_benchmark_instances_used": false,
+  "instance_split": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_instance_split.json",
+  "instance_split_sha256": "578c049ae1fbb3d6addd1350a88da8dfac0d9c5575483727a51e7c0c6303d53d",
+  "root_pilot_coverage": {
+    "30": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 13,
+      "instance_count": 12,
+      "root_context_count": 13
+    },
+    "50": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 29,
+      "instance_count": 17,
+      "root_context_count": 29
+    }
+  },
+  "root_pilot_freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_collection_freeze.json",
+  "root_pilot_freeze_sha256": "f5cbaac14649f34ab6e75f74d246d4a3bcdc362662579addfcdf24763e7d532b",
+  "root_pilot_index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_snapshot_index.json",
+  "root_pilot_index_sha256": "4ee962affee2e27f1a207951adc9554e04ba63f4c1c01dcdf9c062305f1be6d7",
+  "row_limit_sec": 3600.0,
+  "same_exact_config_and_engine_as_root_pilot": true,
+  "scale_selection_audit": {
+    "outcome_fields_used": [],
+    "required_total_context_count": 50,
+    "scale_coverage": {
+      "30": {
+        "context_count": 13,
+        "instance_count": 12,
+        "partition_context_counts": {
+          "calibration": 3,
+          "heldout": 3,
+          "train": 7
+        },
+        "partition_instance_counts": {
+          "calibration": 3,
+          "heldout": 2,
+          "train": 7
+        },
+        "per_scale_preflight_ready": false
+      },
+      "50": {
+        "context_count": 29,
+        "instance_count": 17,
+        "partition_context_counts": {
+          "calibration": 8,
+          "heldout": 6,
+          "train": 15
+        },
+        "partition_instance_counts": {
+          "calibration": 4,
+          "heldout": 4,
+          "train": 9
+        },
+        "per_scale_preflight_ready": true
+      }
+    },
+    "selected_scales": [
+      30
+    ],
+    "selection_input": "frozen_root_snapshot_index_and_preoutcome_split",
+    "total_context_count": 42
+  },
+  "scale_selection_uses_arm_or_oracle_outcomes": false,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_realmap_v4_tree_supplement_freeze.v1",
+  "selection_policy": "coverage_deficient_scales_all20_standard_bpc_tree_fixed_before_run",
+  "snapshot_capture_can_issue_certificate": false,
+  "snapshot_max_per_instance": 15,
+  "standard_exact_run_certificate_path_unchanged": true,
+  "status": "FROZEN_BEFORE_TREE_SUPPLEMENT_OUTCOMES",
+  "supplement_scales": [
+    30
+  ],
+  "supplement_source_sha256": "406466ef59fc57be7b40bef610411d4457949eb54f2d381960f0bcc0f7424498",
+  "trigger": "completed_root_pilot_failed_snapshot_preflight"
+}

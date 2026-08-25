@@ -1,0 +1,40 @@
+{
+  "created_at": "2026-08-07T10:59:25+08:00",
+  "development_only": true,
+  "deployment_authorized": false,
+  "fitting_gate_profile": "bounded_instance_supported_fitting_only.v2",
+  "frozen_before_scale50_oracle_outcomes": true,
+  "observed_scale50_context_directories": 0,
+  "oracle_execution_freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_oracle_execution_freeze.json",
+  "oracle_execution_freeze_sha256": "5c0746ad7c2404255e61f6f810f4df82d013c6b0e7ea36ac5791dc93febb264d",
+  "partition_minimums": {
+    "calibration": {
+      "contexts": 2,
+      "instances": 2
+    },
+    "heldout": {
+      "contexts": 2,
+      "instances": 2
+    },
+    "train": {
+      "contexts": 4,
+      "instances": 2
+    }
+  },
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v4_fitting_gate_freeze.v1",
+  "source_sha256": {
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/authorize_p0v5_qg2_realmap_v4_instance_balanced_training.py": "8f4c99a03709169f01230400142ff6c31fcfc46d9b6cbf7ac321b8ff712bd850",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/authorize_p0v5_qg2_realmap_v4_training.py": "9d952483744d10e2723cbfb2437b1917df09de09c39d1f9e0658059f688f9ca5"
+  },
+  "thresholds": {
+    "harmful_ratio_threshold": 1.05,
+    "maximum_instance_saved_wall_fraction": 0.5,
+    "minimum_determined_contexts_per_scale": 12,
+    "minimum_determined_instances_per_scale": 6,
+    "minimum_harmful_instances_per_scale": 1,
+    "minimum_nonpositive_contexts_per_scale": 4,
+    "minimum_strict_positive_contexts_per_scale": 2,
+    "minimum_strict_positive_instances_per_scale": 2
+  }
+}

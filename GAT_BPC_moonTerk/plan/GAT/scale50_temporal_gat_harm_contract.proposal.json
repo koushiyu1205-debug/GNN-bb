@@ -1,0 +1,83 @@
+{
+  "activated_subset_audit": {
+    "claim_harm_upper_at_most": 0.1,
+    "claim_only_if_independent_activated_instances_at_least": 29,
+    "confidence": 0.95,
+    "insufficient_activation_status": "INSUFFICIENT_ACTIVATED_EVIDENCE",
+    "method": "ONE_SIDED_EXACT_BINOMIAL",
+    "required_reports": [
+      "ACTIVATION_COVERAGE",
+      "FALSE_CONTINUE",
+      "FALSE_REVERT",
+      "CONTINUE_WALL_RATIO",
+      "REVERT_TAX_RATIO",
+      "ACTIVATED_EXACT_CLOSURE",
+      "ACTIVATED_ACTION_INDUCED_CENSOR",
+      "OOD_VETO",
+      "DISAGREEMENT_VETO",
+      "RESOURCE_PREFLIGHT_VETO"
+    ],
+    "unit": "INDEPENDENT_ACTIVATED_INSTANCE"
+  },
+  "authority": "plan/GAT/P0V4_V5_Temporal_GAT_Additional_5_Questions_Formal_Response_20260825.md",
+  "binary_harm_statistics": {
+    "confidence": 0.95,
+    "harm_upper_at_most": 0.1,
+    "method": "ONE_SIDED_EXACT_BINOMIAL",
+    "minimum_valid_independent_instances_if_zero_harm": 29,
+    "pool_with_scale30": false,
+    "unit": "INDEPENDENT_INSTANCE"
+  },
+  "censor_event": {
+    "action_induced_memory_censor": "HARD_FAIL",
+    "action_induced_timeout": "HARD_FAIL",
+    "baseline_q0_censor": "REPORT_SEPARATELY_NOT_ATTRIBUTED_TO_POLICY",
+    "both_policies_incomplete": "RESOURCE_HARD_AND_UNSAFE_FOR_ACTIVATION"
+  },
+  "comparison": {
+    "baseline": "LITERAL_Q0",
+    "candidate": "TEMPORAL_GAT_POLICY",
+    "candidate_costs_included": [
+      "Q0_BOUNDARY_PREFIX",
+      "QD1_TRIAL",
+      "GRAPH_BUILD",
+      "GAT_INFERENCE",
+      "CONTINUE_OR_REVERSE_MIGRATION",
+      "FAIL_CLOSED_FALLBACK",
+      "FULL_REQUEST_AND_BPC_WALL"
+    ],
+    "primary_scope": "FULL_BPC_INSTANCE_LEVEL_COLLAPSED_E2E"
+  },
+  "hard_redlines": {
+    "action_induced_resource_censor_max": 0,
+    "certificate_semantics_mismatch_max": 0,
+    "correctness_mismatch_max": 0,
+    "creation_id_or_frontier_hash_mismatch_max": 0,
+    "label_drop_max": 0,
+    "migration_conservation_failure_max": 0,
+    "route_true_rc_reconstruction_failure_max": 0,
+    "unauthorized_scope_entry_max": 0
+  },
+  "insufficient_evidence_status": "INSUFFICIENT_EVIDENCE",
+  "performance_harm_event": {
+    "definition": "INSTANCE_COLLAPSED_E2E_RATIO_GE_THRESHOLD",
+    "ratio": "T_TEMPORAL_GAT_POLICY_OVER_T_LITERAL_Q0",
+    "threshold": 1.05
+  },
+  "required_reports": [
+    "INSTANCE_WEIGHTED_GEOMETRIC_MEAN",
+    "MEDIAN_RATIO",
+    "P90_RATIO",
+    "P95_RATIO",
+    "WORST_RATIO",
+    "PAIRED_LOG_RATIO_95_CI",
+    "EXACT_CLOSURE_COUNTS",
+    "TIMEOUT_AND_MEMORY_CENSOR_COUNTS",
+    "MIGRATION_WALL",
+    "PEAK_EXTRA_MEMORY",
+    "ACTIVATED_SUBSET_AUDIT"
+  ],
+  "schema_version": "lunar_ice_bpc.scale50_temporal_gat_harm_contract.proposal.v1",
+  "status": "PROPOSAL_REQUIRES_USER_CONFIRMATION",
+  "threshold_selection_after_outcome_forbidden": true
+}

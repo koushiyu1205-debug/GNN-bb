@@ -1,0 +1,40 @@
+{
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "differential_redlines": [],
+  "gate_is_outcome_independent_and_monotone": true,
+  "maximum_determined_instances_by_scale": {
+    "30": 31,
+    "50": 39
+  },
+  "minimum_determined_instances_gate": 32,
+  "partial_file_count": 0,
+  "production_switch_authorized": false,
+  "published_correctness_redline_row_count": 0,
+  "published_resource_censor_count": 0,
+  "published_status_counts": {
+    "COMPLETE": 9
+  },
+  "published_task_count": 9,
+  "reason": "NO_PASSING_TEMPORAL_TRIAL_K_SCALE30_MAX_DETERMINED_INSTANCES_31_LT_32",
+  "scheduled_context_count_by_scale": {
+    "30": 32,
+    "50": 98
+  },
+  "scheduled_distinct_instance_count_by_scale": {
+    "30": 31,
+    "50": 39
+  },
+  "scheduled_task_count": 3510,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_trial_early_terminal_audit.v1",
+  "source_config_freeze_sha256": "81a821a69ac270ef610d508f6d132fa4a921c1e3a5b13b1e6cc2597f22abffa9",
+  "source_contexts_sha256": "e1539b3142fad2d3844e3eafd4b4753d60e9bd2e1f0ed3c713207a50ff1ed717",
+  "source_freeze_sha256": "df10bd7b7e3e6917ef23b6a940b7fc7d665933768c25d995a55ecfe9e4bc0e4c",
+  "source_schedule": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round3_20260821/train_trial_schedule.freeze.json",
+  "source_schedule_sha256": "6cc8473b2cfc1527be8acd48cc40131325d419d594bae4d18247f033630d7278",
+  "stage": "TRAIN_TRIALS",
+  "terminal_gate": "minimum_determined_instances_per_scale",
+  "terminal_negative": true,
+  "unexecuted_task_count": 3501,
+  "unexecuted_tasks_not_treated_as_outcomes": true
+}

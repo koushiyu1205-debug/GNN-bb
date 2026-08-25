@@ -1,0 +1,17 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_post_oracle_controller_freeze.v1",
+  "status": "FROZEN_BEFORE_ORACLE_COMPLETION_AND_ANY_MODEL_TRAINING",
+  "development_only": true,
+  "deployable": false,
+  "frozen_at_local": "2026-08-01T20:43:18+08:00",
+  "frozen_file_sha256": {
+    "scripts/run_p0v5_qg2_training_after_oracle.py": "3ac2d3e13f3ffc6282ab4db55badb9f3f528c89d747135e87f93b63341fd4128",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v1_oracle_execution_freeze.json": "87007b2abf9217a86b3231040515e02fead23ea57840bd6a8a33305191e8387e"
+  },
+  "training_gate": "bounded_oracle_v4_pass_and_training_permitted",
+  "models": ["linear", "mlp", "gat"],
+  "calibration_repeats": 3,
+  "allowed_exact_engine_hash": "0389484e5f5623f2",
+  "allowed_exact_action_policy_hash": "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+  "automatic_e2e_after_calibration": false
+}

@@ -1,0 +1,10 @@
+{
+  "development_only": true,
+  "oracle_pid": 2202101,
+  "paused_parent_pid": 2202095,
+  "poll_sec": 30.0,
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v4_gat_handoff.v1",
+  "status": "WAITING_FOR_FROZEN_ORACLE",
+  "updated_at": "2026-08-07T10:12:47+08:00"
+}

@@ -1,0 +1,69 @@
+{
+  "oracle_gate": {
+    "all_exact_safe": true,
+    "context_count": 110,
+    "frozen_guidance_bucket_width": 0.001,
+    "max_instance_saved_wall_fraction": 0.09146978025460083,
+    "net_gain_5pct_context_count": 56,
+    "passed": false,
+    "queue_action_headroom": {
+      "assumption": "post_native_pipeline_invariant_under_queue_ordering",
+      "available_admission_context_count": 84,
+      "diagnostic_only": true,
+      "scale30": {
+        "admission_context_count": 22,
+        "fixed_pipeline_dominates_context_count": 0,
+        "instance_count": 17,
+        "maximum_post_native_fixed_pipeline_share": 0.026024258126501245,
+        "median_post_native_fixed_pipeline_share": 0.01547698202610931,
+        "median_queue_visible_native_search_share": 0.9845230179738906,
+        "median_raw_to_native_harvest_share": 0.4992906283741221,
+        "median_required_native_search_reduction_for_target": 0.05078601448726054,
+        "target_feasible_context_count": 22
+      },
+      "scale50": {
+        "admission_context_count": 62,
+        "fixed_pipeline_dominates_context_count": 0,
+        "instance_count": 51,
+        "maximum_post_native_fixed_pipeline_share": 0.05956402153241983,
+        "median_post_native_fixed_pipeline_share": 0.014926474916429684,
+        "median_queue_visible_native_search_share": 0.9850735250835703,
+        "median_raw_to_native_harvest_share": 0.445696775995096,
+        "median_required_native_search_reduction_for_target": 0.050757632597187255,
+        "target_feasible_context_count": 62
+      },
+      "target_end_to_end_gain": 0.05,
+      "training_authority": "none_use_matched_qo2_q0_oracle_gate",
+      "unavailable_context_count": 116,
+      "unavailable_reasons": {
+        "milestone_not_reached": 90,
+        "not_an_admission_milestone": 26
+      }
+    },
+    "queue_action_headroom_role": "mechanism_diagnostic_only_matched_oracle_is_authoritative",
+    "reason": "bounded_oracle_gate_failed",
+    "scale30": {
+      "bootstrap_95_upper": 0.9113778979321988,
+      "context_count": 48,
+      "determined_context_count": 47,
+      "paired_geomean_ratio": 0.8667568313601623,
+      "positive_context_count": 29,
+      "positive_fraction": 0.6170212765957447,
+      "positive_instance_count": 28,
+      "right_censored_or_mismatched_context_count": 1
+    },
+    "scale50": {
+      "bootstrap_95_upper": 1.034842021912077,
+      "context_count": 62,
+      "determined_context_count": 54,
+      "paired_geomean_ratio": 0.9113061461392116,
+      "positive_context_count": 27,
+      "positive_fraction": 0.5,
+      "positive_instance_count": 24,
+      "right_censored_or_mismatched_context_count": 8
+    }
+  },
+  "oracle_status": "ORACLE_GATE_FAILED_WITH_BUDGET_REMAINING",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_post_oracle_controller_state.v2",
+  "status": "NOT_STARTED_ORACLE_GATE_FAILED"
+}

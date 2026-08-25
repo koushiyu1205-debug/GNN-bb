@@ -9,7 +9,10 @@ from time import perf_counter
 from typing import Callable, Mapping
 
 from lunar_ice_bpc.exact.bpc.core.column_pool import BpcColumn, ColumnPool
-from lunar_ice_bpc.exact.bpc.core.column_signature import column_signature_from_journey
+from lunar_ice_bpc.exact.bpc.core.column_signature import (
+    column_semantic_signature_hash,
+    column_signature_from_journey,
+)
 from lunar_ice_bpc.exact.bpc.core.master_column_view import MasterColumnView
 from lunar_ice_bpc.exact.bpc.master.reduced_cost import ReducedCostContext
 from lunar_ice_bpc.exact.bpc.pricing.backends.base import (
@@ -594,6 +597,16 @@ def run_true_dual_root_final_judge(
     one_deviation_sparse_tail_action_resolver: (
         Callable[[Mapping[str, object]], object] | None
     ) = None,
+    proof_tail_active_column_count: int | None = None,
+    proof_tail_round_index: int | None = None,
+    proof_tail_previous_proof_wall_sec: float | None = None,
+    proof_tail_previous_processed_labels: int | None = None,
+    proof_tail_previous_queue_policy_id: str = "",
+    proof_tail_previous_dominance_candidate_checks: int | None = None,
+    proof_tail_previous_dominance_wall_sec: float | None = None,
+    proof_tail_previous_max_visited_bucket_size: int | None = None,
+    proof_tail_dual_delta_l1: float | None = None,
+    proof_tail_label_trace_enabled: bool = False,
 ) -> FinalJudgeResult:
     """Run exhaustive fixed-graph pricing with fail-closed proof semantics.
 
@@ -660,6 +673,28 @@ def run_true_dual_root_final_judge(
             one_deviation_sparse_tail_action_resolver=(
                 one_deviation_sparse_tail_action_resolver
             ),
+            proof_tail_active_column_count=proof_tail_active_column_count,
+            proof_tail_round_index=proof_tail_round_index,
+            proof_tail_previous_proof_wall_sec=(
+                proof_tail_previous_proof_wall_sec
+            ),
+            proof_tail_previous_processed_labels=(
+                proof_tail_previous_processed_labels
+            ),
+            proof_tail_previous_queue_policy_id=(
+                proof_tail_previous_queue_policy_id
+            ),
+            proof_tail_previous_dominance_candidate_checks=(
+                proof_tail_previous_dominance_candidate_checks
+            ),
+            proof_tail_previous_dominance_wall_sec=(
+                proof_tail_previous_dominance_wall_sec
+            ),
+            proof_tail_previous_max_visited_bucket_size=(
+                proof_tail_previous_max_visited_bucket_size
+            ),
+            proof_tail_dual_delta_l1=proof_tail_dual_delta_l1,
+            proof_tail_label_trace_enabled=proof_tail_label_trace_enabled,
             column_pool=column_pool,
             master_view=master_view,
             node_id=node_id,
@@ -850,6 +885,16 @@ def _run_labeling_pricer_final_judge(
     pricing_lifecycle_scope: str = (
         PRICING_LIFECYCLE_SCOPE_ROOT_CG
     ),
+    proof_tail_active_column_count: int | None = None,
+    proof_tail_round_index: int | None = None,
+    proof_tail_previous_proof_wall_sec: float | None = None,
+    proof_tail_previous_processed_labels: int | None = None,
+    proof_tail_previous_queue_policy_id: str = "",
+    proof_tail_previous_dominance_candidate_checks: int | None = None,
+    proof_tail_previous_dominance_wall_sec: float | None = None,
+    proof_tail_previous_max_visited_bucket_size: int | None = None,
+    proof_tail_dual_delta_l1: float | None = None,
+    proof_tail_label_trace_enabled: bool = False,
 ) -> FinalJudgeResult:
     start = perf_counter()
     max_exact_tasks = (
@@ -901,6 +946,21 @@ def _run_labeling_pricer_final_judge(
     normalized_harvest_max_processed_labels = max(
         0, int(harvest_max_processed_labels)
     )
+    active_column_signature_hashes = None
+    if master_view is not None:
+        active_signatures = tuple(
+            master_view.signatures_by_node.get(str(node_id), set())
+        )
+        active_column_signature_hashes = tuple(sorted(
+            column_semantic_signature_hash(signature)
+            for signature in active_signatures
+        ))
+        if (
+            proof_tail_active_column_count is not None
+            and len(active_column_signature_hashes)
+            != int(proof_tail_active_column_count)
+        ):
+            active_column_signature_hashes = None
     negative_escape_requested = _env_bool(
         EXACT_NEGATIVE_ESCAPE_ENABLED_ENV,
         default=False,
@@ -1035,6 +1095,35 @@ def _run_labeling_pricer_final_judge(
                 cut_lineage_hash=context.cut_lineage_hash,
                 live_cut_policy_hash=context.live_cut_policy_hash,
                 separator_policy_version=context.separator_policy_version,
+                proof_tail_active_column_count=(
+                    proof_tail_active_column_count
+                ),
+                proof_tail_active_column_signature_hashes=(
+                    active_column_signature_hashes
+                ),
+                proof_tail_round_index=proof_tail_round_index,
+                proof_tail_previous_proof_wall_sec=(
+                    proof_tail_previous_proof_wall_sec
+                ),
+                proof_tail_previous_processed_labels=(
+                    proof_tail_previous_processed_labels
+                ),
+                proof_tail_previous_queue_policy_id=(
+                    proof_tail_previous_queue_policy_id
+                ),
+                proof_tail_previous_dominance_candidate_checks=(
+                    proof_tail_previous_dominance_candidate_checks
+                ),
+                proof_tail_previous_dominance_wall_sec=(
+                    proof_tail_previous_dominance_wall_sec
+                ),
+                proof_tail_previous_max_visited_bucket_size=(
+                    proof_tail_previous_max_visited_bucket_size
+                ),
+                proof_tail_dual_delta_l1=proof_tail_dual_delta_l1,
+                proof_tail_label_trace_enabled=bool(
+                    proof_tail_label_trace_enabled
+                ),
             ),
             branch_context=branch_context,
             cut_context=cut_context,
@@ -1671,6 +1760,38 @@ def _run_labeling_pricer_final_judge(
                 "",
             ),
             "labeling_final_judge_proof_pass_wall_time": round(proof_pass_wall, 6),
+            "labeling_final_judge_proof_pass_processed_labels": int(
+                (proof_pass_payload.get("telemetry") or {}).get(
+                    "processed_labels"
+                )
+                or proof_pass_payload.get("processed_labels")
+                or 0
+            ),
+            "labeling_final_judge_proof_pass_queue_policy_id": str(
+                (proof_pass_payload.get("telemetry") or {}).get(
+                    "proof_queue_policy_id"
+                )
+                or proof_pass_payload.get("proof_queue_policy_id")
+                or "Q0"
+            ),
+            "labeling_final_judge_proof_pass_dominance_candidate_checks": int(
+                (proof_pass_payload.get("telemetry") or {}).get(
+                    "dominance_candidate_checks"
+                )
+                or 0
+            ),
+            "labeling_final_judge_proof_pass_dominance_wall_sec": float(
+                (proof_pass_payload.get("telemetry") or {}).get(
+                    "dominance_wall_time_seconds"
+                )
+                or 0.0
+            ),
+            "labeling_final_judge_proof_pass_max_visited_bucket_size": int(
+                (proof_pass_payload.get("telemetry") or {}).get(
+                    "max_visited_bucket_size"
+                )
+                or 0
+            ),
             "labeling_final_judge_proof_pass_can_certify_no_negative": bool(
                 proof_pass_payload.get("can_certify_no_negative")
             ),

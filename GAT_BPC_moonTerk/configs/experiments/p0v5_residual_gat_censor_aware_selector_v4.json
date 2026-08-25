@@ -1,0 +1,184 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_experiment_config.v4",
+  "experiment_id": "p0v5_residual_gat_censor_aware_selector_v4_20260815",
+  "run_root": "runs/p0v5_residual_gat_censor_aware_selector_v4_20260815",
+  "v3_run_root": "runs/p0v5_interaction_gat_queue_selector_v3_20260814",
+  "v3_expected_terminal_reason": "RESOURCE_CENSOR_UNDETERMINED",
+  "development_only": true,
+  "deployment_authorized": false,
+  "production_switch_authorized": false,
+  "production_default": "no_cut",
+  "runtime_policy": "P0V5_ROOT_INTERACTION_GAT_SELECTOR_V4",
+  "lifecycle_authority": ["root_cg"],
+  "fallback_action": "Q0",
+  "action_universe": ["Q0", "QGR1", "QD1"],
+  "permanent_forced_veto_arms": ["QB1"],
+  "allowed_scales": [30, 50],
+  "literal_bypass_scales": [5, 10, 20],
+  "literal_bypass_lifecycles": ["tree_node"],
+  "selected_exact_config": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "native_build_dir": "build/native-spprc-residual-gat-v4",
+  "candidate_instance_root": "data/p0v5_residual_gat_censor_aware_selector_v4_candidates",
+  "formal_instance_root": "data/instances",
+  "split": {
+    "train": {"source_v3_partition": "train", "instances_per_scale": 14},
+    "calibration": {"source_v3_partition": "selector_heldout", "instances_per_scale": 4},
+    "selector_heldout": {"source": "new_generated", "instances_per_scale": 4},
+    "development_e2e": {"source_v3_partition": "development_e2e", "instances_per_scale": 3},
+    "same_instance_all_contexts": true,
+    "instance_total_weight": 1.0,
+    "maximum_natural_contexts_per_instance": 3
+  },
+  "candidate_generation": {
+    "seed_base": 260815000,
+    "maximum_new_instances_per_scale": 30,
+    "initial_heldout_instances_per_scale": 4,
+    "outcome_blind_fixed_seed_order": true
+  },
+  "trace_reservoir": {
+    "mode": "qgr1_stratified_reservoir_v1",
+    "existing_dominator_preference_cap": 12500,
+    "incoming_dominator_preference_cap": 12500,
+    "surface_reservoir_count": 3125,
+    "surface_labels_per_bucket": 8,
+    "witness_route_cap": 512,
+    "witness_ancestor_cap": 25000,
+    "final_label_state_row_cap": 100000,
+    "training_pair_cap_per_context": 50000,
+    "seed": "first_64_bits_sha256_state_hash",
+    "bottom_k_hash": "stateless_mix64_v1"
+  },
+  "execution": {
+    "blocked_fresh_process_repeats": 3,
+    "single_native_process": true,
+    "memory_limit_gb": 10.867,
+    "replay_caps_sec": {"30": 300, "50": 600},
+    "formal_bpc_cap_sec": 3600,
+    "q0_milestone_screen_before_arm": true,
+    "minimum_comparable_blocks": 2,
+    "arm_order": "rotate_by_state_hash",
+    "q0_repeated_in_every_block": true
+  },
+  "qd1_admission": {
+    "universal_benefit": {
+      "minimum_determined_train_instances": 11,
+      "minimum_strong_benefit_instances": 10,
+      "maximum_harmful_instances": 1
+    },
+    "selective": {
+      "minimum_determined_train_context_fraction": 0.75,
+      "minimum_determined_train_instances": 11,
+      "minimum_strong_benefit_instances": 3,
+      "minimum_neutral_or_harm_instances": 4
+    },
+    "scale30_allowed_modes": ["universal_benefit", "selective"],
+    "scale50_required_mode": "selective",
+    "scale50_q0_qd1_oracle_gm_at_most": 0.98,
+    "scale50_minimum_non_q0_winner_instances": 5
+  },
+  "qgr1_training": {
+    "minimum_trace_complete_train_instances_per_scale": 11,
+    "inner_train_validation_instances_per_scale": [11, 3],
+    "maximum_epochs": 40,
+    "patience": 8,
+    "supervised_pair_fraction": 0.75,
+    "neutral_pair_fraction": 0.25,
+    "neutral_huber_weight": 0.1,
+    "potential_l1_weight": 0.00001,
+    "hard_zero_quantile": 0.75,
+    "bucket_width": 0.0001,
+    "minimum_actionable_pair_accuracy": 0.70,
+    "minimum_family_accuracy_exclusive": 0.55,
+    "minimum_neutral_no_reorder_accuracy": 0.70
+  },
+  "qgr1_force_on": {
+    "contexts_per_scale": 4,
+    "per_scale_gm_strictly_below": 1.0,
+    "minimum_beneficial_instances": 2,
+    "maximum_ratio_ge_1_05": 0,
+    "minimum_residual_win_ratio": 0.97,
+    "maximum_reordered_label_fraction": 0.15,
+    "maximum_scoring_fraction_of_proof_wall": 0.02
+  },
+  "portfolio_headroom": {
+    "oracle_gm_at_most_per_scale": 0.95,
+    "minimum_non_q0_winner_instances": 5,
+    "scale50_requires_beneficial_neutral_harm": true
+  },
+  "selector_training": {
+    "candidate_model": "gat",
+    "control_models": ["mlp", "linear", "no_message", "shuffled_topology"],
+    "seeds": [61635, 91267, 170141],
+    "fold_count": 5,
+    "maximum_epochs": 200,
+    "patience": 25,
+    "hidden_dim": 16,
+    "attention_heads": 2,
+    "dropout": 0.1,
+    "residual": true,
+    "layer_norm": true,
+    "maximum_parameters_exclusive": 20000,
+    "torch_threads": 1,
+    "resource_censor_bce_weight": 0.5
+  },
+  "threshold_grid": {
+    "minimum_benefit_probability": [0.60, 0.70, 0.80, 0.90],
+    "maximum_adverse_probability": [0.02, 0.05, 0.10],
+    "minimum_expected_gain": [0.02, 0.05, 0.10],
+    "risk_penalty": [0.5, 1.0, 2.0],
+    "maximum_resource_probability": [0.02, 0.05, 0.10],
+    "resource_risk_penalty": [0.5, 1.0, 2.0]
+  },
+  "calibration_gate": {
+    "minimum_activation_instances_per_scale": 2,
+    "net_gm_strictly_below": 1.0,
+    "harmful_adverse_resource_activation_limit": 0,
+    "minimum_topology_rank_drop_combined_or_scale50": 0.02,
+    "scale50_gat_strictly_beats_simple_controls": true,
+    "scale30_gat_not_worse_than_simple_controls": true,
+    "combined_gat_strictly_beats_simple_controls": true
+  },
+  "heldout_gate": {
+    "minimum_activation_instances_per_scale": 2,
+    "net_gm_strictly_below": 1.0,
+    "harmful_adverse_resource_censor_limit": 0,
+    "warm_graph_tensorization_inference_p99_ms_at_most": 10.0,
+    "scale50_and_combined_strictly_beat_mlp_linear": true,
+    "scale30_not_worse_than_simple_controls": true,
+    "not_worse_than_topology_controls": true,
+    "one_shot_no_reselection": true
+  },
+  "development_e2e_gate": {
+    "net_gm_strictly_below": 1.0,
+    "exact_count_may_not_decrease": true,
+    "minimum_activation_instances_per_scale": 2,
+    "worst_instance_median_ratio_at_most": 1.10,
+    "tree_model_calls_required": 0
+  },
+  "formal_gate": {
+    "instances_per_scale": 20,
+    "small_scales": {"scales": [5, 10, 20], "exact_required": 20, "gm_at_most": 1.01, "model_calls_required": 0},
+    "scale30": {"exact_required": 20, "common_exact_gm_strictly_below": 1.0, "par2_may_not_increase": true},
+    "scale50": {"exact_count_may_not_decrease": true, "minimum_exact": 15, "common_exact_gm_strictly_below": 1.0, "par2_may_not_increase": true},
+    "minimum_activation_instances_per_large_scale": 5,
+    "large_scale_tail": {"p90_ratio_at_most": 1.05, "worst_ratio_at_most": 1.20},
+    "strong_speedup_gm_at_most": 0.95,
+    "promotion_requires_bootstrap95_upper_strictly_below": 1.0
+  },
+  "stop_reasons": [
+    "V4_NATIVE_TELEMETRY_REDLINE",
+    "TRACE_RESERVOIR_CAPACITY_OR_WITNESS_FAILURE",
+    "INSTANCE_FEATURE_FOLD_OR_OUTCOME_LEAKAGE",
+    "INSUFFICIENT_FRESH_ROOT_COVERAGE",
+    "INSUFFICIENT_DETERMINED_COVERAGE",
+    "NO_QD1_RESIDUAL_GAT_FEASIBILITY",
+    "NO_SCALE30_GAT_PORTFOLIO_HEADROOM",
+    "NO_SCALE50_GAT_PORTFOLIO_HEADROOM",
+    "NO_SAFE_GAT_THRESHOLD",
+    "NO_GAT_ADVANTAGE",
+    "HELDOUT_FRESH_FAILED",
+    "DEVELOPMENT_E2E_FAILED",
+    "FORMAL_SMALL_SCALE_MODEL_CALL",
+    "FREEZE_HASH_DRIFT"
+  ]
+}

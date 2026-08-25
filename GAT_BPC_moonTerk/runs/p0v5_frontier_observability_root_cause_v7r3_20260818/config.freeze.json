@@ -1,0 +1,57 @@
+{
+  "actions": [
+    "QPF0",
+    "QPD1"
+  ],
+  "allowed_scales": [
+    30,
+    50
+  ],
+  "candidate_training_forbidden": true,
+  "coverage_audit": {
+    "binomial_tail_algorithm": "stable_lower_cdf_recurrence_v1",
+    "confidence": 0.95,
+    "maximum_repaired_candidate_cap": 600,
+    "primary_cohort": "v7_pilot_scale30",
+    "target_eligible_instances": [
+      8,
+      37
+    ]
+  },
+  "deployment_authorized": false,
+  "development_only": true,
+  "experiment_id": "p0v5_frontier_observability_root_cause_v7r3_20260818",
+  "feature_sufficiency": {
+    "fold_count": 5,
+    "maximum_epochs": 200,
+    "maximum_gat_gap_to_best_control": 0.02,
+    "maximum_similar_opposite_label_fraction": 0.35,
+    "minimum_scale50_balanced_accuracy": 0.65,
+    "minimum_scale50_rank_accuracy": 0.65,
+    "model_kinds": [
+      "gat",
+      "mlp",
+      "linear",
+      "no_message",
+      "shuffled_topology"
+    ],
+    "patience": 25,
+    "seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "similar_pair_distance_quantile": 0.1
+  },
+  "frozen_before_coverage_repair_and_feature_diagnostic": true,
+  "manifest_generation_forbidden": true,
+  "probe_boundary": 4096,
+  "production_switch_authorized": false,
+  "qpf0_qpd1_outcomes_imported_read_only": true,
+  "run_root": "runs/p0v5_frontier_observability_root_cause_v7r3_20260818",
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_root_cause_config.v1",
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v5_frontier_observability_root_cause_v7r3.json",
+  "source_config_sha256": "f3765e2c07ad76c3c165932383ea42b0fe943128ef92aaf0049ba902fe3cc18d",
+  "source_v7r2_run_root": "runs/p0v5_frontier_observability_root_cause_v7r2_20260818",
+  "threshold_search_forbidden": true
+}

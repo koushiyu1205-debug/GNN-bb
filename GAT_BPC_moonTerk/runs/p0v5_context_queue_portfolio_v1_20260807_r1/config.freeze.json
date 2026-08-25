@@ -1,0 +1,221 @@
+{
+  "action_universe": [
+    "Q0",
+    "QGR1",
+    "QD1",
+    "QB1"
+  ],
+  "allowed_scales": [
+    30,
+    50
+  ],
+  "arm_admission": {
+    "correctness_redline_limit": 0,
+    "minimum_determined_train_contexts": 12,
+    "minimum_neutral_or_harm_contexts": 2,
+    "minimum_ratio_le_0_95_contexts": 2,
+    "minimum_ratio_le_0_95_instances": 2,
+    "minimum_train_instances": 6
+  },
+  "context_coverage": {
+    "calibration": {
+      "minimum_contexts": 8,
+      "minimum_instances": 4,
+      "target_contexts": 12
+    },
+    "maximum_per_instance": 3,
+    "selector_heldout": {
+      "minimum_contexts": 6,
+      "minimum_instances": 3,
+      "target_contexts": 9
+    },
+    "train": {
+      "minimum_contexts": 20,
+      "minimum_instances": 8,
+      "target_contexts": 30
+    }
+  },
+  "deployment_authorized": false,
+  "development_e2e_gate": {
+    "correctness_redline_limit": 0,
+    "exact_count_may_not_decrease": true,
+    "net_gm_strictly_below": 1.0,
+    "worst_context_median_ratio_at_most": 1.1
+  },
+  "development_instance_root": "data/p0v5_qg2_realmap_development_v4",
+  "development_only": true,
+  "execution": {
+    "arm_order": "rotate_by_state_hash",
+    "blocked_fresh_process_repeats": 3,
+    "formal_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "q0_repeated_in_every_block": true,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "same_prefrozen_milestone_required": true,
+    "single_native_process": true
+  },
+  "experiment_id": "p0v5_context_queue_portfolio_v1_20260807_r1",
+  "fallback_action": "Q0",
+  "formal_gate": {
+    "instances_per_scale": 20,
+    "large_scale_tail": {
+      "p90_ratio_at_most": 1.05,
+      "worst_ratio_at_most": 1.2
+    },
+    "promotion_requires_bootstrap95_upper_strictly_below": 1.0,
+    "scale30": {
+      "common_exact_gm_strictly_below": 1.0,
+      "exact_required": 20,
+      "par2_may_not_increase": true
+    },
+    "scale50": {
+      "common_exact_gm_strictly_below": 1.0,
+      "exact_count_may_not_decrease": true,
+      "minimum_exact": 15,
+      "par2_may_not_increase": true
+    },
+    "small_scales": {
+      "exact_required": 20,
+      "gm_at_most": 1.01,
+      "model_calls_required": 0,
+      "scales": [
+        5,
+        10,
+        20
+      ]
+    },
+    "strong_speedup_gm_at_most": 0.95
+  },
+  "formal_instance_root": "data/instances",
+  "heldout_gate": {
+    "adverse_activation_limit": 0,
+    "correctness_redline_limit": 0,
+    "harmful_activation_limit": 0,
+    "minimum_activation_instances_per_scale": 2,
+    "net_gm_strictly_below": 1.0,
+    "one_shot_no_reselection": true,
+    "warm_tensorization_inference_p99_ms_at_most": 10.0
+  },
+  "historical_inputs": {
+    "old_single_run_arm_outcomes": "diagnostic_only",
+    "qo2_leaked_outcomes": "diagnostic_only",
+    "tinygat": "diagnostic_only",
+    "v3_synthetic_selector": "diagnostic_only"
+  },
+  "instance_split_per_scale": {
+    "calibration": 4,
+    "development_e2e": 3,
+    "selector_heldout": 3,
+    "train": 10
+  },
+  "literal_bypass_scales": [
+    5,
+    10,
+    20
+  ],
+  "native_build_dir": "build/native-spprc-context-queue-portfolio-v1",
+  "portfolio_headroom_gate": {
+    "correctness_redline_limit": 0,
+    "minimum_non_q0_winner_instances_per_scale": 3,
+    "oracle_gm_at_most_per_scale": 0.95
+  },
+  "production_default": "no_cut",
+  "production_switch_authorized": false,
+  "qgr1_bucket_width": 0.0001,
+  "qgr1_smoke_gate": {
+    "force_on_context_count": 8,
+    "force_on_instances": 8,
+    "maximum_epochs": 40,
+    "maximum_ratio_ge_1_05_contexts": 1,
+    "minimum_beneficial_instances_per_scale": 1,
+    "overall_actionable_pair_accuracy_min": 0.7,
+    "overall_gm_strictly_below": 0.98,
+    "patience": 8,
+    "per_family_accuracy_strictly_above": 0.55,
+    "per_scale_gm_at_most": 1.02,
+    "q0_complete_qgr1_censor_limit": 0,
+    "train_validation_instances": [
+      8,
+      2
+    ]
+  },
+  "run_root": "runs/p0v5_context_queue_portfolio_v1_20260807_r1",
+  "schema_version": "lunar_ice_bpc.p0v5_context_queue_portfolio_config_freeze.v1",
+  "selected_exact_config": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "selector_tiebreak_order": [
+    "zero_correctness_redline",
+    "zero_calibration_harmful_activation_or_noop",
+    "minimum_worst_scale_gm",
+    "minimum_instance_weighted_combined_gm",
+    "minimum_harmful_wilson95_upper",
+    "minimum_preparation_p99",
+    "minimum_parameter_count"
+  ],
+  "selector_training": {
+    "attention_heads": 2,
+    "hidden_dim": 32,
+    "instance_balanced": true,
+    "loss": {
+      "adverse_bce": 1.0,
+      "benefit_bce": 1.0,
+      "pairwise_rank": 0.25,
+      "positive_gain_huber": 0.5
+    },
+    "maximum_epochs": 200,
+    "maximum_parameters": 50000,
+    "model_order": [
+      "gat",
+      "mlp",
+      "linear"
+    ],
+    "ood_relative_margin": 0.05,
+    "patience": 25,
+    "seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "torch_threads": 1
+  },
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v5_context_queue_portfolio_v1.json",
+  "source_config_sha256": "9b44ddb4422296b60b81141b5e256e03c3013bb4bce360b4c4d05053ebd57867",
+  "status": "FROZEN_BEFORE_ANY_PORTFOLIO_OUTCOME",
+  "stop_reasons": [
+    "CORRECTNESS_REDLINE",
+    "INSTANCE_OR_FEATURE_LEAKAGE",
+    "INSUFFICIENT_CONTEXT_COVERAGE",
+    "NO_SCALE30_PORTFOLIO_HEADROOM",
+    "NO_SCALE50_PORTFOLIO_HEADROOM",
+    "HELDOUT_FRESH_FAILED",
+    "DEVELOPMENT_E2E_EXACT_COUNT_DECREASED",
+    "FORMAL_SMALL_SCALE_MODEL_CALL",
+    "FREEZE_HASH_DRIFT",
+    "UNDETERMINED_BY_CONTINUOUS_RESOURCE_CENSOR"
+  ],
+  "threshold_grid": {
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "risk_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ]
+  }
+}

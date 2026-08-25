@@ -174,6 +174,11 @@ def _live_subset_row_payload(
             negative_eps=negative_eps,
             cache=DirectPricingCache(),
             cut_context=live_context,
+            active_task_sets={
+                frozenset(column.task_set) for column in universe
+            },
+            proof_tail_active_column_count=len(universe),
+            proof_tail_round_index=0,
         )
     final_judge = {} if judge is None else judge.pricing_payload
     priced_columns = tuple() if judge is None else judge.all_priced_columns

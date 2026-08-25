@@ -1,0 +1,61 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_late_switch_config.v1",
+  "experiment_id": "p0v5_temporal_frontier_late_switch_oracle_v10_20260818",
+  "run_root": "runs/p0v5_temporal_frontier_late_switch_oracle_v10_20260818",
+  "source_preaction_run_root": "runs/p0v5_frontier_observability_root_cause_v7r2_20260818",
+  "source_terminal_run_root": "runs/p0v5_multires_frontier_observability_v9r1_20260818",
+  "reference_native_build": "build/native-spprc-counterfactual-prefix-v8r1",
+  "temporal_native_build": "build/native-spprc-temporal-frontier-v10",
+  "allowed_scales": [30, 50],
+  "pilot_instances_per_scale": 8,
+  "instance_selection": "one_context_per_instance_then_sha256_v10_scale_context_instance_state",
+  "decision_boundaries": {
+    "30": [4096],
+    "50": [4096, 8192, 16384]
+  },
+  "observation_prefixes": {
+    "4096": [4096],
+    "8192": [4096, 8192],
+    "16384": [4096, 8192, 16384]
+  },
+  "execution": {
+    "blocked_fresh_process_repeats": 3,
+    "replay_caps_sec": {"30": 300, "50": 600},
+    "memory_limit_gb": 10.867,
+    "single_native_process": true,
+    "task_limit_default": 6
+  },
+  "native_differential": {
+    "case_count": 500,
+    "mismatch_count_required": 0
+  },
+  "probe_overhead_gate": {
+    "gm_at_most": 1.01,
+    "worst_ratio_at_most": 1.05
+  },
+  "scale30_gate": {
+    "minimum_determined_instances": 7,
+    "minimum_qpd1_winner_instances": 5,
+    "net_oracle_gm_at_most": 0.95,
+    "fixed_qpd1_net_gm_at_most": 0.98
+  },
+  "scale50_boundary_gate": {
+    "minimum_determined_instances": 7,
+    "minimum_qpd1_winner_instances": 3,
+    "minimum_strong_benefit_instances": 2,
+    "minimum_neutral_or_harm_instances": 2,
+    "net_oracle_gm_at_most": 0.95
+  },
+  "scale50_boundary_selection": [
+    "passing_gate",
+    "minimum_net_oracle_gm",
+    "minimum_boundary"
+  ],
+  "candidate_training_forbidden": true,
+  "threshold_search_forbidden": true,
+  "manifest_generation_forbidden": true,
+  "diagnostic_only": true,
+  "development_only": true,
+  "deployment_authorized": false,
+  "production_switch_authorized": false
+}

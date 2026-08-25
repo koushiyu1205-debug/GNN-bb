@@ -1,0 +1,66 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_tree_storage_cap_failure_attestation.v1",
+  "status": "FAIL_CLOSED_ROOT_CORPUS_PHYSICAL_CAP_BLOCKED_TREE_SNAPSHOTS",
+  "development_only": true,
+  "deployable": false,
+  "attested_at_local": "2026-08-02T20:10:40+08:00",
+  "root_corpus_preserved": true,
+  "root_context_count": 300,
+  "root_context_count_by_scale": {
+    "30": 150,
+    "50": 150
+  },
+  "failure": {
+    "implementation": "record_qg2_fallback_snapshot used fixed physical caps of 300 globally and 150 per scale",
+    "effect": "the already-full root corpus caused every real-tree context to return global_300_context_cap before persistence",
+    "oracle_or_training_started": false,
+    "certificate_or_exact_path_mutated": false
+  },
+  "diagnostic_tree_run": "runs/p0v5_qg2_label_state_gat_20260801/snapshot_collection_qg2_clean_v2_tree_scale30",
+  "diagnostic_results": [
+    {
+      "instance": "scale30/001",
+      "result": "runs/p0v5_qg2_label_state_gat_20260801/snapshot_collection_qg2_clean_v2_tree_scale30/scale_030/proofs/scale_030/instance_001/tree_closure_results/tree_closure_001.json",
+      "sha256": "55e3711c881c8bf608f6d5a838c85150297524ed4416ac066c14b5f34771521f",
+      "algorithm_status": "BPC_OPTIMAL",
+      "branch_count": 0,
+      "active_cut_count": 0,
+      "snapshot_reason": "global_300_context_cap"
+    },
+    {
+      "instance": "scale30/002",
+      "result": "runs/p0v5_qg2_label_state_gat_20260801/snapshot_collection_qg2_clean_v2_tree_scale30/scale_030/proofs/scale_030/instance_002/tree_closure_results/tree_closure_001.json",
+      "sha256": "ea31c1f4bfdba8060b54352ecb325e903c5e2eb51a6c654f24d1dfff78299457",
+      "algorithm_status": "BPC_OPTIMAL",
+      "branch_count": 0,
+      "active_cut_count": 0,
+      "snapshot_reason": "global_300_context_cap"
+    },
+    {
+      "instance": "scale30/003",
+      "result": "runs/p0v5_qg2_label_state_gat_20260801/snapshot_collection_qg2_clean_v2_tree_scale30/scale_030/proofs/scale_030/instance_003/tree_closure_results/tree_closure_001.json",
+      "sha256": "9b04b60960ca77bf9a1016924ec639dde61c8e3da7c37f66b5439ba32d3d3b77",
+      "algorithm_status": "BPC_INCOMPLETE_PRICING",
+      "pricing_state": "INCOMPLETE_LIMIT",
+      "branch_count": 0,
+      "active_cut_count": 4,
+      "snapshot_reason": "global_300_context_cap"
+    }
+  ],
+  "interruption": {
+    "instance_003_allowed_to_finish_naturally": true,
+    "instance_004_suffix_stopped_before_material_runtime": true,
+    "stopped_processes": [4159598, 4159531, 4139008, 4139006, 4139005],
+    "old_artifacts_formal_evidence_eligible": false
+  },
+  "correction_contract": {
+    "default_physical_cap_global": 300,
+    "default_physical_cap_per_scale": 150,
+    "tree_supplement_physical_cap_global": 450,
+    "tree_supplement_physical_cap_per_scale": 225,
+    "oracle_context_budget_global": 300,
+    "oracle_context_budget_per_scale": 150,
+    "same_prefrozen_instances": true,
+    "result_based_instance_reselection": false
+  }
+}

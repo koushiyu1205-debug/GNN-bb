@@ -2,3 +2,7 @@ GAT_BPC_moonTerk/data/instances/lunar_ice_sp50_100/*_logical_graph.json filter=l
 GAT_BPC_moonTerk/runs/native_spprc_50_100_5x3600_20260717/scale100_acceptance/scale_100/pools/scale_100/instance_004/stage_001/probe.json filter=lfs diff=lfs merge=lfs -text
 GAT_BPC_moonTerk/data/gat_p0v2/pricing_training_rows.jsonl filter=lfs diff=lfs merge=lfs -text
 GAT_BPC_moonTerk/runs/large_exact_dssr_pricer_20260727/e2e_dssr_scale100_instance001/scale_100/pools/scale_100/instance_001/stage_001/probe.json filter=lfs diff=lfs merge=lfs -text
+GAT_BPC_moonTerk/runs/p0v5_counterfactual_prefix_gat_qd1_selector_v8_20260818/representation_triplets.json filter=lfs diff=lfs merge=lfs -text
+GAT_BPC_moonTerk/runs/p0v5_counterfactual_prefix_gat_qd1_selector_v8r1_20260818/representation_triplets.json filter=lfs diff=lfs merge=lfs -text
+GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v4_20260815/fresh_root_runs/scale50_1d448e7e4e70ede2/scale_050/pools/scale_050/instance_002/stage_001/probe.json filter=lfs diff=lfs merge=lfs -text
+GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v4_20260815/fresh_root_runs/scale50_c6d2229a59e0ca50/scale_050/pools/scale_050/instance_002/stage_001/probe.json filter=lfs diff=lfs merge=lfs -text

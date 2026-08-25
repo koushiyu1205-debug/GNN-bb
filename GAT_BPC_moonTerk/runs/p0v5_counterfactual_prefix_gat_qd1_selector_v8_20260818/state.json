@@ -1,0 +1,13 @@
+{
+  "current_stage": "TERMINAL",
+  "deployment_authorized": false,
+  "development_only": true,
+  "production_switch_authorized": false,
+  "representation_prefix_tasks_complete": 76,
+  "representation_prefix_tasks_total": 76,
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_state.v8",
+  "status": "FAIL",
+  "terminal": true,
+  "terminal_decision": "terminal_decision.json",
+  "terminal_reason": "COUNTERFACTUAL_PREFIX_NOT_IDENTIFIABLE"
+}

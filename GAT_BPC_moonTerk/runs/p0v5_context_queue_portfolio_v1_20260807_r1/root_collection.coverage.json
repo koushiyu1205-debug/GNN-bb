@@ -1,0 +1,56 @@
+{
+  "by_scale": {
+    "30": {
+      "calibration": {
+        "context_count": 3,
+        "instance_count": 3,
+        "minimum_contexts": 8,
+        "minimum_instances": 4,
+        "passed": false
+      },
+      "selector_heldout": {
+        "context_count": 2,
+        "instance_count": 2,
+        "minimum_contexts": 6,
+        "minimum_instances": 3,
+        "passed": false
+      },
+      "train": {
+        "context_count": 6,
+        "instance_count": 6,
+        "minimum_contexts": 20,
+        "minimum_instances": 8,
+        "passed": false
+      }
+    },
+    "50": {
+      "calibration": {
+        "context_count": 8,
+        "instance_count": 4,
+        "minimum_contexts": 8,
+        "minimum_instances": 4,
+        "passed": true
+      },
+      "selector_heldout": {
+        "context_count": 7,
+        "instance_count": 3,
+        "minimum_contexts": 6,
+        "minimum_instances": 3,
+        "passed": true
+      },
+      "train": {
+        "context_count": 23,
+        "instance_count": 10,
+        "minimum_contexts": 20,
+        "minimum_instances": 8,
+        "passed": true
+      }
+    }
+  },
+  "passed": false,
+  "violations": [
+    "SCALE30_TRAIN_COVERAGE",
+    "SCALE30_CALIBRATION_COVERAGE",
+    "SCALE30_SELECTOR_HELDOUT_COVERAGE"
+  ]
+}

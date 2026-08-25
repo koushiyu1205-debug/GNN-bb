@@ -1,0 +1,19 @@
+{
+  "coverage": {
+    "30": {
+      "branch_or_cut_context_count": 26,
+      "context_count": 65,
+      "instance_count": 13,
+      "root_context_count": 27
+    },
+    "50": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 29,
+      "instance_count": 17,
+      "root_context_count": 29
+    }
+  },
+  "preflight_exit_code": 0,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_realmap_v4_collection_state.v1",
+  "status": "ORACLE_PREFLIGHT_READY_AFTER_TREE_SUPPLEMENT"
+}

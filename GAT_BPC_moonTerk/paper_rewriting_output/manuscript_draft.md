@@ -12,43 +12,46 @@ No placeholder may be interpreted as a result. Placeholder activation is
 controlled by result_placeholder_schema.md and phase_4_placeholder_ledger.md.
 -->
 
-# Learning-Guided Exact Branch-Price-and-Cut for Multi-Trip Lunar Water-Ice Exploration Routing
+# Learning-Guided Exact Branch-Price-and-Cut for Multi-Trip Lunar Water-Ice Prospecting Routing
 
 ## Abstract
 
-This paper considers a forward-looking lunar south-pole benchmark in which a
-rover fleet coordinates in-situ prospecting across spatially dispersed
-candidate sites, including shadowed cold-trap environments and their
-surrounding access terrain. The decision assigns sites and predeclared
-terrain-aware paths to rovers and groups visits into successive
-depot-to-depot trips. Each trip obeys time-window, energy, load, and cumulative
-shadow-exposure limits, while return, docking, recharge, and elapsed mission
-time couple consecutive trips. Waiting is prohibited at candidate task sites
-and en route, so arrival at a candidate task coincides with the start of its
-prescribed service. A rover may instead wait at the support depot and adjust the
-departure time of each trip to reach every selected task within its time
-window. The prohibition concerns idle loitering; prescribed detection,
-sampling, and drilling service times remain part of task execution. The
-problem is formulated over a fixed logical-path solution space,
-and a pricing-led, branching-assisted learning-guided exact
-Branch-Price-and-Cut (BPC) framework is specified for its solution.
-Multi-trip route columns encode complete one-rover schedules. The normalized
-objective combines operating cost, risk, and $0.4$ times science-weighted
-completion time, so earlier completion is valued more strongly for
-higher-weight prospecting tasks. Learning ranks pricing work and branch
-candidates constructed by the exact branching rule. It does not control cuts,
-bounds, pruning, termination, or proof records. Exact pricing completion,
-deterministic valid-cut logic, exact branch construction with fail-closed
-incomplete handling, and the branch tree remain responsible for all formal
-conclusions.
-The no-task-wait formulation and its conditional exactness proof are specified
-in this paper and realized by the frozen exact implementation. In a fresh-process
-benchmark with one run per instance, all 80 instances with 5--30 tasks reached
-exact closure and passed the recorded correctness checks under the specified
-no-task-wait formulation. The learning-guided and seasonal comparisons remain
-pending. The learning interface is designed to alter only search order,
-leaving the feasible set, normalized objective, and proof requirements
-unchanged.
+This paper studies fleet routing for large-area in-situ prospecting of lunar
+south-polar water-ice candidate sites. Detection, sampling, and drilling tasks
+are assigned to rovers and grouped into successive depot-to-depot trips, while
+one predeclared terrain-aware path is selected for each leg. Every trip obeys
+time-window, load, energy, and cumulative shadow-exposure limits; return,
+docking, recharge, and elapsed mission time couple consecutive trips. Waiting
+is prohibited at candidate task sites and en route. Arrival therefore
+coincides with service start, while necessary delay is placed at the support
+depot by shifting the departure time common to all tasks in a trip. Complete
+one-rover multi-trip schedules form the columns of a set-partitioning master
+whose normalized objective is operating cost plus risk plus $0.4$ times
+science-weighted completion time.
+
+The current exact method combines a memory-compact exhaustive pricing
+fallback (P0V4) with deterministic V5 accelerators. A bidirectional midpoint
+prepass seeks negative-reduced-cost witnesses and re-audits every returned
+route under the true dual; root-only three-task subset-row inequalities are
+considered through deterministic candidate-group screening. Neither stage has
+authority to prove that no negative column exists. Missing witnesses, failed
+audits, or resource-limited prepasses fall back to exhaustive P0V4 pricing.
+The QG2 graph-attention component now under preparation is inserted only
+between this midpoint prepass and the exhaustive fallback. It may reorder
+labels within the same terminal class and reduced-cost bucket, but cannot
+filter labels, change dominance or reduced cost, provide a bound, prune, stop
+a proof, or manage cuts. Any binding, out-of-distribution, numerical, or
+calibration failure restores the literal deterministic Q0 queue.
+
+In one fresh-process run per instance, the current P0V4+V5 candidate reached
+exact closure on all 80 instances with 5--30 tasks. At 50 tasks, 15 of 20
+instances closed exactly and five terminated safely with incomplete pricing.
+These observations establish the present exact-computation boundary; they are
+not evidence of learned acceleration. The QG2 bounded oracle, model
+comparison, calibration, held-out replay, and paired end-to-end evaluation
+remain incomplete. All exact claims are restricted to the finite declared
+path options of each fixed mission-epoch instance rather than arbitrary
+continuous lunar-surface trajectories.
 
 **Keywords:** lunar exploration routing; multi-trip fleet routing;
 Branch-Price-and-Cut; resource-constrained shortest path; learning-guided
@@ -157,13 +160,17 @@ effort [@C059]. These priorities may move promising work forward in the
 search order, but they cannot prove that no negative-reduced-cost column
 remains or that a branch-and-bound node can be closed.
 
-To address these challenges, this paper develops a learning-guided exact
-Branch-Price-and-Cut (BPC) framework. The learning layer orders pricing work
-and candidates generated by the exact branching rule. Path feasibility,
-reduced-cost evaluation, deterministic valid inequalities, node bounds,
-pruning, and branch-tree closure remain the responsibility of exact
-procedures; a mandatory exact fallback processes all work that the learning
-layer postpones or cannot evaluate. In the experimental design, environmental
+To address these challenges, this paper develops an exact P0V4+V5
+Branch-Price-and-Cut (BPC) framework with a proof-safe learning interface. A
+bidirectional midpoint prepass seeks negative-column witnesses before a
+memory-compact exhaustive pricing fallback, and deterministic root-only SRI-3
+candidate groups are screened before commitment. The QG2 graph-attention
+component under preparation acts only when the midpoint stage has returned no
+usable column: it reorders labels within a common terminal class and
+reduced-cost bucket before exhaustive fallback. Path feasibility, reduced-cost
+evaluation, deterministic valid inequalities, node bounds, pruning,
+branching, and branch-tree closure remain the responsibility of exact
+procedures. In the experimental design, environmental
 variation will be represented by independently fixed mission-epoch instances.
 After implementation verification, the same revised solver will be applied
 separately to each instance to compare seasonal operating phases without
@@ -178,15 +185,16 @@ phase. The contributions are threefold.
 formulated as a multi-path, multi-trip fleet-routing problem that incorporates
 lunar terrain, cumulative shadow exposure, recharging, heterogeneous services,
 depot-only waiting, adjustable trip departures, and science-weighted
-completion time. (2) A learning-guided exact BPC algorithm is developed,
-together with a conditional proof covering pricing, root-only valid
-inequalities, branching, pruning, bounds, and branch-tree closure. Learning
-guides pricing order primarily and branch-candidate order secondarily, without
-controlling cuts or replacing any exact conclusion. (3) A reproducible lunar
-benchmark and a correctness-first evaluation package are provided. The frozen
-no-task-wait baseline establishes exact closure for 80 instances with 5--30
-tasks. Paired learning-guidance and four-phase seasonal results are specified
-by the evaluation protocol but remain pending. The remainder of this paper is
+completion time. (2) An exact P0V4+V5 BPC algorithm is developed, together
+with a conditional proof covering pricing, root-only valid inequalities,
+branching, pruning, bounds, and branch-tree closure. Its QG2 interface is
+restricted to within-bucket label ordering and cannot replace an exact
+conclusion. (3) A reproducible lunar benchmark and a correctness-first
+evaluation package are provided. The current exact candidate closes all 80
+instances with 5--30 tasks and 15 of 20 instances with 50 tasks; the remaining
+five terminate with incomplete pricing. Paired QG2 and four-phase seasonal
+results are specified by the evaluation protocol but remain pending. The
+remainder of this paper is
 organized as follows. Section 2 reviews the related literature. Sections 3 and
 4 present the formulation and exact algorithm, respectively. Sections 5 and 6
 define the experiments and report the available evidence. Sections 7 and 8
@@ -484,10 +492,7 @@ $\mathcal{I}^{\zeta}$ instances proves the result only for each corresponding
 window-aggregated instance; it does not prove that one route is robust or
 dynamically optimal across all $\zeta\in\mathcal{Q}$.
 
-> **Figure 1 placeholder (FIG01/FIG06, evidence available):** lunar south-pole
-> planning layers and one representative fixed task graph with three
-> declared path alternatives per directed edge. The final caption must
-> distinguish measured inputs, derived proxies, and visualization-only layers.
+![Figure 1. Exploded representation of the lunar south-pole planning environment and an illustrative logical routing diagram. All five panels use the same $50\,\mathrm{km}\times50\,\mathrm{km}$ mission region and spatially registered task coordinates. Panels (a)--(e) respectively show the logical routing diagram, average solar-visibility map, deterministic traversal-risk map, digital elevation model (DEM), and LOLA-derived shaded-relief map. The DEM color scale is expressed in kilometres and bounded by the 1st and 99th percentiles of the displayed elevation field. The DEM, solar-visibility, and traversal-risk panels respectively display the complete directed low-time, low-energy, and low-risk candidate graphs, each comprising 56 arcs over one depot and seven representative tasks. Panel (a) illustrates three rovers performing four closed depot-to-depot trips. For every directed leg, the selected path, including a depot return, is shown as a solid curve, whereas the two unselected candidate paths are shown as dashed curves. Candidate-path curvature is enhanced consistently for legibility. The LOLA-derived shaded relief, DEM, and solar visibility are map-derived inputs, traversal risk is a deterministic model proxy, and the logical routing diagram is visualization-only rather than solver output or evidence of feasibility or optimality.](figures/lunar_water_ice_exploration_schematic_v5.png)
 
 ## 3.2 Multi-trip route feasibility
 
@@ -893,81 +898,41 @@ work order but not column validity.
 
 ## 4.1 Algorithm overview
 
-The route master sees complete one-rover schedules, not individual lunar
-movements. Pricing is therefore the operational core of the decomposition: it
-must assemble prospecting tasks and terrain-aware path options into multi-trip
-routes that satisfy the full time, load, energy, shadow, docking, and recharge
-logic of Section 3. The algorithm must find useful routes early enough to make
-the decomposition practical while still exhausting this admissible route space
-whenever a node bound or tree conclusion is required.
+The route master sees complete one-rover schedules, so pricing remains the
+operational core of the decomposition. The current exact candidate combines
+the memory-compact exhaustive P0V4 backend with three deterministic V5
+components: a bidirectional midpoint negative-column prepass, an enlarged raw
+negative pool followed by frozen diverse batch admission, and root-only SRI-3
+candidate-group screening. The midpoint stage has no certificate authority.
+Every returned route is re-audited under the true dual and current branch/cut
+context; failure to obtain an admissible negative column triggers the
+unchanged exhaustive P0V4 backend.
 
-The proposed framework has two operational lanes but one mathematical model.
-The guidance lane assigns priorities to pricing work and to branch candidates
-constructed by the exact branching rule. The exact lane solves the restricted
-master, checks column addability, performs proof-bearing complete pricing,
-constructs valid cuts and branch children, maintains bounds, and writes proof
-records. For the revised timing model, complete pricing becomes proof-bearing
-only after implementation verification confirms every no-task-wait
-transition and state invariant.
-Figure 2 summarizes this asymmetric responsibility. Information moves from
-exact state records to the guidance layer and returns only as validated
-priority scores bound to the current solver state; no learned output is
-connected to the cut lifecycle, node bound, pruning decision, or audited proof
-records.
+The QG2 learning interface under preparation is located only on this fallback
+edge. One request-level inference may provide immutable potentials for
+within-bucket label ordering before exhaustive P0V4 pricing. It does not act
+on cuts or branching and cannot create bounds, prune nodes, change dominance,
+terminate pricing, or write proof records. Figure 2 should therefore show the
+deterministic midpoint prepass, optional QG2 ordering, and exhaustive fallback
+in series, with all proof-bearing arrows originating from the exact lane.
 
-> **Figure 2 placeholder (FIG09/FIG10, method evidence available):**
-> two-lane architecture. The learning lane contains pricing-work ordering and
-> valid branch-candidate ranking. The exact lane contains RMP optimization,
-> column validity, proof-bearing exact completion, deterministic cuts, branch
-> construction and fallback, bounds, pruning, and proof records. No arrow is
-> permitted from learning to cut control or proof state.
-
-At a branch-tree node, the solver follows four phases. First, it solves the
-current RMP and extracts the true dual vector. Second, ordered or fast pricing
-searches for useful columns. Third, proof-bearing exact completion is invoked whenever
-proof-producing closure is required. Finally, the solver adds columns,
-strengthens the root RMP with deterministic valid cuts, accepts an exact node
-bound, or branches. A resource limit ends this sequence as incomplete. In
-particular, termination before the pricing frontier has been exhausted cannot
-support a proof that no negative-reduced-cost column exists.
-Algorithm 1 expands these phases into the node-control procedure used
-throughout this section.
-
-**Algorithm 1. Exact processing of one BPC node with guidance-only ordering**
-
-**Require:** node $n$; branch context $\mathcal{B}(n)$; active deterministic-cut
-context $\mathcal{H}(n)$; restricted route pool
-$\mathcal{P}'(n)$; incumbent upper bound $U$; exact resource limits; optional
-typed pricing and branch-ranking hints.
-
-**Ensure:** an audited node outcome and any exact-admissible columns, cuts, or
-child contexts.
+**Algorithm 1. P0V4+V5 exact node processing with optional QG2 ordering**
 
 | Line | Procedure |
 |---:|---|
-| 1 | Initialize the set of unresolved deferred-pricing obligations $\mathcal{D}\leftarrow\varnothing$. |
-| 2 | **while** node $n$ is unresolved **do** |
-| 3 | $\quad$Solve the current RMP; if it is infeasible after a context change, run exact Phase I under the same $\mathcal{B}(n)$ and $\mathcal{H}(n)$. |
-| 4 | $\quad$**if** Phase I neither restores feasibility nor proves node infeasibility **then terminate** node processing without an exact conclusion. |
-| 5 | $\quad$Extract the true RMP duals and audit the reduced costs and context bindings of all active columns. |
-| 6 | $\quad$**if** the RMP is not optimal or any audit fails **then terminate** node processing without an exact conclusion. |
-| 7 | $\quad$Run guidance-ordered pricing with exact completion by Algorithm 2. |
-| 8 | $\quad$**if** Algorithm 2 finds one or more exact-addable negative-reduced-cost columns **then** admit them and **continue**. |
-| 9 | $\quad$**if** Algorithm 2 terminates before proving pricing closure **then terminate** node processing without an exact conclusion. |
-| 10 | $\quad$At the root only, separate the predefined task-triple valid inequalities described in Section 4.4; learning supplies no cut action. |
-| 11 | $\quad$**if** one or more cuts are admitted **then** update $\mathcal{H}(n)$ and **continue**. |
-| 12 | $\quad$Record the RMP objective as a valid node lower bound only after exhaustive pricing has proved that no negative-reduced-cost column exists and $\mathcal{D}=\varnothing$. |
-| 13 | $\quad$**if** the lower bound excludes improvement over the incumbent **then fathom** the node by bound. |
-| 14 | $\quad$**if** the RMP solution is integral **then accept** it as an incumbent candidate and **fathom** the node. |
-| 15 | $\quad$Run exact-valid branch-candidate ranking and child construction by Algorithm 3. |
-| 16 | $\quad$**if** two valid child contexts are constructed **then pass** both children to the tree search; **otherwise terminate** node processing without an exact conclusion. |
-| 17 | **end while** |
+| 1 | Solve and audit the current RMP; extract the true task, fleet, and active-cut duals. |
+| 2 | Run the bidirectional midpoint prepass and re-audit every returned witness for resources, branch feasibility, context, and true reduced cost. |
+| 3 | If a master-addable negative batch is obtained, admit it and return to Line 1. |
+| 4 | Otherwise validate the QG2 instance, engine, feature, model, dual, branch, cut, OOD, and calibration bindings; on any failure select the literal deterministic Q0 queue. |
+| 5 | Run exhaustive P0V4 pricing. If an audited negative batch is found, admit it and return to Line 1. |
+| 6 | Accept a no-negative conclusion only if the complete frontier is exhausted and every context, reduced-cost, and proof-obligation audit passes; otherwise terminate the node as incomplete. |
+| 7 | At the root only, separate and deterministically group-screen SRI-3 rows; if a group is committed, update the cut context and return to Line 1. |
+| 8 | Record the node bound, update an integral incumbent, prune by a proved bound, or create an exact Ryan–Foster disjunction. Any unresolved branch case terminates as incomplete. |
 
-Lines 3–6 establish an optimal and audited RMP state. Lines 7–9 delegate
-only the order of pricing work while retaining exact completion. Lines 10–12
-place deterministic separation before the node bound is declared valid. Lines 13–16
-then fathom, accept an incumbent, or branch; no learned output writes any of
-these outcomes.
+Lines 2–4 may change when useful work is attempted. Lines 5–8 remain the
+only path to a proof-bearing node outcome. Thus, finding a negative witness
+early and proving the absence of all negative columns remain separate
+operations.
 
 Let $L_n$ be the audited node lower bound, $U$ the incumbent objective,
 $z_n^{\mathrm{LB}}$ indicate that all conditions required for a valid node
@@ -998,7 +963,7 @@ nonempty deferred-pricing set makes at least one condition in (14) false and
 therefore cannot fathom the node.
 
 The same responsibility boundary governs every proof-bearing statement.
-Learned scores are diagnostic or heuristic signals. Exact pricing may prove
+Learned scores and midpoint outcomes are diagnostic or heuristic signals. Exact pricing may prove
 the absence of negative columns
 only after exhaustive coverage under the active context, and the branch tree
 may prove optimality only when every open node has been processed by a valid
@@ -1247,10 +1212,16 @@ an active cut can add a cut-dual contribution that is absent from (18). The
 proof-bearing implementation therefore enables this pruning only when the
 active-cut context is empty and forces it off whenever a cut is active.
 
-Fast pricing and exact completion serve different purposes. The former may
-use dual ordering, learned priorities, active-support task sets, or limited
-path profiles to find negative columns quickly. A local failure to find one is
-not a proof. The proof-bearing true-dual completion pass must search an exact
+Fast pricing and exact completion serve different purposes. In P0V4+V5, the
+fast stage is a bidirectional midpoint prepass. Forward and backward partial
+states are joined only when their task, time, load, energy, shadow, and branch
+states are compatible. The prepass returns negative-column witnesses, not a
+lower bound or no-negative conclusion. Root column generation may accept a
+fully audited witness from a resource-limited midpoint search, whereas tree
+pricing uses the conservative scope rule. Every witness is reconstructed and
+checked again under (13); no witness, any mismatch, or any prepass resource
+limit invokes the unchanged exhaustive P0V4 backend. The proof-bearing
+true-dual completion pass must search an exact
 dominance-reduced representation of the complete multi-trip route space
 induced by the fixed graph and active context. The equal-travel-time
 same-endpoint substitution in Section 3.1 and Lemma 1 accounts for the limited
@@ -1364,10 +1335,17 @@ $$
 
 Thus, $\mathcal{C}_{\mathrm{SRI3}}(n_0)$ contains every threshold-violating
 triple, whereas $\mathcal{H}_{\mathrm{SRI3}}(n_0)$ contains only the cuts
-retained after the predefined separation round and lineage caps. The operator
-$\operatorname{Retain}_{\mathrm{SRI3}}$ applies those deterministic caps after
-ordering by decreasing violation, decreasing positive-support count, and
-lexicographic task tuple. An active SRI-3 contributes exactly
+retained after deterministic V5 group screening and the lineage caps. The
+operator $\operatorname{Retain}_{\mathrm{SRI3}}$ first keeps a window of at
+most 16 candidates ordered by decreasing violation, decreasing positive
+support, and lexicographic task tuple. These candidates are tested as at most
+four groups of at most four cuts. A group is committed only if its trial RMP
+is optimal and either has an integral primal solution or raises the restricted
+RMP bound by at least the frozen gain threshold. The trial bound is not an
+official node bound before commitment and exact reoptimization. If no group
+passes, no cut is committed in that separation round. This is a deterministic
+heuristic commitment rule over already valid inequalities, not a learned cut
+policy or a validity test. An active SRI-3 contributes exactly
 $-\gamma_Sa_{Sp}^{\mathrm{SRI}}$ to Eq. (13). The same coefficient remains
 active when a root cut is inherited by a descendant.
 
@@ -1380,8 +1358,8 @@ is an implementation optimization, not a relaxation of cut validity.
 
 Learning has no cut action in this paper. It neither proposes a subset, scores
 cut retention, chooses an activation round, nor deletes an active inequality.
-This exclusion keeps the experimental question focused on pricing and
-branching, and it avoids requiring a separate proof that a learned cut policy
+This exclusion keeps the experimental question focused on proof-tail pricing,
+and it avoids requiring a separate proof that a learned cut policy
 preserves separation validity and exact pricing compatibility.
 
 ## 4.5 Branching rule
@@ -1412,12 +1390,11 @@ i<j,\
 \tag{22}
 $$
 
-The deterministic diagnostic order first maximizes $f_{ij}$, then minimizes
+The current deterministic order first maximizes $f_{ij}$, then minimizes
 the absolute difference between the numbers of currently available columns in
 the same-route and different-route children, and finally breaks ties by
-task identifiers. Learned branch guidance may replace this order over the
-unchanged set $\mathcal{C}_{\mathrm{RF}}(n)$, but it does not alter $y_{ij}$,
-the fractionality test, or either child definition.
+task identifiers. QG2 has no branch action and cannot alter $y_{ij}$, the
+fractionality test, the candidate set, or either child definition.
 
 Candidate construction and tree completeness are separate obligations.
 Failure to find a fractional Ryan–Foster pair does not prove that the current
@@ -1425,78 +1402,75 @@ solution is integral. Such a node can be resolved only by an exact alternative
 disjunction or by a separately derived proof that the fractional
 representation corresponds to an integral scheduling decision. Because
 neither mechanism is currently available in this case, the node remains
-unresolved and no exact tree-level conclusion is drawn. The learned branch
-ranker enters only after exact logic has formed a valid candidate set and
-cannot alter this requirement.
+unresolved and no exact tree-level conclusion is drawn. Learned branch
+ranking is reserved for future work and is not part of the present
+P0V4+V5+QG2 implementation claim.
 
-## 4.6 Learning guidance
+## 4.6 QG2 label-state ordering
 
-The learning interface has three parts. A graph-state representation exposes
-only the solver information required for ranking; typed hints bind every
-prediction to its exact context; and separate pricing and branching interfaces
-restrict learning to work order. This design retains the lunar task, path, and
-resource structure needed to distinguish expensive pricing choices while
-preventing a prediction from changing the transportation model. The following
-subsections define these parts in the order in which they enter the exact
-framework.
+QG2 combines one request-level graph inference, a fixed 15-feature label-state
+score evaluated inside Native pricing, and a fail-closed activation gate. It
+is invoked only after the V5 midpoint prepass has returned no usable negative
+column and before the exhaustive P0V4 fallback. The interface has no branch or
+cut action. It retains the lunar task, path, dual, resource, and trajectory
+context needed to distinguish proof-tail states while restricting learning to
+a precisely defined queue-ordering surface.
 
 ### 4.6.1 Graph representation
 
-The planned guidance representation preserves the directed task graph and
+The QG2 representation preserves the directed task graph and
 the distinction among path alternatives. Task nodes contain depot/task type,
 location, operation mode, science weight, demand, service quantities, time
 windows, and shadow/thermal indicators. Directed pair and path-option features
 represent relative geometry, travel time, energy, risk, distance, and shadow
-exposure. Solver-state features provide the current dual, branch, cut,
-candidate, and workload context. Graph neural networks are appropriate
+exposure. Solver-state features include the current true dual, active-column
+task-set incidence, column-generation round, previous proof-tail work, dual
+change, branch and cut summaries, and V5 midpoint wall time. Missing
+trajectory values carry explicit presence masks. Graph neural networks are appropriate
 representational tools for such structured solver states [@C003; @C008], but
 the representation alone is not evidence of an effective policy.
 
-The exact interface accepts typed hints rather than a model object. Each hint
-binds a candidate identifier and signature to a priority, uncertainty,
-finite-delay budget, source, branch/cut/path-option context signatures,
-reduced-cost fingerprint, model identifier, and feature-schema version. A
-context mismatch, an unavailable model, or an out-of-distribution trigger
-reverts the decision to shadow-only or deterministic behavior. The exact BPC
-does not import a training framework or checkpoint loader.
+One inference produces immutable node and arc potentials, 15 label-state
+coefficients, and two activation heads. Native pricing then computes a scalar
+priority without per-label PyTorch calls. The model families scheduled for
+comparison are a linear model, a two-layer MLP, and a two-layer TinyGAT with
+hidden dimension 32 and two attention heads; none is currently authorized for
+formal use. Model, feature, engine, action-policy, checkpoint,
+dual, branch, cut, numerical, OOD, and calibration mismatches all select the
+literal Q0 container before a learned action can occur.
 
-[[TBD-M002: Insert the frozen pricing-guidance checkpoint hash, feature-schema
-version, architecture, training target, loss, model-selection rule,
-calibration fields, and inference environment. Leave all values empty until
-the model package exists.]]
+[[TBD-M002: Insert the frozen model-comparison report, selected checkpoint,
+feature schema, bucket width, calibration thresholds, inference environment,
+and deployment manifest only after the bounded oracle and all downstream
+gates pass.]]
 
-[[TBD-M003: Insert the frozen branch-ranking checkpoint, candidate-label
-construction, valid-candidate logging schema, and branch inference
-environment. Leave all values empty until the model package exists.]]
+The current implementation establishes the action restriction and fallback,
+not learned effectiveness. Branch ranking is outside the present QG2 claim.
 
-The current implementation contains the typed safety interface and a
-deterministic shadow-only execution path. It does not establish that a trained
-GAT has been produced, selected, or evaluated. The placeholders above are
-intentionally located inside the method section so that later implementation
-details can be inserted without changing the responsibility boundary or the
-order of the algorithm.
+### 4.6.2 Queue action
 
-### 4.6.2 Pricing guidance
+QG2 ranks labels rather than task expansions, pricing calls, or branch
+candidates. Let $u(L)$ indicate that label $L$ is currently a depot-return
+label that has visited at least one task, let $q(L)$ be its exact partial
+reduced cost, let $\eta>0$ be the
+frozen bucket width, and $\tau(L)$ be its deterministic creation identifier.
+One inference supplies a label-state score $h_\theta(L)$, while Native pricing
+orders labels by the ascending lexicographic key
 
-Pricing guidance ranks work items such as task expansions, path-option
-expansions, worker seeds, candidate task sets, or expensive pricing calls. The
-desired mechanism is earlier discovery of useful negative-reduced-cost
-routes, not a change to the set of routes that may eventually be searched.
-This role parallels learned and selective pricing research [@C002; @C009;
-@C059], while the present interface makes exact completion mandatory before a
-proof-bearing node bound is accepted.
+$$
+K(L)=\left(-u(L),\left\lfloor q(L)/\eta\right\rfloor,
+-h_\theta(L),q(L),\tau(L)\right).
+\tag{23}
+$$
 
-A finite delay is permitted only if the associated pricing obligation remains
-explicit. Every delayed item enters $\mathcal{D}_n$ immediately with its
-context binding and with unreconstructed reduced cost. A recheck removes the
-item only after it is shown nonnegative, processed as a true-negative
-candidate, or covered by a complete true-dual repricing pass. Before a
-no-negative-column proof or node bound is established, every item must
-therefore be resolved. Thus, the learned order may affect when work is
-performed but cannot permanently discard a column that the exact algorithm
-requires.
+Terminal class and reduced-cost bucket precede the learned score. QG2 can
+therefore change order only within their intersection. It does not defer work
+outside the exact queue, and the current implementation keeps the
+deferred-pricing set below identically empty. Learned order may affect when a
+route is discovered but cannot remove any label or column required by
+exhaustive completion.
 
-Let $\mathcal{D}_n$ contain unreleased delayed candidates, with
+For compatibility with the general proof ledger, let $\mathcal{D}_n$ contain unresolved work external to the exact queue, with
 $\bar c_d=\bot$ when the true reduced cost has not yet been reconstructed.
 Let $b_n^{\mathrm{delay}}$ indicate whether this set contains an unresolved
 item that could invalidate pricing closure:
@@ -1518,20 +1492,21 @@ b_n^{\mathrm{delay}}
 \ \land\
 b_n^{\mathrm{delay}}=0.
 \end{aligned}
-\tag{23}
+\tag{23a}
 $$
 
-Operationally, deferred items are released before a proof attempt and are
-reprocessed or subsumed by exhaustive true-dual completion. Merely clearing
-the set without performing that exact work would not satisfy (23).
+QG2 does not create such work, so $\mathcal{D}_n=\varnothing$ throughout a
+valid QG2 request. Merely clearing an externally created obligation without
+performing the exact work would not satisfy (23a); this is a general ledger
+rule, not a learned mechanism.
 
-**Algorithm 2. Pricing guidance with exact completion and deferred-work control**
+**Algorithm 2. QG2 ordering with exhaustive P0V4 completion**
 
 **Require:** node $n$; true dual tuple
 $(\boldsymbol{\pi},\mu,\boldsymbol{\gamma})$; branch context
-$\mathcal{B}(n)$; deterministic-cut context $\mathcal{H}(n)$; pricing work set
-$\mathcal{W}(n)$; unresolved deferred-pricing set $\mathcal{D}$; reduced-cost
-tolerance $\varepsilon_{\mathrm{rc}}$; optional typed pricing hints.
+$\mathcal{B}(n)$; deterministic-cut context $\mathcal{H}(n)$; reduced-cost
+tolerance $\varepsilon_{\mathrm{rc}}$; optional frozen QG2 manifest and
+checkpoint.
 
 **Ensure:** one of three outcomes: an audited set of exact-addable
 negative-reduced-cost routes; a proof that no such route exists in
@@ -1539,67 +1514,38 @@ $\mathcal{P}(n)$; or termination without a pricing-closure proof.
 
 | Line | Procedure |
 |---:|---|
-| 1 | Validate every hint against the candidate signature, feature schema, model identifier, dual fingerprint, and branch/cut/path-option context. |
-| 2 | Reject unavailable, mismatched, or out-of-distribution hints and use the deterministic work order for their items. |
-| 3 | Reorder $\mathcal{W}(n)$ by accepted priorities without deleting any work item; enter each delayed item in $\mathcal{D}$ with $\bar c_d=\bot$ and enforce every finite-delay budget. |
-| 4 | Run ordered fast pricing and reconstruct each returned route's true reduced cost using (13). |
-| 5 | **if** an exact-feasible, exact-addable route has $\bar c_p<-\varepsilon_{\mathrm{rc}}$ **then return** the audited batch of negative-reduced-cost routes. |
-| 6 | Recheck every due item in $\mathcal{D}$ by true-reduced-cost reconstruction and exact processing; leave any unresolved item recorded. |
-| 7 | Run the verified exact SPPRC completion over $\mathcal{P}(n)$ with the true duals and the complete active context; clear a remaining item from $\mathcal{D}$ only when this pass covers its bound context. |
-| 8 | **if** exact completion finds an addable negative-reduced-cost route **then return** the audited batch containing that route. |
-| 9 | **if** exact completion exhausts the frontier, all reduced-cost and context audits pass, and $\mathcal{D}=\varnothing$ **then conclude** that no negative-reduced-cost route exists in $\mathcal{P}(n)$. |
-| 10 | **otherwise terminate** without a pricing-closure proof. |
+| 1 | Validate the QG2 model, feature, engine, action-policy, dual, branch, cut, OOD, numerical, and calibration bindings once for the request. |
+| 2 | If any validation fails, select the literal Q0 queue before learned ordering begins. |
+| 3 | Otherwise run one inference and install immutable node, arc, and 15-dimensional label-state coefficients. |
+| 4 | Insert every generated exact-feasible label into the exhaustive queue and order it by (23); do not modify feasibility, dominance, bounds, or termination. |
+| 5 | Reconstruct every returned route's true reduced cost using (13) and apply the frozen master-admission audit. |
+| 6 | If an exact-addable negative route exists, return the audited batch. |
+| 7 | Otherwise continue until the complete exact frontier is exhausted or a resource limit is reached. |
+| 8 | Conclude no negative route only after exhaustive coverage, successful audits, and an empty proof-obligation ledger; otherwise return an incomplete outcome. |
 
-Lines 1–3 convert learned output into a permutation with bounded delay rather
-than a filter. Lines 4–6 retain true-reduced-cost admission and deferred-work
-accounting. Lines 7–10 form the exact completion tail: only exhaustive
-proof-bearing pricing with no unresolved deferred-pricing obligation can prove the absence
-of a negative-reduced-cost route. The algorithm defines the permitted learned
-interface; it does not imply that the
-TBD pricing checkpoint in M002 has been trained or evaluated.
+Lines 1–4 restrict learning to a fail-closed permutation. Lines 5–8 keep
+admission and proof on the true-dual exact path. The algorithm defines the
+permitted learned interface; it does not imply that the TBD model in M002 has
+passed its oracle or evaluation gates.
 
-### 4.6.3 Branch guidance
+### 4.6.3 Supervision and activation
 
-Branch guidance ranks an exact-valid candidate set and determines which
-candidates receive expensive evaluation first. It may approximate a strong
-branching preference or a downstream pricing-pressure signal, as suggested by
-learning-to-branch precedents [@C001; @C003]. The selected candidate still
-passes the exact branch constructor, and its two children retain the complete
-same/different-route partition.
+QG2 supervision is aligned with two observable milestones: creation of a
+frozen, master-ready admission batch and completion of exhaustive pricing.
+Ancestors of raw negative routes are positive admission labels only when the
+frozen selector chose those routes and the current master accepted them.
+Omitted or rejected negative-route ancestors provide hard negatives. Every
+preference pair lies in the same terminal class and reduced-cost bucket, so
+the training target is reachable by (23). First raw-negative time remains a
+diagnostic quantity rather than the optimization target.
 
-When the score is absent, rejected by a context check, or too uncertain, the
-deterministic candidate rule is used. When no Ryan–Foster pair is available,
-the exact fallback remains unchanged. Branch ranking is secondary in the paper
-because it acts less frequently than pricing and because its incremental value
-must be measured against a variant that already contains pricing guidance.
-
-**Algorithm 3. Branch-candidate ranking over exact-valid Ryan–Foster pairs**
-
-**Require:** fractional RMP solution $\boldsymbol{\lambda}^{*}$; node context
-$\mathcal{B}(n)$; exact Ryan–Foster candidate constructor; deterministic
-candidate/evaluation budget; deterministic candidate rule; optional typed
-branch-ranking hints.
-
-**Ensure:** two exact child contexts or an explicit exact fallback/incomplete
-outcome.
-
-| Line | Procedure |
-|---:|---|
-| 1 | Construct the deterministically bounded set $\mathcal{C}_{\mathrm{RF}}(n)$ of fractional, exact-valid Ryan–Foster task pairs from $\boldsymbol{\lambda}^{*}$. |
-| 2 | **if** $\mathcal{C}_{\mathrm{RF}}(n)=\varnothing$ **then** invoke an available exact representative/variable fallback or require an aggregation proof; if neither exists, return an explicit incomplete outcome rather than declaring integrality. |
-| 3 | Validate every branch hint against a member of $\mathcal{C}_{\mathrm{RF}}(n)$ and the current node, candidate-set, branch, and model-schema signatures. |
-| 4 | Reorder $\mathcal{C}_{\mathrm{RF}}(n)$ by accepted hints; if a hint is absent, invalid, or too uncertain, use the deterministic order. |
-| 5 | Verify that the ordered set contains exactly the candidates constructed on Line 1; no candidate may be added or removed by learning. |
-| 6 | Evaluate candidates in that order under the frozen exact branch-selection policy and select an exact-valid pair $(i,j)$. |
-| 7 | Construct $\mathcal{B}^{\mathrm{same}}(n;i,j)$ and $\mathcal{B}^{\mathrm{different}}(n;i,j)$ with the exact branch constructor. |
-| 8 | Validate that generated routes in each child satisfy its full inherited branch context. |
-| 9 | **if** both child contexts pass validation **then return** the two children; **else** use the next exact-valid candidate or deterministic fallback. |
-
-Lines 1–2 keep candidate construction and the no-pair proof boundary on the
-exact path. Lines 3–5 permit learning to change only the inspection order.
-Lines 6–9 leave candidate evaluation and same/different-route child
-construction exact and otherwise fail closed. This component remains
-design-only until M003 and the L2 experiment block are frozen.
+The bounded oracle must establish sufficient action headroom separately at
+scales 30 and 50 before Linear, MLP, and TinyGAT training is authorized.
+Independent calibration then controls harmful-action rate, beneficial
+precision, held-out wall-time ratio, incremental value over non-graph models,
+and inference latency. As of this manuscript update, the oracle and all
+downstream gates remain incomplete; no checkpoint or GAT speedup is therefore
+claimed.
 
 ## 4.7 Exactness proof
 
@@ -1796,29 +1742,29 @@ implies that tasks $i$ and $j$ are either served by the same selected route or
 by two different selected routes; exactly one case holds. The same-route child
 rejects columns containing only one member of the pair, whereas the
 different-route child rejects columns containing both. The integer solution
-therefore belongs to exactly one child, which proves (26). Learning may change
-which exact-valid pair is considered first, but it cannot change either child
-definition. If no valid pair or exact alternative disjunction is available
+therefore belongs to exactly one child, which proves (26). The present QG2
+interface has no branch action. If no valid pair or exact alternative disjunction is available
 for a fractional node, the node remains incomplete and cannot be closed as
 integral. $\square$
 
-**Lemma 5 (preservation under learning guidance).** Suppose accepted learning
-outputs only permute pricing work and exact-valid branch candidates, every
-finite delay is released or covered by exhaustive true-dual repricing before
-a proof-bearing event, and guidance cannot modify column admission, cuts,
-branch contexts, bounds, pruning, or proof records. Then guidance does not
-change any feasible set $\mathcal{F}(n)$, any route cost $c_p$, or the validity
+**Lemma 5 (preservation under accelerators).** Suppose the midpoint stage
+admits only audited feasible negative-column witnesses and otherwise invokes
+exhaustive P0V4; root cut groups contain only valid SRI-3 rows; and QG2 only
+permutes labels within the queue order (23). Suppose further that none of
+these components can modify feasibility, dominance, reduced cost, branch
+contexts, official bounds, pruning, stopping, or proof records. Then they do
+not change any feasible set $\mathcal{F}(n)$, route cost $c_p$, or the validity
 of Lemmas 1–4.
 
-*Proof.* A permutation changes only the time at which an unchanged work item
-is processed. Finite delay has the same property once every delayed item is
-processed or subsumed by exhaustive exact completion. The necessary condition
-in (23) prevents a proof while any deferred-pricing obligation is unresolved.
-Exact column
-admission still uses (13) and (15), cuts remain those proved valid in Lemma 4,
-and branching still uses the two exact child definitions in (26). Guidance
-therefore changes an execution trace, and may change the selected valid branch
-pair, without changing the mathematical alternatives covered by the trace.
+*Proof.* A midpoint witness adds a route already in $\mathcal P(n)$ after
+true-dual audit; lack of a witness removes nothing because exhaustive fallback
+remains mandatory. Group screening decides whether already valid rows are
+committed and cannot remove an integer-feasible solution. A queue permutation
+changes only when an unchanged exact label is processed. The condition in
+(23a) still blocks proof while any external obligation is unresolved. Column
+admission uses (13) and (15), branching retains (26), and exhaustive completion
+covers the same route set under Q0 and QG2. Hence the accelerators may change
+the trace but not the mathematical alternatives or proof conditions.
 $\square$
 
 **Theorem 1 (conditional exactness of the complete BPC algorithm).** Consider
@@ -1890,6 +1836,10 @@ contexts, outstanding pricing obligations, preservation of the branch
 candidate set, the absence of unresolved nodes, and the validity of the proof
 records. Any failed check blocks both performance interpretation and a
 tree-level exact conclusion.
+
+<!-- SUPERSEDED 2026-08-03: retained temporarily for audit traceability only.
+The rendered manuscript uses the replacement Sections 5 and 6 below. Do not
+translate or cite this archived block.
 
 # 5. Experimental Design
 
@@ -2324,6 +2274,141 @@ These rows demonstrate fail-closed behavior under the recorded limit. They do
 not prove optimality, infeasibility, or the absence of negative columns at
 either scale.
 
+-->
+
+# 5. Experimental Design
+
+## 5.1 Research questions
+
+The revised experiments address five questions: (RQ1) exact closure and
+resource-limited behavior of P0V4+V5 across task scales; (RQ2) paired effects
+of the deterministic midpoint, batch-admission, and root-cut screening
+components; (RQ3) whether QG2 reduces time to a master-ready negative-column
+batch or exact pricing completion without changing any exact decision; (RQ4)
+held-out activation, fallback, overhead, and harmful-action behavior; and
+(RQ5) paired completion-time differences among four independently fixed lunar
+operating phases.
+
+## 5.2 Instances and fixed mission epochs
+
+The benchmark uses 20 instances at each of 5, 10, 20, 30, 50, and 100 tasks
+over a common $50\,\mathrm{km}\times50\,\mathrm{km}$ lunar south-polar base
+area. Verified local inputs comprise LOLA-derived elevation, slope,
+roughness, PSR, and average solar-visibility rasters. The spatial extent and
+maximum modeled speed are forward-looking scenario assumptions, not present
+rover capabilities.
+
+The planned epoch study uses 12 anchors over one draconic year and groups
+three consecutive anchors into each of four southern seasonal phases. Hourly
+environmental states are summarized before path generation, consistent with
+the temporal resolution and multi-lunation polar-shadow analysis of Kloos et
+al. [@C063] and with later season-conditioned lunar south-pole operational
+studies [@C064]. The four groups, mission horizons, and statistical comparison
+remain choices of the present study. Each optimization run receives fixed
+path attributes; no departure-time-dependent illumination state is introduced
+into the current SPPRC.
+
+## 5.3 Exact and learning comparisons
+
+The deterministic comparison separates exhaustive P0V4, P0V4 with the
+bidirectional midpoint prepass, and the complete P0V4+V5 candidate. A valid
+component claim requires a fresh-process paired ablation under a common
+engine and instance order. The learning comparison is activated only after
+the bounded oracle passes and includes Q0, fixed-seed random order,
+handcrafted QD1/QB1 controls, a linear model, a two-layer MLP, and QG2
+TinyGAT. QG2 is allowed only at scales 30 and 50; scales 5, 10, and 20 bypass
+the model before loading.
+
+The action-surface-v2 corpus currently contains 150 states at each of scales
+30 and 50, drawn from 116 and 109 instances. Splits are performed by instance
+content hash. Oracle, training, calibration, held-out replay, development E2E,
+and formal acceptance are distinct gates. Timeouts, memory limits, frontier
+limits, and zero-addable outcomes are not converted into successful learning
+labels.
+
+## 5.4 Metrics and proof checks
+
+Every experiment reports exact closures, incomplete-pricing outcomes,
+objective and reduced-cost reconstruction, context drift, unresolved proof
+obligations, wall time, pricing time, processed labels, dominance work,
+midpoint acceptance, P0V4 fallback, master iterations, tree nodes, and memory.
+Learning runs additionally report inference latency, QG2 activation and
+fallback, actual within-bucket reorderings, time to admission or proof,
+harmful-action rate, beneficial precision, and calibration intervals. Pure
+runtime comparisons use paired geometric-mean ratios over common exact
+closures and always retain the total closure counts of both methods.
+
+# 6. Computational Results
+
+## 6.1 Current exact boundary
+
+Table 1 reports one fresh-process run per instance for the current P0V4+V5
+candidate bound to Native engine hash `a3be48f74fb8ec8a`. All 80 instances at
+scales 5--30 closed exactly and passed the recorded correctness checks. At
+scale 50, 15 of 20 instances closed exactly; instances 008, 009, 013, 014, and
+019 terminated with incomplete pricing and diagnostic-frontier scope only.
+
+| Tasks | Instances | Exact | Incomplete pricing | Mean (s) | Median (s) | Maximum (s) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 5 | 20 | 20 | 0 | 0.461 | 0.455 | 0.516 |
+| 10 | 20 | 20 | 0 | 1.190 | 0.958 | 3.160 |
+| 20 | 20 | 20 | 0 | 19.737 | 6.470 | 98.014 |
+| 30 | 20 | 20 | 0 | 80.853 | 52.386 | 260.426 |
+| 50 | 20 | 15 | 5 | -- | -- | 3605.753* |
+
+*The scale-50 maximum includes incomplete runs and describes the resource
+boundary. A complete-corpus mean or median is not inferred from the 15 closed
+rows.* The scale-100 stage of the final acceptance pipeline is not complete;
+the evidence does not support a six-scale completion claim.
+
+## 6.2 Deterministic components
+
+The current artifacts establish that the midpoint witness prepass, true-dual
+re-audit, enlarged negative pool, diverse batch admission, root-only SRI-3
+group screening, and exhaustive P0V4 fallback operate in one candidate. They
+do not yet contain a complete same-engine paired component ablation. The
+combined results above must therefore not be attributed separately to any V5
+component.
+
+## 6.3 Learning status
+
+Earlier learning tracks failed their predeclared continuation gates. For the
+unconditional proof-tail queue model, the paired learned/baseline geometric
+mean time ratio over 15 comparable states was 1.090, with a 95% bootstrap
+interval of [1.013, 1.166], and therefore failed the non-regression condition.
+A classifier proposed for skipping the bidirectional prepass showed high
+held-out discrimination but produced 228 false-skip decisions in calibration;
+it was never activated in formal solving. A third, one-deviation policy was
+stopped because the predefined opportunity and signal conditions were not
+met. These figures explain development choices and are not performance
+evidence for QG2 or for Table 1.
+
+The current QG2 package has passed its implementation action-surface checks
+and holds 300 context-bound pricing states, but the bounded oracle was still running at the
+2026-08-03 evidence cut. Model comparison, fresh-process calibration, held-out
+replay, development E2E, and formal full evaluation remain incomplete.
+Consequently, no model kind, bucket width, speedup, or deployment claim is
+authorized.
+
+| Learning result | Current value | Activation requirement |
+|---|---|---|
+| Bounded-oracle decision | TBD | Both scales pass the frozen headroom gates |
+| Selected Linear/MLP/GAT model | TBD | Common-split comparison completed |
+| Calibration threshold | TBD | Harm and benefit confidence gates passed |
+| Paired scale-30/50 effect | TBD | Same exact outcomes and complete ledgers |
+| Deployment authorized | No | All upstream and formal gates pass |
+
+## 6.4 Mission-epoch comparison
+
+The four-phase paired instance package has not yet been produced. No fastest
+operating phase is claimed. The final analysis will compare normalized
+science-weighted completion time using common task families and normalizers,
+with makespan, operating cost, risk, shadow exposure, feasibility, and exact
+closure as secondary outcomes.
+
+<!-- SUPERSEDED 2026-08-03: archived discussion and conclusion retained only
+for audit traceability. The rendered manuscript uses the replacement below.
+
 # 7. Discussion and Limitations
 
 ## 7.1 Established evidence
@@ -2514,6 +2599,76 @@ deterministic environmental inputs, current corpus, and available exact
 resources. Future experiments must preserve those boundaries while determining
 whether learned ordering changes exact-solver effort in practice.
 
+-->
+
+# 7. Discussion and Limitations
+
+The lunar character of the problem lies in coupled decisions rather than in
+labels alone. Candidate sites represent in-situ evidence tasks; PSR exposure,
+low solar elevation, slope, and roughness create path-dependent trade-offs;
+depot returns initiate docking, recharge, and later trips; and prohibition of
+task-site waiting makes unequal-travel-time alternatives noninterchangeable.
+Shadow exposure is therefore retained as a bounded off-depot resource,
+energy as a separate trip resource, and traversal/service risk as an objective
+term. Combining them into one opaque lunar penalty would conceal which
+quantity determines feasibility.
+
+Exactness remains restricted to the finite path options of one fixed
+mission-epoch instance. The theorem does not establish completeness over
+continuous terrain, physical calibration of resource proxies, or robustness
+across all environmental phases. Likewise, proof safety and computational
+benefit are different properties. Midpoint witnesses, deterministic cut-group
+screening, and QG2 may preserve exactness while still increasing wall time.
+Only paired end-to-end evidence can establish their computational value.
+
+The current results place the practical frontier between 30 and 50 tasks: all
+80 instances through scale 30 closed, whereas five of 20 scale-50 rows retained
+incomplete pricing. These rows are part of the result rather than removable
+outliers. Further scaling requires lower proof-tail work or memory without
+weakening true-dual exhaustive completion. Complete-case runtime comparisons
+must also report each method's total closure count to avoid survivorship bias.
+
+The supported-depot assumption excludes standby energy and thermal exposure
+during depot waiting. A mission without such support requires explicit
+standby, charging-concurrency, and depot-availability states and a revised
+proof. Fixed mission epochs are another deliberate boundary. Hourly
+environmental information is summarized before each solve; future work may
+update those attributes in a rolling horizon or make resources depend directly
+on departure time, at the cost of a larger pricing state and new dominance and
+completion-bound arguments.
+
+The immediate next step is to complete the QG2 bounded oracle. Failure should
+terminate this learning track rather than relax the deployment criteria. If
+the oracle passes, Linear, MLP, and GAT models must be compared under the same
+instance split, followed by calibration, held-out replay, development E2E, and
+formal acceptance. Multi-depot support, heterogeneous rovers, optional
+reward-collecting tasks, online replanning, stronger valid bounds, and a
+complete alternative branch rule remain further extensions.
+
+# 8. Conclusion
+
+This paper formulates lunar south-polar water-ice prospecting as a multi-path,
+multi-trip fleet-routing problem with heterogeneous services, static task
+windows, no task-site or en-route waiting, depot departure adjustment, load,
+energy, shadow exposure, risk, recharge, and science-weighted completion. The
+single normalized objective is operating cost plus risk plus $0.4$ times
+weighted completion time.
+
+The exact method combines exhaustive P0V4 pricing with V5 midpoint witnesses,
+diverse batch admission, and deterministic root-only SRI-3 group screening.
+Under the stated conditions, true-dual exhaustive pricing, valid cuts,
+complete branching, valid node bounds, and a closed finite tree prove global
+optimality within the fixed logical-path solution space. QG2 may only reorder
+labels within a common terminal class and reduced-cost bucket and has no
+filtering, pruning, bounding, cut, branch, or proof authority.
+
+The current candidate closed all 80 instances with 5--30 tasks and 15 of 20
+instances with 50 tasks; the other five terminated safely with incomplete
+pricing. These results establish the current deterministic exact boundary but
+do not establish learned acceleration. QG2 and four-phase mission-epoch
+comparisons remain subject to their predeclared oracle, calibration, paired,
+and formal-acceptance gates.
+
 # Appendix A. Proof Assumptions and Numerical Scope
 
 The proof in Section 4.7 uses the fixed route and master notation of
@@ -2564,10 +2719,14 @@ Descendant nodes inherit admitted root cuts but perform no new SRI separation.
 Existing correctness evidence does not by itself establish a runtime benefit,
 and later projection, packing, replay, or benchmark-only evidence cannot be
 promoted without its own frozen design and acceptance manifest. The
-deterministic cut-effect and state-refinement experiments reported in Sections
-6.2 and 6.3 used the legacy wait-permitted timing rule. The revised baseline
-in Section 6.1 uses root-only SRI-3 as a fixed control component but is not a
-paired estimate of that cut family's effect.
+historical cut-effect and state-refinement experiments under the legacy
+wait-permitted timing rule are retained only in the separate evidence archive.
+Section 6.2 of the current manuscript establishes component integration but
+does not estimate the speed effect of root-only SRI-3 or of any other
+individual component.
+
+<!-- SUPERSEDED 2026-08-03: historical appendices C--E retained only for the
+internal evidence trail.
 
 # Appendix C. Exploratory Evidence for the Optimized Candidate
 
@@ -2606,6 +2765,25 @@ overhead, exact-fallback frequency, and uncertainty.]]
 [[TBD-M005: Exact-safety, overhead, fallback, held-out, and OOD package.]]
 
 [[TBD-M006: Paired mission-epoch instance and four-phase comparison package.]]
+
+-->
+
+# Appendix C. Current Evidence Boundaries
+
+The P0V4+V5 acceptance evidence supports 80/80 exact closures at scales 5--30
+and 15/20 at scale 50. The five incomplete scale-50 rows have diagnostic
+pricing-frontier scope only. The scale-100 acceptance stage is incomplete.
+Neither the combined baseline nor the implementation tests identify a causal
+speed contribution from an individual V5 component.
+
+# Appendix D. Pending Learning Artifacts
+
+The following artifacts remain required before a learning-performance claim
+is activated: the completed bounded-oracle decision; instance-level split and
+leakage audit; Linear/MLP/GAT comparison and checkpoint; fresh-process
+calibration; held-out replay; development E2E comparison; formal scale-5--50
+acceptance; inference, fallback, and exact-equivalence ledgers. Branch-guidance
+artifacts are not part of the current QG2 scope.
 
 # Editorial Reference-Key Map (Working Draft Only)
 

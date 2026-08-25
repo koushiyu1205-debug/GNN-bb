@@ -22,7 +22,7 @@ formula may appear in a manuscript-facing visual.
 
 | Figure ID | Source Image or Data | Intended Caption | Target Location | LaTeX Label | Evidence Anchor | Readiness | Required Action |
 |---|---|---|---|---|---|---|---|
-| FIG01 | `runs/figures/basemaps/south_pole_sp50_preview_terrain_atlas.pdf` and `.png` (3081×2674) | Four spatial layers used to construct the 50 km lunar south-pole benchmark preview: elevation, deterministic traversal risk, water-ice resource potential and average solar visibility | Problem context/data | `fig:lunar_terrain_atlas` | EV011 | CANDIDATE | Verify every panel against the map catalog; state which layers are measured inputs, derived proxies or visualization-only; harmonize fonts |
+| FIG01 | `paper_rewriting_output/figures/lunar_water_ice_exploration_schematic_v5.pdf` and `.png` | Five spatially registered lunar planning layers: LOLA shaded relief, DEM terrain, deterministic traversal-risk proxy, average solar visibility and an illustrative fleet route-selection layer | Problem context/model | `fig:lunar_environment_route_stack` | EV009–EV011 | READY_FOR_LAYOUT | Use the vector PDF for submission and the 500 dpi PNG for review; the caption distinguishes map-derived inputs, model proxies and visualization-only route selection |
 | FIG02 | `runs/figures/basemaps/south_pole_sp50_preview_resource_basemap.pdf` and `.png` (2522×2254) | Water-ice resource-potential layer used by the benchmark generation pipeline | Data | `fig:resource_basemap` | EV011 | CANDIDATE | Use only if the atlas is too dense; identify proxy construction and avoid implying ground-truth ice abundance |
 | FIG03 | `runs/figures/basemaps/south_pole_sp50_preview_risk_basemap.pdf` and `.png` (2522×2254) | Deterministic traversal-risk layer derived from recorded terrain inputs | Data/problem formulation | `fig:risk_basemap` | EV011 | CANDIDATE | Audit colorbar, units and exact derivation; distinguish model risk from observed mission risk |
 | FIG04 | `runs/figures/basemaps/south_pole_sp50_preview_illumination_basemap.pdf` and `.png` (2522×2254) | Average solar-visibility context used in the benchmark map pipeline | Data | `fig:illumination_basemap` | EV011 | CANDIDATE | Confirm layer role in generator and caption native resolution; do not imply it enters every objective term |
@@ -54,7 +54,7 @@ formula may appear in a manuscript-facing visual.
 
 ## Selection Recommendation Before Drafting
 
-The likely main-text set is FIG01, FIG06, FIG09, FIG10, FIG12 and FIG15,
+The likely main-text set is FIG01, FIG09, FIG10, FIG12 and FIG15,
 plus TAB01, TAB02, TAB04 and TAB08. FIG13 is suitable if deterministic SRI
 remains an important exact-engine component in the paper; FIG14 belongs in an
 appendix unless a formal repeated promotion is later completed. This is a

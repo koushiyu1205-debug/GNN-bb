@@ -1,0 +1,182 @@
+{
+  "checks": {
+    "automated_regression_tests": {
+      "evidence": {
+        "commands": [
+          {
+            "command": [
+              "/home/kai/miniconda3/bin/python",
+              "-m",
+              "pytest",
+              "-q",
+              "tests/test_p0v5_bidirectional_gate_gat.py",
+              "tests/test_p0v5_qg2_label_state_gat.py"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": "................................................................         [100%]\n64 passed in 17.76s\n"
+          },
+          {
+            "command": [
+              "ctest",
+              "--test-dir",
+              "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1",
+              "--output-on-failure"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": "Internal ctest changing into directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1\nTest project /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1\n    Start 1: lunar_spprc_native_tests\n1/2 Test #1: lunar_spprc_native_tests .........   Passed    0.04 sec\n    Start 2: lunar_spprc_patch_queue_check\n2/2 Test #2: lunar_spprc_patch_queue_check ....   Passed    0.04 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   0.11 sec\n"
+          },
+          {
+            "command": [
+              "git",
+              "diff",
+              "--check"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": ""
+          }
+        ]
+      },
+      "note": "QG2 Python, Native CTest, and diff checks",
+      "status": "PASS"
+    },
+    "bounded_qo2_oracle_gate": {
+      "evidence": {},
+      "note": "bounded QO2 oracle has not completed",
+      "status": "INCOMPLETE"
+    },
+    "clean_snapshot_coverage": {
+      "evidence": {
+        "collection_freeze_sha256": "d75c261acbedd97917892ef621331d97a8ee25cfff981b106ca0e0f6b0562233",
+        "coverage": {
+          "30": {
+            "branch_or_cut_context_count": 0,
+            "context_count": 34,
+            "instance_count": 28,
+            "root_context_count": 34
+          },
+          "50": {
+            "branch_or_cut_context_count": 0,
+            "context_count": 1,
+            "instance_count": 1,
+            "root_context_count": 1
+          }
+        },
+        "excluded_count": 0,
+        "index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_live_snapshot_index.json",
+        "observed_action_hashes": [
+          "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+          "b2f9eab6bd01d12a0f4319342550733ddb0510e559d5e6a6abc119765d2203e2"
+        ],
+        "required_action_hashes_by_scale": {
+          "30": "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+          "50": "b2f9eab6bd01d12a0f4319342550733ddb0510e559d5e6a6abc119765d2203e2"
+        }
+      },
+      "note": "strict clean snapshot coverage gate",
+      "status": "INCOMPLETE"
+    },
+    "development_e2e_controller_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_e2e_controller_freeze_scale_aware_v2.json",
+        "issues": []
+      },
+      "note": "calibration-pass-only development E2E controller freeze",
+      "status": "PASS"
+    },
+    "development_end_to_end": {
+      "evidence": {},
+      "note": "scale30/50 development E2E evidence missing",
+      "status": "INCOMPLETE"
+    },
+    "exact_control_and_collection_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_collection_freeze_scale_aware_v3.json",
+        "issues": []
+      },
+      "note": "freeze hash audit",
+      "status": "PASS"
+    },
+    "formal_full20_controller_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_formal_controller_freeze_scale_aware_v2.json",
+        "issues": []
+      },
+      "note": "development-E2E-pass-only formal full20 controller freeze",
+      "status": "PASS"
+    },
+    "formal_scale5_to_50_full20": {
+      "evidence": {},
+      "note": "formal scale5-to-50 full20 evidence missing",
+      "status": "INCOMPLETE"
+    },
+    "fresh_process_calibration": {
+      "evidence": {},
+      "note": "fresh-process calibration report missing",
+      "status": "INCOMPLETE"
+    },
+    "frozen400_candidate_corpus": {
+      "evidence": {
+        "manifest": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_qg2_oracle_development_v3/manifest.json"
+      },
+      "note": "400 unique pre-oracle candidates with zero protected overlap",
+      "status": "PASS"
+    },
+    "frozen_experiment_candidate": {
+      "evidence": {},
+      "note": "independent experiment candidate freeze missing",
+      "status": "INCOMPLETE"
+    },
+    "heldout_snapshot_replay": {
+      "evidence": {},
+      "note": "heldout fresh-process replay missing",
+      "status": "INCOMPLETE"
+    },
+    "model_comparison_training": {
+      "evidence": {},
+      "note": "Linear/MLP/GAT training report missing",
+      "status": "INCOMPLETE"
+    },
+    "oracle_execution_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_oracle_execution_freeze_scale_aware_v2.json",
+        "issues": []
+      },
+      "note": "replay/oracle/training/calibration cache identity freeze",
+      "status": "PASS"
+    },
+    "post_oracle_controller_freeze": {
+      "evidence": {
+        "freeze": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_post_oracle_controller_freeze_scale_aware_v2.json",
+        "issues": []
+      },
+      "note": "oracle-pass-only training and calibration controller freeze",
+      "status": "PASS"
+    },
+    "qg2_exact_safe_implementation": {
+      "evidence": {
+        "label_state_bytes": "176",
+        "runtime_implementation_hash": "fb011a154bfbd095140e33947285268aefe3674075689887c6f9923d0bf7dccb",
+        "source_engine_hash": "0389484e5f5623f2"
+      },
+      "note": "engine/runtime binding and 176-byte State",
+      "status": "PASS"
+    },
+    "real_branch_cut_snapshot_coverage": {
+      "evidence": {},
+      "note": "bounded real-tree supplement has not run",
+      "status": "INCOMPLETE"
+    }
+  },
+  "complete": false,
+  "completion_rule": "all_required_checks_must_pass",
+  "failed_check_count": 0,
+  "incomplete_check_count": 9,
+  "objective": "P0V5 Proof-Tail GAT V2 Q0-Anchored Label-State Guidance",
+  "passed_check_count": 8,
+  "pre_final_freeze": false,
+  "required_check_count": 17,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v2_completion_audit.v1"
+}

@@ -46,6 +46,8 @@ PROOF_QUEUE_POLICY_QC0 = "QC0"
 PROOF_QUEUE_POLICY_QD1 = "QD1"
 PROOF_QUEUE_POLICY_QB1 = "QB1"
 PROOF_QUEUE_POLICY_QG1 = "QG1"
+PROOF_QUEUE_POLICY_QG2 = "QG2"
+PROOF_QUEUE_POLICY_QGR1 = "QGR1"
 PROOF_QUEUE_POLICIES = frozenset(
     {
         PROOF_QUEUE_POLICY_Q0,
@@ -53,8 +55,51 @@ PROOF_QUEUE_POLICIES = frozenset(
         PROOF_QUEUE_POLICY_QD1,
         PROOF_QUEUE_POLICY_QB1,
         PROOF_QUEUE_POLICY_QG1,
+        PROOF_QUEUE_POLICY_QG2,
+        PROOF_QUEUE_POLICY_QGR1,
     }
 )
+FRONTIER_PROBE_MODE_DISABLED = "disabled"
+FRONTIER_PROBE_MODE_COLLECT_FORCE_Q0 = "collect_force_q0"
+FRONTIER_PROBE_MODE_FORCE_QD1 = "force_qd1"
+FRONTIER_PROBE_MODE_LEARNED = "learned"
+FRONTIER_PROBE_MODE_COLLECT_TRIAL = "collect_trial"
+FRONTIER_PROBE_MODE_FORCE_TRIAL_CONTINUE = "force_trial_continue"
+FRONTIER_PROBE_MODE_FORCE_TRIAL_REVERT = "force_trial_revert"
+FRONTIER_PROBE_MODE_LEARNED_AFTER_TRIAL = "learned_after_trial"
+FRONTIER_TRIAL_MODES = frozenset(
+    {
+        FRONTIER_PROBE_MODE_COLLECT_TRIAL,
+        FRONTIER_PROBE_MODE_FORCE_TRIAL_CONTINUE,
+        FRONTIER_PROBE_MODE_FORCE_TRIAL_REVERT,
+        FRONTIER_PROBE_MODE_LEARNED_AFTER_TRIAL,
+    }
+)
+FRONTIER_PROBE_MODES = frozenset(
+    {
+        FRONTIER_PROBE_MODE_DISABLED,
+        FRONTIER_PROBE_MODE_COLLECT_FORCE_Q0,
+        FRONTIER_PROBE_MODE_FORCE_QD1,
+        FRONTIER_PROBE_MODE_LEARNED,
+        *FRONTIER_TRIAL_MODES,
+    }
+)
+FRONTIER_PROBE_BOUNDARY_V7 = 4096
+FRONTIER_TEMPORAL_BOUNDARIES_V10 = (4096, 8192, 16384)
+FRONTIER_CONTEXT_FEATURE_COUNT_V7 = 28
+COUNTERFACTUAL_PREFIX_MODE_DISABLED = "disabled"
+COUNTERFACTUAL_PREFIX_MODE_Q0 = "counterfactual_q0_prefix"
+COUNTERFACTUAL_PREFIX_MODE_QD1 = "counterfactual_qd1_prefix"
+COUNTERFACTUAL_PREFIX_MODES = frozenset(
+    {
+        COUNTERFACTUAL_PREFIX_MODE_DISABLED,
+        COUNTERFACTUAL_PREFIX_MODE_Q0,
+        COUNTERFACTUAL_PREFIX_MODE_QD1,
+    }
+)
+COUNTERFACTUAL_PREFIX_BOUNDARY_V8 = 4096
+COUNTERFACTUAL_PREFIX_CHECKPOINTS_V8 = (128, 512, 2048)
+COUNTERFACTUAL_LABEL_SAMPLE_CAP_V8 = 256
 PROOF_QUEUE_EXPERIMENT_ENV = (
     "LUNAR_ICE_EXPERIMENTAL_PROOF_QUEUE_POLICY"
 )
@@ -178,6 +223,63 @@ class BackendPricingRequest:
     subset_dominance_enabled: bool = False
     proof_queue_policy_id: str = PROOF_QUEUE_POLICY_Q0
     proof_queue_guidance_bucket_width: float = 0.01
+    proof_tail_gat_enabled: bool = False
+    proof_tail_queue_policy_id: str = PROOF_QUEUE_POLICY_QG2
+    proof_tail_label_state_schema_version: str = ""
+    proof_tail_gat_manifest_path: str = ""
+    proof_tail_label_trace_enabled: bool = False
+    proof_tail_label_trace_max_rows: int = 50_000
+    proof_tail_label_trace_sampling_mode: str = "prefix_v1"
+    proof_tail_label_trace_seed: int = 0
+    proof_tail_preference_cap_per_family: int = 12_500
+    proof_tail_surface_reservoir_count: int = 3_125
+    proof_tail_surface_labels_per_bucket: int = 8
+    proof_tail_witness_route_cap: int = 512
+    proof_tail_witness_ancestor_cap: int = 25_000
+    proof_tail_fallback_context: bool = False
+    proof_tail_active_column_count: int | None = None
+    proof_tail_active_task_sets: tuple[tuple[str, ...], ...] | None = None
+    proof_tail_active_column_signature_hashes: tuple[str, ...] | None = None
+    proof_tail_round_index: int | None = None
+    proof_tail_previous_proof_wall_sec: float | None = None
+    proof_tail_previous_processed_labels: int | None = None
+    proof_tail_previous_queue_policy_id: str = ""
+    proof_tail_previous_dominance_candidate_checks: int | None = None
+    proof_tail_previous_dominance_wall_sec: float | None = None
+    proof_tail_previous_max_visited_bucket_size: int | None = None
+    proof_tail_dual_delta_l1: float | None = None
+    proof_tail_v5_midpoint_wall_sec: float | None = None
+    proof_tail_v5_midpoint_reason: str = ""
+    proof_tail_frontier_probe_mode: str = FRONTIER_PROBE_MODE_DISABLED
+    proof_tail_frontier_probe_boundary: int = FRONTIER_PROBE_BOUNDARY_V7
+    proof_tail_frontier_trial_pop_budget: int = 0
+    proof_tail_frontier_require_root_cg: bool = True
+    proof_tail_frontier_fail_closed_on_ood: bool = True
+    proof_tail_frontier_observation_boundaries: tuple[int, ...] = ()
+    proof_tail_frontier_context_features: tuple[float, ...] = tuple(
+        0.0 for _ in range(FRONTIER_CONTEXT_FEATURE_COUNT_V7)
+    )
+    proof_tail_frontier_gat_bundle: Mapping[str, object] | None = None
+    proof_tail_frontier_manifest_path: str = ""
+    proof_tail_frontier_manifest_sha256: str = ""
+    proof_tail_frontier_bundle_sha256: str = ""
+    proof_tail_counterfactual_prefix_mode: str = (
+        COUNTERFACTUAL_PREFIX_MODE_DISABLED
+    )
+    proof_tail_counterfactual_prefix_boundary: int = (
+        COUNTERFACTUAL_PREFIX_BOUNDARY_V8
+    )
+    proof_tail_counterfactual_rollout_checkpoints: tuple[int, ...] = (
+        COUNTERFACTUAL_PREFIX_CHECKPOINTS_V8
+    )
+    proof_tail_counterfactual_max_rollout_budget: int = 2048
+    proof_tail_counterfactual_label_sample_cap: int = (
+        COUNTERFACTUAL_LABEL_SAMPLE_CAP_V8
+    )
+    proof_tail_counterfactual_sampling_seed: int = 0
+    proof_tail_counterfactual_telemetry_only: bool = True
+    proof_tail_counterfactual_public_routes_forbidden: bool = True
+    proof_tail_counterfactual_certificate_forbidden: bool = True
     dssr_enabled: bool = False
     dssr_policy_version: str = ""
     dssr_negative_batch_target: int = 0
@@ -313,6 +415,16 @@ class BackendPricingRequest:
             raise ValueError(
                 "non-Q0 proof queue policies are exact-proof diagnostics only"
             )
+        if proof_queue_policy_id in {
+            PROOF_QUEUE_POLICY_QG2,
+            PROOF_QUEUE_POLICY_QGR1,
+        }:
+            if int(self.data.scale) not in {30, 50}:
+                raise ValueError("label-state GAT is restricted to scale30/50")
+            if objective_mode != BACKEND_OBJECTIVE_OFFICIAL:
+                raise ValueError("label-state GAT requires the official objective")
+            if not bool(self.proof_tail_fallback_context):
+                raise ValueError("label-state GAT requires a V5 fallback context")
         object.__setattr__(
             self,
             "proof_queue_policy_id",
@@ -333,7 +445,402 @@ class BackendPricingRequest:
             "proof_queue_guidance_bucket_width",
             guidance_bucket_width,
         )
+        proof_tail_queue_policy_id = str(
+            self.proof_tail_queue_policy_id
+        )
+        if proof_tail_queue_policy_id not in {
+            PROOF_QUEUE_POLICY_QG2,
+            PROOF_QUEUE_POLICY_QGR1,
+        }:
+            raise ValueError("proof-tail GAT action policy must be QG2 or QGR1")
+        object.__setattr__(
+            self, "proof_tail_queue_policy_id", proof_tail_queue_policy_id
+        )
+        object.__setattr__(
+            self, "proof_tail_gat_enabled", bool(self.proof_tail_gat_enabled)
+        )
+        object.__setattr__(
+            self,
+            "proof_tail_label_state_schema_version",
+            str(self.proof_tail_label_state_schema_version),
+        )
+        object.__setattr__(
+            self,
+            "proof_tail_gat_manifest_path",
+            str(self.proof_tail_gat_manifest_path),
+        )
+        object.__setattr__(
+            self,
+            "proof_tail_label_trace_enabled",
+            bool(self.proof_tail_label_trace_enabled),
+        )
+        trace_max_rows = int(self.proof_tail_label_trace_max_rows)
+        if trace_max_rows <= 0 or trace_max_rows > 100_000:
+            raise ValueError(
+                "proof_tail_label_trace_max_rows must be in [1, 100000]"
+            )
+        object.__setattr__(
+            self, "proof_tail_label_trace_max_rows", trace_max_rows
+        )
+        if self.proof_tail_label_trace_enabled and not self.exact_proof_mode:
+            raise ValueError(
+                "proof-tail label trace is exact-proof development telemetry"
+            )
+        sampling_mode = str(self.proof_tail_label_trace_sampling_mode)
+        if sampling_mode not in {"prefix_v1", "qgr1_stratified_reservoir_v1"}:
+            raise ValueError("unsupported proof-tail label trace sampling mode")
+        object.__setattr__(
+            self, "proof_tail_label_trace_sampling_mode", sampling_mode
+        )
+        seed = int(self.proof_tail_label_trace_seed)
+        if seed < 0 or seed >= 2**64:
+            raise ValueError("proof-tail label trace seed must be uint64")
+        object.__setattr__(self, "proof_tail_label_trace_seed", seed)
+        caps = {
+            "proof_tail_preference_cap_per_family": int(
+                self.proof_tail_preference_cap_per_family
+            ),
+            "proof_tail_surface_reservoir_count": int(
+                self.proof_tail_surface_reservoir_count
+            ),
+            "proof_tail_surface_labels_per_bucket": int(
+                self.proof_tail_surface_labels_per_bucket
+            ),
+            "proof_tail_witness_route_cap": int(
+                self.proof_tail_witness_route_cap
+            ),
+            "proof_tail_witness_ancestor_cap": int(
+                self.proof_tail_witness_ancestor_cap
+            ),
+        }
+        if any(value <= 0 for value in caps.values()):
+            raise ValueError("proof-tail label trace reservoir caps must be positive")
+        if caps["proof_tail_surface_labels_per_bucket"] < 2:
+            raise ValueError("surface label reservoir must retain at least two labels")
+        for name, value in caps.items():
+            object.__setattr__(self, name, value)
+        object.__setattr__(
+            self,
+            "proof_tail_fallback_context",
+            bool(self.proof_tail_fallback_context),
+        )
+        if self.proof_tail_active_task_sets is not None:
+            legal_tasks = set(self.data.task_ids)
+            active_task_sets = tuple(sorted({
+                tuple(sorted(str(task_id) for task_id in task_set))
+                for task_set in self.proof_tail_active_task_sets
+            }))
+            if any(
+                not task_set or not set(task_set).issubset(legal_tasks)
+                for task_set in active_task_sets
+            ):
+                raise ValueError(
+                    "proof_tail_active_task_sets contain an invalid task set"
+                )
+            object.__setattr__(
+                self,
+                "proof_tail_active_task_sets",
+                active_task_sets,
+            )
+        if self.proof_tail_active_column_signature_hashes is not None:
+            signature_hashes = tuple(sorted({
+                str(value).strip().lower()
+                for value in self.proof_tail_active_column_signature_hashes
+            }))
+            if any(
+                len(value) != 64
+                or any(character not in "0123456789abcdef" for character in value)
+                for value in signature_hashes
+            ):
+                raise ValueError(
+                    "proof_tail_active_column_signature_hashes must be SHA-256 hex"
+                )
+            if (
+                self.proof_tail_active_column_count is not None
+                and len(signature_hashes) != int(self.proof_tail_active_column_count)
+            ):
+                raise ValueError(
+                    "active signature count must equal proof_tail_active_column_count"
+                )
+            object.__setattr__(
+                self,
+                "proof_tail_active_column_signature_hashes",
+                signature_hashes,
+            )
+        for field_name in (
+            "proof_tail_active_column_count",
+            "proof_tail_round_index",
+            "proof_tail_previous_processed_labels",
+            "proof_tail_previous_dominance_candidate_checks",
+            "proof_tail_previous_max_visited_bucket_size",
+        ):
+            value = getattr(self, field_name)
+            if value is not None:
+                value = int(value)
+                if value < 0:
+                    raise ValueError(f"{field_name} must be non-negative")
+                object.__setattr__(self, field_name, value)
+        for field_name in (
+            "proof_tail_previous_proof_wall_sec",
+            "proof_tail_previous_dominance_wall_sec",
+            "proof_tail_dual_delta_l1",
+            "proof_tail_v5_midpoint_wall_sec",
+        ):
+            value = getattr(self, field_name)
+            if value is not None:
+                value = float(value)
+                if not isfinite(value) or value < 0.0:
+                    raise ValueError(
+                        f"{field_name} must be finite and non-negative"
+                    )
+                object.__setattr__(self, field_name, value)
+        previous_queue_policy = str(
+            self.proof_tail_previous_queue_policy_id or ""
+        )
+        if (
+            previous_queue_policy
+            and previous_queue_policy not in PROOF_QUEUE_POLICIES
+        ):
+            raise ValueError(
+                "proof_tail_previous_queue_policy_id is invalid"
+            )
+        object.__setattr__(
+            self,
+            "proof_tail_previous_queue_policy_id",
+            previous_queue_policy,
+        )
+        if previous_queue_policy != PROOF_QUEUE_POLICY_Q0:
+            # Previous-arm performance is intervention-dependent.  Keep it
+            # out of the next selector input instead of creating a feedback
+            # channel that was absent from the Q0-only training corpus.
+            for field_name in (
+                "proof_tail_previous_proof_wall_sec",
+                "proof_tail_previous_processed_labels",
+                "proof_tail_previous_dominance_candidate_checks",
+                "proof_tail_previous_dominance_wall_sec",
+                "proof_tail_previous_max_visited_bucket_size",
+            ):
+                object.__setattr__(self, field_name, None)
+        object.__setattr__(
+            self,
+            "proof_tail_v5_midpoint_reason",
+            str(self.proof_tail_v5_midpoint_reason),
+        )
+        frontier_mode = str(self.proof_tail_frontier_probe_mode).strip().lower()
+        if frontier_mode not in FRONTIER_PROBE_MODES:
+            raise ValueError(
+                f"unsupported proof-tail frontier probe mode {frontier_mode!r}"
+            )
+        frontier_boundary = int(self.proof_tail_frontier_probe_boundary)
+        observation_boundaries = tuple(
+            int(value)
+            for value in self.proof_tail_frontier_observation_boundaries
+        )
+        if observation_boundaries:
+            expected_boundaries = tuple(
+                value
+                for value in FRONTIER_TEMPORAL_BOUNDARIES_V10
+                if value <= frontier_boundary
+            )
+            if (
+                frontier_mode == FRONTIER_PROBE_MODE_DISABLED
+                or frontier_boundary not in FRONTIER_TEMPORAL_BOUNDARIES_V10
+                or observation_boundaries != expected_boundaries
+                or observation_boundaries[-1] != frontier_boundary
+            ):
+                raise ValueError(
+                    "temporal frontier observations require an enabled probe "
+                    "and the canonical 4096/8192/16384 prefix through the "
+                    "decision boundary"
+                )
+        elif (
+            frontier_boundary != FRONTIER_PROBE_BOUNDARY_V7
+            and frontier_mode not in FRONTIER_TRIAL_MODES
+        ):
+            raise ValueError(
+                "legacy frontier probe boundary must be exactly 4096"
+            )
+        frontier_context = tuple(
+            float(value) for value in self.proof_tail_frontier_context_features
+        )
+        if (
+            len(frontier_context) != FRONTIER_CONTEXT_FEATURE_COUNT_V7
+            or any(not isfinite(value) for value in frontier_context)
+        ):
+            raise ValueError(
+                "V7 frontier context must contain 28 finite features"
+            )
+        if frontier_mode != FRONTIER_PROBE_MODE_DISABLED:
+            if proof_queue_policy_id != PROOF_QUEUE_POLICY_Q0:
+                raise ValueError("V7 frontier probe requires literal Q0")
+            if mode != BACKEND_MODE_EXACT_PROOF:
+                raise ValueError("V7 frontier probe requires exact proof")
+            if objective_mode != BACKEND_OBJECTIVE_OFFICIAL:
+                raise ValueError("V7 frontier probe requires official objective")
+            if int(self.data.scale) not in {30, 50}:
+                raise ValueError("V7 frontier probe is restricted to scale30/50")
+            if pricing_lifecycle_scope != PRICING_LIFECYCLE_SCOPE_ROOT_CG:
+                raise ValueError("V7 frontier probe is root-CG only")
+            if not bool(self.proof_tail_fallback_context):
+                raise ValueError("V7 frontier probe requires a V5 fallback context")
+            if (
+                self.guidance_hints is not None
+                or str(self.guidance_mode) != GUIDANCE_MODE_OFF
+            ):
+                raise ValueError("V7 frontier probe cannot combine with guidance")
+            if self.dssr_enabled:
+                raise ValueError("V7 frontier probe cannot run inside DSSR")
+        trial_pop_budget = int(self.proof_tail_frontier_trial_pop_budget)
+        if frontier_mode in FRONTIER_TRIAL_MODES:
+            expected_boundary = 4096 if int(self.data.scale) == 30 else 16384
+            if frontier_boundary != expected_boundary:
+                raise ValueError(
+                    "temporal trial boundary must be 4096 for scale30 and "
+                    "16384 for scale50"
+                )
+            if trial_pop_budget not in COUNTERFACTUAL_PREFIX_CHECKPOINTS_V8:
+                raise ValueError(
+                    "temporal trial pop budget must be one of 128/512/2048"
+                )
+        elif trial_pop_budget != 0:
+            raise ValueError(
+                "frontier trial pop budget is allowed only in a trial mode"
+            )
+        bundle = self.proof_tail_frontier_gat_bundle
+        if frontier_mode in {
+            FRONTIER_PROBE_MODE_LEARNED,
+            FRONTIER_PROBE_MODE_LEARNED_AFTER_TRIAL,
+        }:
+            if not isinstance(bundle, Mapping):
+                raise ValueError("learned V7 frontier probe requires a bundle")
+            bundle = dict(bundle)
+        elif bundle is not None:
+            raise ValueError("portable GAT bundle is allowed only in learned mode")
+        object.__setattr__(self, "proof_tail_frontier_probe_mode", frontier_mode)
+        object.__setattr__(self, "proof_tail_frontier_probe_boundary", frontier_boundary)
+        object.__setattr__(
+            self, "proof_tail_frontier_trial_pop_budget", trial_pop_budget
+        )
+        object.__setattr__(
+            self,
+            "proof_tail_frontier_observation_boundaries",
+            observation_boundaries,
+        )
+        object.__setattr__(self, "proof_tail_frontier_context_features", frontier_context)
+        object.__setattr__(self, "proof_tail_frontier_gat_bundle", bundle)
+        object.__setattr__(
+            self, "proof_tail_frontier_manifest_path",
+            str(self.proof_tail_frontier_manifest_path),
+        )
+        object.__setattr__(
+            self, "proof_tail_frontier_manifest_sha256",
+            str(self.proof_tail_frontier_manifest_sha256),
+        )
+        object.__setattr__(
+            self, "proof_tail_frontier_bundle_sha256",
+            str(self.proof_tail_frontier_bundle_sha256),
+        )
+        counterfactual_mode = str(
+            self.proof_tail_counterfactual_prefix_mode
+        ).strip().lower()
+        if counterfactual_mode not in COUNTERFACTUAL_PREFIX_MODES:
+            raise ValueError(
+                "unsupported counterfactual prefix mode "
+                f"{counterfactual_mode!r}"
+            )
+        counterfactual_boundary = int(
+            self.proof_tail_counterfactual_prefix_boundary
+        )
+        checkpoints = tuple(
+            int(value)
+            for value in self.proof_tail_counterfactual_rollout_checkpoints
+        )
+        maximum_rollout_budget = int(
+            self.proof_tail_counterfactual_max_rollout_budget
+        )
+        sample_cap = int(
+            self.proof_tail_counterfactual_label_sample_cap
+        )
+        sampling_seed = int(
+            self.proof_tail_counterfactual_sampling_seed
+        )
+        if counterfactual_boundary != COUNTERFACTUAL_PREFIX_BOUNDARY_V8:
+            raise ValueError("V8 counterfactual boundary must be exactly 4096")
+        if checkpoints != COUNTERFACTUAL_PREFIX_CHECKPOINTS_V8:
+            raise ValueError(
+                "V8 counterfactual checkpoints must be (128, 512, 2048)"
+            )
+        if maximum_rollout_budget not in checkpoints:
+            raise ValueError(
+                "V8 maximum rollout budget must be one of 128/512/2048"
+            )
+        if sample_cap != COUNTERFACTUAL_LABEL_SAMPLE_CAP_V8:
+            raise ValueError("V8 label sample cap must be exactly 256")
+        if sampling_seed < 0 or sampling_seed >= 2**64:
+            raise ValueError("V8 counterfactual sampling seed must be uint64")
+        contract_flags = (
+            bool(self.proof_tail_counterfactual_telemetry_only),
+            bool(self.proof_tail_counterfactual_public_routes_forbidden),
+            bool(self.proof_tail_counterfactual_certificate_forbidden),
+        )
+        if counterfactual_mode != COUNTERFACTUAL_PREFIX_MODE_DISABLED:
+            if frontier_mode != FRONTIER_PROBE_MODE_DISABLED:
+                raise ValueError("V8 prefix cannot combine with the V7 probe")
+            if proof_queue_policy_id != PROOF_QUEUE_POLICY_Q0:
+                raise ValueError("V8 prefix requires literal Q0")
+            if mode != BACKEND_MODE_EXACT_PROOF:
+                raise ValueError("V8 prefix requires exact-proof trajectory")
+            if objective_mode != BACKEND_OBJECTIVE_OFFICIAL:
+                raise ValueError("V8 prefix requires the official objective")
+            if int(self.data.scale) not in {30, 50}:
+                raise ValueError("V8 prefix is restricted to scale30/50")
+            if pricing_lifecycle_scope != PRICING_LIFECYCLE_SCOPE_ROOT_CG:
+                raise ValueError("V8 prefix is root-CG only")
+            if not bool(self.proof_tail_fallback_context):
+                raise ValueError("V8 prefix requires a V5 fallback context")
+            if self.dssr_enabled:
+                raise ValueError("V8 prefix cannot run inside DSSR")
+            if not all(contract_flags):
+                raise ValueError(
+                    "V8 prefix must be telemetry-only with routes and certificate forbidden"
+                )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_prefix_mode", counterfactual_mode
+        )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_prefix_boundary",
+            counterfactual_boundary,
+        )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_rollout_checkpoints", checkpoints
+        )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_max_rollout_budget",
+            maximum_rollout_budget,
+        )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_label_sample_cap", sample_cap
+        )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_sampling_seed", sampling_seed
+        )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_telemetry_only", contract_flags[0]
+        )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_public_routes_forbidden",
+            contract_flags[1],
+        )
+        object.__setattr__(
+            self, "proof_tail_counterfactual_certificate_forbidden",
+            contract_flags[2],
+        )
         object.__setattr__(self, "dssr_enabled", bool(self.dssr_enabled))
+        if self.dssr_enabled and proof_queue_policy_id in {
+            PROOF_QUEUE_POLICY_QG2,
+            PROOF_QUEUE_POLICY_QGR1,
+        }:
+            raise ValueError("label-state GAT cannot run inside DSSR")
         if self.dssr_enabled and self.exact_negative_escape_enabled:
             raise ValueError(
                 "exact negative escape and DSSR cannot be enabled together"

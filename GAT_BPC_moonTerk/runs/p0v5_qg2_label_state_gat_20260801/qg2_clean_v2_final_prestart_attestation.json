@@ -1,0 +1,41 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_final_prestart_attestation.v1",
+  "collection_id": "qg2_clean_v2",
+  "attested_at_local": "2026-08-01T21:35:20+08:00",
+  "status": "READY_FOR_ONE_FINAL_FRESH_PROCESS_COLLECTION",
+  "development_only": true,
+  "production_default": false,
+  "clean_namespace_verified": true,
+  "native_or_collection_processes_before_start": 0,
+  "guidance_environment_variables_before_start": 0,
+  "available_disk_gib_approx": 786,
+  "available_memory_gib_approx": 12,
+  "test_evidence": {
+    "python": "62 passed in 5.85s",
+    "native_ctest": "2/2 passed",
+    "native_randomized_q0_qg2_differential_cases": 500,
+    "native_state_size_bytes": 176,
+    "patch_queue": "passed_with_explicit_source",
+    "git_diff_check": "passed",
+    "completion_audit": "8 PASS, 9 outcome-dependent INCOMPLETE, 0 FAIL"
+  },
+  "freeze_sha256": {
+    "collection": "0a45986c582eecb58079e4d0c7d3e621d7afa5dd1e2e7d740fa7ffc5a090415c",
+    "tree_supplement": "0eb679ddb3bdaad8bd4c1327fa8665c166516119f8eb27af40a2c202e4a3f3bf",
+    "oracle_execution": "b774504c64f972f3eca136e200ef77b0e3e42f82f623e5a6d7e52b49da0a57fe",
+    "post_oracle": "005c61fe2ce70241d2f44dfb0451e3e89f1b9b234f3c914e53f0b28d1e8ad932",
+    "development_e2e": "d047a4dc934ad1e5054fa2579de0da0312cd141d71bf06a61295a81a920706c1",
+    "formal_full20": "b095836b5b249ff488d8eebb2f116332670f63fe2f3e1c13db3af6d872b1bc71",
+    "candidate_finalizer": "db0f8ebbfc83ecacbf72d7642bfa44c90ee88289baf317a8c0c4d0001b9ef7e4"
+  },
+  "implementation_sha256": {
+    "python_test_qg2": "7623c30b5158a6760b304781c933733aadd1de4c5f3afc1e6cb8a305fe20bc6b",
+    "python_test_bidirectional_gate": "018eab20835200d71416314aa73afca36cef5dd64c41f9f0b19a91b2ba9851ce",
+    "native_test": "f2b88693fdbfea4722fb81a4c2cc41b3ebbf281500e37dd1ebe659cb2b300184",
+    "completion_audit": "742d041638e0fe9949b86aa208fa8bdab4c25701c7b50592e7de4631749132ed",
+    "patch_queue_check": "c4a56881930149a4be628ac24a3f7a4decd8abd89d1f08cc5f99e29a8936626c"
+  },
+  "archived_rejected_collection": "runs/p0v5_qg2_label_state_gat_20260801/diagnostic_interrupted_qg2_clean_v2_pre_final_tests_20260801T213424",
+  "restart_policy": "do_not_restart_for_tuning_or_more_tests; stop only on correctness, hash, redline, or infrastructure failure",
+  "mutation_rule": "do_not_edit engine, runtime, features, native extension, exact config, corpus, tests, or frozen controllers until collection and bounded oracle finish"
+}

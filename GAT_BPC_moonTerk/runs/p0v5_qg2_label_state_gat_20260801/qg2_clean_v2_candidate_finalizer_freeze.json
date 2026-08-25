@@ -1,0 +1,29 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_candidate_finalizer_freeze.v1",
+  "status": "REFROZEN_WITH_TEST_SOURCE_BINDING_BEFORE_FORMAL_FULL20_AND_CANDIDATE_CREATION",
+  "development_only": true,
+  "production_default": false,
+  "deployable": false,
+  "frozen_at_local": "2026-08-01T21:23:03+08:00",
+  "collection_id": "qg2_clean_v2",
+  "frozen_file_sha256": {
+    "scripts/finalize_p0v5_qg2_clean_v2_candidate.py": "302481e359619673a4d1a4433c397524de60fd175c3088779c1ee21c0f657e61",
+    "scripts/audit_p0v5_qg2_v2_completion.py": "742d041638e0fe9949b86aa208fa8bdab4c25701c7b50592e7de4631749132ed",
+    "tests/test_p0v5_qg2_label_state_gat.py": "7623c30b5158a6760b304781c933733aadd1de4c5f3afc1e6cb8a305fe20bc6b",
+    "tests/test_p0v5_bidirectional_gate_gat.py": "018eab20835200d71416314aa73afca36cef5dd64c41f9f0b19a91b2ba9851ce",
+    "native/lunar_spprc/tests/test_native_pricer.cpp": "f2b88693fdbfea4722fb81a4c2cc41b3ebbf281500e37dd1ebe659cb2b300184",
+    "scripts/check_rcspp_patch_queue.py": "c4a56881930149a4be628ac24a3f7a4decd8abd89d1f08cc5f99e29a8936626c",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_formal_controller_freeze.json": "b095836b5b249ff488d8eebb2f116332670f63fe2f3e1c13db3af6d872b1bc71",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_collection_freeze.json": "0a45986c582eecb58079e4d0c7d3e621d7afa5dd1e2e7d740fa7ffc5a090415c",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py": "aeb8d499170da05a999044fe71c17f896d0ed84262186a356c20e293d903b239",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_gat.py": "018d39c8688f7fb0cedff5fdde29f5fe037253a6fe75fbc21f7c93645f7a5db8",
+    "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42"
+  },
+  "activation_gate": "formal_full20_pass_with_bound_result_hash",
+  "pre_freeze_audit_requirement": "all_non_candidate_requirements_pass",
+  "post_freeze_audit_requirement": "all_requirements_including_candidate_pass",
+  "candidate_model_id": "P0V5_QG2_LABEL_STATE_GAT",
+  "candidate_role": "independent_experiment_candidate",
+  "historical_baseline_mutation_permitted": false,
+  "automatic_production_switch": false
+}

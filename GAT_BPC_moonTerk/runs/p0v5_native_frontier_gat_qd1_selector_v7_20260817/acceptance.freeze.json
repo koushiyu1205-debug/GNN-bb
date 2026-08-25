@@ -1,0 +1,79 @@
+{
+  "controls_cannot_be_candidate": true,
+  "correctness_redline_limit": 0,
+  "gates": {
+    "calibration": {
+      "minimum_activation_instances_scale30": 4,
+      "minimum_activation_instances_scale50": 3,
+      "minimum_topology_rank_drop": 0.02,
+      "net_gm_strictly_below": 1.0
+    },
+    "development_e2e": {
+      "minimum_activation_instances_per_scale": 2,
+      "net_gm_strictly_below": 1.0,
+      "worst_instance_ratio_at_most": 1.1
+    },
+    "formal": {
+      "large_scale_gm_strictly_below": 1.0,
+      "minimum_activation_instances_per_scale": 5,
+      "p90_ratio_at_most": 1.05,
+      "small_scale_gm_at_most": 1.01,
+      "worst_ratio_at_most": 1.2
+    },
+    "heldout": {
+      "minimum_activation_instances_per_scale": 3,
+      "net_gm_strictly_below": 1.0,
+      "warm_p99_ms_at_most": 10.0
+    },
+    "main": {
+      "determined_context_fraction": 0.75,
+      "determined_train_instances": 16,
+      "minimum_adverse_or_neutral_instances": 4,
+      "minimum_benefit_instances": 5,
+      "minimum_switch_winner_instances": 7,
+      "oracle_gm_at_most": 0.95
+    },
+    "pilot": {
+      "determined_contexts_per_scale": 7,
+      "minimum_qpd1_winner_instances": 3,
+      "oracle_gm_at_most": 0.95
+    },
+    "probe_overhead": {
+      "gm_at_most": 1.01,
+      "p90_at_most": 1.02,
+      "warm_p99_ms_at_most": 10.0,
+      "worst_at_most": 1.05
+    }
+  },
+  "heldout_one_shot": true,
+  "production_review_separate": true,
+  "schema_version": "lunar_ice_bpc.p0v5_native_frontier_gat_acceptance.v7",
+  "threshold_grid": {
+    "adverse_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "maximum_disagreement": [
+      0.05,
+      0.1,
+      0.15
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ]
+  }
+}

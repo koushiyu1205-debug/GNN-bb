@@ -1,0 +1,12 @@
+{
+  "authority": "model_fitting_and_evaluation_only",
+  "deployable": false,
+  "frozen_file_sha256": {
+    "scripts/build_p0v5_qg2_selective_oracle_evidence.py": "9a7ac5025154837daf04bfd43b32b83631eada01bc44f885f1fc8d2011382d57",
+    "scripts/run_p0v5_qg2_selective_oracle_evidence_after_training.py": "aa8e46dd93b23cae026f07983b7deae4976f034cc6d8da4c9ef0f87b150f6138",
+    "src/lunar_ice_bpc/guidance/qg2_oracle_evidence.py": "820ba4bb215eae876d34e28380e81bc7a7b02e66fbaeeef869cd0127dc6b09b0"
+  },
+  "oracle_execution_unchanged": true,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_selective_oracle_evidence_controller_freeze.v1",
+  "training_only_v2_freeze_sha256": "8510ffdf3d57b43f60137a90c0f3254d6ef2ea35126fa36dc8b4f54abb1a7407"
+}

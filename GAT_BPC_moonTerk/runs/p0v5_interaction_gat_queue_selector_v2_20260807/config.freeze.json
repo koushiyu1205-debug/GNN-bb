@@ -1,0 +1,279 @@
+{
+  "action_universe": [
+    "Q0",
+    "QGR1",
+    "QD1",
+    "QB1"
+  ],
+  "allowed_scales": [
+    30,
+    50
+  ],
+  "arm_admission": {
+    "correctness_redline_limit": 0,
+    "minimum_determined_train_contexts": 18,
+    "minimum_neutral_or_harm_contexts": 4,
+    "minimum_neutral_or_harm_instances": 3,
+    "minimum_ratio_le_0_95_contexts": 3,
+    "minimum_ratio_le_0_95_instances": 3,
+    "minimum_train_instances": 9
+  },
+  "candidate_generation": {
+    "batch_size": 5,
+    "eligible_minimum_root_contexts": 2,
+    "maximum_new_instances_per_scale": 30,
+    "maximum_saved_root_contexts": 3,
+    "outcome_blind": true,
+    "seed_base": 260807000,
+    "target_eligible_instances_per_scale": 23,
+    "tree_supplement_forbidden": true
+  },
+  "candidate_instance_root": "data/p0v5_interaction_gat_queue_selector_v2_candidates",
+  "contexts_per_instance": {
+    "calibration": 2,
+    "selector_heldout": 2,
+    "train": 2
+  },
+  "controls_candidate_authorized": false,
+  "deployment_authorized": false,
+  "development_e2e_gate": {
+    "correctness_redline_limit": 0,
+    "exact_count_may_not_decrease": true,
+    "minimum_activation_instances_per_scale": 2,
+    "net_gm_strictly_below": 1.0,
+    "tree_model_calls_required": 0,
+    "worst_instance_median_ratio_at_most": 1.1
+  },
+  "development_only": true,
+  "execution": {
+    "arm_order": "rotate_by_state_hash",
+    "blocked_fresh_process_repeats": 3,
+    "formal_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "q0_repeated_in_every_block": true,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "same_prefrozen_milestone_required": true,
+    "single_native_process": true
+  },
+  "existing_development_instance_root": "data/p0v5_qg2_realmap_development_v4",
+  "experiment_id": "p0v5_interaction_gat_queue_selector_v2_20260807",
+  "fallback_action": "Q0",
+  "formal_gate": {
+    "instances_per_scale": 20,
+    "large_scale_tail": {
+      "p90_ratio_at_most": 1.05,
+      "worst_ratio_at_most": 1.2
+    },
+    "minimum_activation_instances_per_large_scale": 5,
+    "promotion_requires_bootstrap95_upper_strictly_below": 1.0,
+    "scale30": {
+      "common_exact_gm_strictly_below": 1.0,
+      "exact_required": 20,
+      "par2_may_not_increase": true
+    },
+    "scale50": {
+      "common_exact_gm_strictly_below": 1.0,
+      "exact_count_may_not_decrease": true,
+      "minimum_exact": 15,
+      "par2_may_not_increase": true
+    },
+    "small_scales": {
+      "exact_required": 20,
+      "gm_at_most": 1.01,
+      "manifest_torch_gat_ranker_calls_required": 0,
+      "scales": [
+        5,
+        10,
+        20
+      ]
+    },
+    "strong_speedup_gm_at_most": 0.95
+  },
+  "formal_instance_root": "data/instances",
+  "gat_calibration_gate": {
+    "correctness_redline_limit": 0,
+    "harmful_activation_limit": 0,
+    "minimum_activation_instances_per_scale": 2,
+    "minimum_topology_ablation_rank_drop": 0.02,
+    "rank_accuracy_not_below_topology_controls": true,
+    "selected_action_gm_not_above_topology_controls": true,
+    "selected_action_gm_strictly_below": 1.0
+  },
+  "gat_is_only_candidate": true,
+  "graph": {
+    "bidirectional": true,
+    "canonical_task_id_tiebreak": true,
+    "feature_schema": "lunar_ice_bpc.p0v5_interaction_gat_queue_features.v2",
+    "graph_schema": "lunar_ice_bpc.p0v5_root_interaction_graph.v1",
+    "ood_relative_margin": 0.05,
+    "self_loops": true,
+    "top_k_cooccurrence": 4,
+    "top_k_travel": 4
+  },
+  "heldout_gate": {
+    "adverse_activation_limit": 0,
+    "censor_limit": 0,
+    "correctness_redline_limit": 0,
+    "gat_not_worse_than_topology_controls": true,
+    "gat_strictly_beats_mlp_linear_worst_and_combined_gm": true,
+    "harmful_activation_limit": 0,
+    "minimum_activation_instances_per_scale": 2,
+    "net_gm_strictly_below": 1.0,
+    "one_shot_no_reselection": true,
+    "warm_graph_tensorization_inference_p99_ms_at_most": 10.0
+  },
+  "historical_inputs": {
+    "old_single_run_arm_outcomes": "diagnostic_only",
+    "qo2_leaked_outcomes": "diagnostic_only",
+    "r1_root_q0_snapshots": "preaction_hash_matched_only",
+    "r1_tree_snapshots": "forbidden",
+    "tinygat": "diagnostic_only"
+  },
+  "instance_split_per_scale": {
+    "calibration": 4,
+    "development_e2e": 3,
+    "selector_heldout": 4,
+    "train": 12
+  },
+  "lifecycle_authority": [
+    "root_cg"
+  ],
+  "literal_bypass_lifecycles": [
+    "tree_node"
+  ],
+  "literal_bypass_scales": [
+    5,
+    10,
+    20
+  ],
+  "message_passing_required": true,
+  "native_build_dir": "build/native-spprc-context-queue-portfolio-v1",
+  "portfolio_headroom_gate": {
+    "correctness_redline_limit": 0,
+    "minimum_non_q0_winner_instances_per_scale": 5,
+    "oracle_gm_at_most_per_scale": 0.95,
+    "require_beneficial_neutral_harm_instances": true
+  },
+  "production_default": "no_cut",
+  "production_switch_authorized": false,
+  "protected_content_manifests": [
+    "data/gat_p0v2/development_instances_manifest.json",
+    "data/p0v4_fixed_k_gat_development_v1/manifest.json",
+    "data/p0v5_qg2_oracle_development_v1/manifest.json",
+    "data/p0v5_qg2_oracle_development_v2/manifest.json",
+    "data/p0v5_qg2_oracle_development_v3/manifest.json"
+  ],
+  "protected_instance_roots": [
+    "data/dssr_v2_validation"
+  ],
+  "qgr1_bucket_width": 0.0001,
+  "qgr1_force_on": {
+    "context_count": 8,
+    "distinct_instances": 8,
+    "maximum_ratio_ge_1_05_contexts": 0,
+    "maximum_reordered_label_fraction": 0.15,
+    "maximum_scoring_fraction_of_proof_wall": 0.02,
+    "minimum_beneficial_instances_per_scale": 2,
+    "overall_gm_strictly_below": 0.98,
+    "per_scale_gm_strictly_below": 1.0,
+    "q0_complete_qgr1_censor_limit": 0
+  },
+  "qgr1_training": {
+    "hard_zero_quantile": 0.75,
+    "inner_train_validation_instances_per_scale": [
+      10,
+      2
+    ],
+    "maximum_epochs": 40,
+    "maximum_pairs_per_context": 50000,
+    "neutral_huber_weight": 0.1,
+    "neutral_no_reorder_accuracy_min": 0.7,
+    "neutral_pair_fraction": 0.25,
+    "outer_train_instances_per_scale": 12,
+    "overall_actionable_pair_accuracy_min": 0.7,
+    "patience": 8,
+    "per_family_accuracy_strictly_above": 0.55,
+    "potential_l1_weight": 1e-05,
+    "pressure_weight": "sqrt(1+action_surface_group_size)_clipped_at_8",
+    "supervised_pair_fraction": 0.75
+  },
+  "r1_expected_engine_hash": "0480c284f7a248d6",
+  "r1_expected_terminal_reason": "INSUFFICIENT_CONTEXT_COVERAGE",
+  "r1_run_root": "runs/p0v5_context_queue_portfolio_v1_20260807_r1",
+  "run_root": "runs/p0v5_interaction_gat_queue_selector_v2_20260807",
+  "runtime_policy": "P0V5_ROOT_INTERACTION_GAT_SELECTOR_V2",
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_config_freeze.v2",
+  "selected_exact_config": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "selector_training": {
+    "attention_heads": 2,
+    "candidate_model": "gat",
+    "control_models": [
+      "mlp",
+      "linear"
+    ],
+    "hidden_dim": 32,
+    "instance_balanced": true,
+    "loss": {
+      "adverse_bce": 1.0,
+      "benefit_bce": 1.0,
+      "pairwise_rank": 0.25,
+      "positive_gain_huber": 0.5
+    },
+    "maximum_epochs": 200,
+    "maximum_parameters_exclusive": 50000,
+    "patience": 25,
+    "seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "topology_controls": [
+      "no_message",
+      "shuffled_topology"
+    ],
+    "torch_threads": 1
+  },
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v5_interaction_gat_queue_selector_v2.json",
+  "source_config_sha256": "9569dd9d6c8784ec87329725d9e1f4510386f4299d2b498f5e84c677e1febe28",
+  "status": "FROZEN_BEFORE_ANY_V2_ARM_OUTCOME",
+  "stop_reasons": [
+    "CORRECTNESS_REDLINE",
+    "INSTANCE_FEATURE_OR_OUTCOME_LEAKAGE",
+    "INSUFFICIENT_ROOT_GAT_COVERAGE",
+    "FREEZE_HASH_DRIFT",
+    "NO_SCALE30_GAT_PORTFOLIO_HEADROOM",
+    "NO_SCALE50_GAT_PORTFOLIO_HEADROOM",
+    "NO_SAFE_GAT_CALIBRATION_THRESHOLD",
+    "NO_GAT_ADVANTAGE",
+    "HELDOUT_FRESH_FAILED",
+    "DEVELOPMENT_E2E_EXACT_COUNT_DECREASED",
+    "FORMAL_SMALL_SCALE_MODEL_CALL",
+    "UNDETERMINED_BY_CONTINUOUS_RESOURCE_CENSOR"
+  ],
+  "threshold_grid": {
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "risk_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ]
+  }
+}

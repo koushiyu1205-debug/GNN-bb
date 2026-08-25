@@ -1,0 +1,389 @@
+{
+  "arm_outcomes_read": 0,
+  "schema_version": "lunar_ice_bpc.p0v5_coverage_repair_candidate_selection.v5",
+  "screened_new_candidates": [
+    {
+      "accepted_instance_index": 1,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "b58c4499f02bfb4b",
+      "instance_id": "lunar_ice_sp50_030_001_seed261116001",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_001_logical_graph.json",
+      "legal_snapshot_count": 0,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": "NO_NATURAL_V5_ROOT_FALLBACK",
+      "scale": 30,
+      "screen_status": "INELIGIBLE",
+      "screened_ineligible": true,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 1,
+      "snapshot_cap": 3,
+      "snapshot_rows": [],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 2,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "0a5a83bb94e5e2e1",
+      "instance_id": "lunar_ice_sp50_030_002_seed261116002",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_002_logical_graph.json",
+      "legal_snapshot_count": 0,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": "NO_NATURAL_V5_ROOT_FALLBACK",
+      "scale": 30,
+      "screen_status": "INELIGIBLE",
+      "screened_ineligible": true,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 2,
+      "snapshot_cap": 3,
+      "snapshot_rows": [],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 3,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "da06213bdaa84bcf",
+      "instance_id": "lunar_ice_sp50_030_003_seed261116003",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_003_logical_graph.json",
+      "legal_snapshot_count": 1,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": null,
+      "scale": 30,
+      "screen_status": "ELIGIBLE",
+      "screened_ineligible": false,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 3,
+      "snapshot_cap": 3,
+      "snapshot_rows": [
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/da06213bdaa84bcf/a0d1f616bf7b8f2b8cfabe307e507605b3f7eae3a71fc3b5a8eaa3efd7119326.json",
+          "snapshot_sha256": "954ec26c2541e609abd9a6b9246d71a1bd47b9efe704d5db3cb0ce48ab4eb338",
+          "state_hash": "a0d1f616bf7b8f2b8cfabe307e507605b3f7eae3a71fc3b5a8eaa3efd7119326"
+        }
+      ],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 4,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "52c523df3dbaa719",
+      "instance_id": "lunar_ice_sp50_030_004_seed261116004",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_004_logical_graph.json",
+      "legal_snapshot_count": 0,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": "NO_NATURAL_V5_ROOT_FALLBACK",
+      "scale": 30,
+      "screen_status": "INELIGIBLE",
+      "screened_ineligible": true,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 4,
+      "snapshot_cap": 3,
+      "snapshot_rows": [],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 5,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "f885a43046210539",
+      "instance_id": "lunar_ice_sp50_030_005_seed261116005",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_005_logical_graph.json",
+      "legal_snapshot_count": 0,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": "NO_NATURAL_V5_ROOT_FALLBACK",
+      "scale": 30,
+      "screen_status": "INELIGIBLE",
+      "screened_ineligible": true,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 5,
+      "snapshot_cap": 3,
+      "snapshot_rows": [],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 6,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "44bd3f68f4e5cbb2",
+      "instance_id": "lunar_ice_sp50_030_006_seed261116006",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_006_logical_graph.json",
+      "legal_snapshot_count": 1,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": null,
+      "scale": 30,
+      "screen_status": "ELIGIBLE",
+      "screened_ineligible": false,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 6,
+      "snapshot_cap": 3,
+      "snapshot_rows": [
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/44bd3f68f4e5cbb2/4ad669b33cd8fbc72a5c2fa13d530dece26cefd63a587e96820819e8eb8c3c8f.json",
+          "snapshot_sha256": "cd692e912f830f0f4d65c2cc26f1f5cc184b4b852e04baddea6476fc5efd114c",
+          "state_hash": "4ad669b33cd8fbc72a5c2fa13d530dece26cefd63a587e96820819e8eb8c3c8f"
+        }
+      ],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 7,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "9a9044119548693c",
+      "instance_id": "lunar_ice_sp50_030_007_seed261116007",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_007_logical_graph.json",
+      "legal_snapshot_count": 0,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": "NO_NATURAL_V5_ROOT_FALLBACK",
+      "scale": 30,
+      "screen_status": "INELIGIBLE",
+      "screened_ineligible": true,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 7,
+      "snapshot_cap": 3,
+      "snapshot_rows": [],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 8,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "4c5935321220685f",
+      "instance_id": "lunar_ice_sp50_030_008_seed261116008",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_008_logical_graph.json",
+      "legal_snapshot_count": 3,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": null,
+      "scale": 30,
+      "screen_status": "ELIGIBLE",
+      "screened_ineligible": false,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 8,
+      "snapshot_cap": 3,
+      "snapshot_rows": [
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/4c5935321220685f/21ce03ceec3a36628113d102bb53d07c74e95b1b74c688e8afc5624afe6f5d28.json",
+          "snapshot_sha256": "adbdb1cd87334a4f3061209452fc009ec9ccfa7508daeb621de3f7dce3e1804d",
+          "state_hash": "21ce03ceec3a36628113d102bb53d07c74e95b1b74c688e8afc5624afe6f5d28"
+        },
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/4c5935321220685f/44e26fef02daf334f41509a7e174c986a683654be5a5722cf2e9e4bca30397ab.json",
+          "snapshot_sha256": "d62d4354f2771f9b681aeae29adcb8ec77cc8cb558abb956f3aa58f1545c7129",
+          "state_hash": "44e26fef02daf334f41509a7e174c986a683654be5a5722cf2e9e4bca30397ab"
+        },
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/4c5935321220685f/eed38d936dcfeb8181a665ecdd3c269950c8dc2b549bbfbf88572d0c93d36173.json",
+          "snapshot_sha256": "f7fc0433f736ec08c2a65375609d925968850c75262b2e02be5111ea2dfe711c",
+          "state_hash": "eed38d936dcfeb8181a665ecdd3c269950c8dc2b549bbfbf88572d0c93d36173"
+        }
+      ],
+      "source_cohort": "fresh_generated_v5_candidate"
+    }
+  ],
+  "selected_new_scale30": [
+    {
+      "accepted_instance_index": 3,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "da06213bdaa84bcf",
+      "instance_id": "lunar_ice_sp50_030_003_seed261116003",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_003_logical_graph.json",
+      "legal_snapshot_count": 1,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": null,
+      "scale": 30,
+      "screen_status": "ELIGIBLE",
+      "screened_ineligible": false,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 3,
+      "snapshot_cap": 3,
+      "snapshot_rows": [
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/da06213bdaa84bcf/a0d1f616bf7b8f2b8cfabe307e507605b3f7eae3a71fc3b5a8eaa3efd7119326.json",
+          "snapshot_sha256": "954ec26c2541e609abd9a6b9246d71a1bd47b9efe704d5db3cb0ce48ab4eb338",
+          "state_hash": "a0d1f616bf7b8f2b8cfabe307e507605b3f7eae3a71fc3b5a8eaa3efd7119326"
+        }
+      ],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 6,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "44bd3f68f4e5cbb2",
+      "instance_id": "lunar_ice_sp50_030_006_seed261116006",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_006_logical_graph.json",
+      "legal_snapshot_count": 1,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": null,
+      "scale": 30,
+      "screen_status": "ELIGIBLE",
+      "screened_ineligible": false,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 6,
+      "snapshot_cap": 3,
+      "snapshot_rows": [
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/44bd3f68f4e5cbb2/4ad669b33cd8fbc72a5c2fa13d530dece26cefd63a587e96820819e8eb8c3c8f.json",
+          "snapshot_sha256": "cd692e912f830f0f4d65c2cc26f1f5cc184b4b852e04baddea6476fc5efd114c",
+          "state_hash": "4ad669b33cd8fbc72a5c2fa13d530dece26cefd63a587e96820819e8eb8c3c8f"
+        }
+      ],
+      "source_cohort": "fresh_generated_v5_candidate"
+    },
+    {
+      "accepted_instance_index": 8,
+      "arm_outcomes_read": 0,
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "4c5935321220685f",
+      "instance_id": "lunar_ice_sp50_030_008_seed261116008",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_008_logical_graph.json",
+      "legal_snapshot_count": 3,
+      "model_calls": 0,
+      "ranker_calls": 0,
+      "reason": null,
+      "scale": 30,
+      "screen_status": "ELIGIBLE",
+      "screened_ineligible": false,
+      "selection_inputs": [
+        "accepted_instance_index",
+        "legal_snapshot_count_ge_1"
+      ],
+      "selection_order": 8,
+      "snapshot_cap": 3,
+      "snapshot_rows": [
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/4c5935321220685f/21ce03ceec3a36628113d102bb53d07c74e95b1b74c688e8afc5624afe6f5d28.json",
+          "snapshot_sha256": "adbdb1cd87334a4f3061209452fc009ec9ccfa7508daeb621de3f7dce3e1804d",
+          "state_hash": "21ce03ceec3a36628113d102bb53d07c74e95b1b74c688e8afc5624afe6f5d28"
+        },
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/4c5935321220685f/44e26fef02daf334f41509a7e174c986a683654be5a5722cf2e9e4bca30397ab.json",
+          "snapshot_sha256": "d62d4354f2771f9b681aeae29adcb8ec77cc8cb558abb956f3aa58f1545c7129",
+          "state_hash": "44e26fef02daf334f41509a7e174c986a683654be5a5722cf2e9e4bca30397ab"
+        },
+        {
+          "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/candidate_root_snapshots/scale30/4c5935321220685f/eed38d936dcfeb8181a665ecdd3c269950c8dc2b549bbfbf88572d0c93d36173.json",
+          "snapshot_sha256": "f7fc0433f736ec08c2a65375609d925968850c75262b2e02be5111ea2dfe711c",
+          "state_hash": "eed38d936dcfeb8181a665ecdd3c269950c8dc2b549bbfbf88572d0c93d36173"
+        }
+      ],
+      "source_cohort": "fresh_generated_v5_candidate"
+    }
+  ],
+  "selection_rule": "first_three_eligible_in_accepted_instance_index_order",
+  "status": "FROZEN_BEFORE_ANY_V5_ARM_OUTCOME",
+  "v4_scale30_eligible": [
+    {
+      "cap_sec": 300,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "4588071c34202578",
+      "instance_id": "lunar_ice_sp50_030_004_seed261115004",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v4_candidates/lunar_ice_sp50_030/instance_004_logical_graph.json",
+      "ordinal": 45,
+      "scale": 30,
+      "snapshot_cap": 3,
+      "source_cohort": "fresh_generated_v4_candidate"
+    }
+  ],
+  "v4_scale50_eligible": [
+    {
+      "cap_sec": 600,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "26803262347fd941",
+      "instance_id": "lunar_ice_sp50_050_001_seed261315001",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v4_candidates/lunar_ice_sp50_050/instance_001_logical_graph.json",
+      "ordinal": 46,
+      "scale": 50,
+      "snapshot_cap": 3,
+      "source_cohort": "fresh_generated_v4_candidate"
+    },
+    {
+      "cap_sec": 600,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "c6d2229a59e0ca50",
+      "instance_id": "lunar_ice_sp50_050_002_seed261315002",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v4_candidates/lunar_ice_sp50_050/instance_002_logical_graph.json",
+      "ordinal": 47,
+      "scale": 50,
+      "snapshot_cap": 3,
+      "source_cohort": "fresh_generated_v4_candidate"
+    },
+    {
+      "cap_sec": 600,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "1eef79726be90cf5",
+      "instance_id": "lunar_ice_sp50_050_003_seed261315003",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v4_candidates/lunar_ice_sp50_050/instance_003_logical_graph.json",
+      "ordinal": 48,
+      "scale": 50,
+      "snapshot_cap": 3,
+      "source_cohort": "fresh_generated_v4_candidate"
+    },
+    {
+      "cap_sec": 600,
+      "desired_partition": "candidate_pool",
+      "instance_content_hash": "ec8d306edfd97d17",
+      "instance_id": "lunar_ice_sp50_050_004_seed261315004",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v4_candidates/lunar_ice_sp50_050/instance_004_logical_graph.json",
+      "ordinal": 49,
+      "scale": 50,
+      "snapshot_cap": 3,
+      "source_cohort": "fresh_generated_v4_candidate"
+    }
+  ]
+}

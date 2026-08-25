@@ -1,0 +1,11 @@
+{
+  "current_stage": "TERMINAL",
+  "deployment_authorized": false,
+  "development_only": true,
+  "experiment_id": "p0v5_residual_gat_censor_aware_selector_v4_20260815",
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_state.v4",
+  "status": "FAIL",
+  "terminal": true,
+  "terminal_decision": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v4_20260815/terminal_decision.json"
+}

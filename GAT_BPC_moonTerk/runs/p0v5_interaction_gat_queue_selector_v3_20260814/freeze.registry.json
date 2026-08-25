@@ -1,0 +1,25 @@
+{
+  "arm_outcomes_present_at_freeze": 0,
+  "artifact_sha256": {
+    "acceptance.freeze.json": "9420f6fa895a28a26f1fc9ab48277d620681e1d92cf517b73cff4af041a519c6",
+    "combined_preaction_index.freeze.json": "ded501a15919644f70ba45d14a94e3943b024b679108094e01726d3a86cca469",
+    "config.freeze.json": "9cb6c57046112077ba9f3e2268b29f3d9efed43d68ab043433bb6dc8e67aa83a",
+    "corpus.freeze.json": "94279693823752d7e1b337639b50f151e90c8904d2115d9c28193e6ded1a5da2",
+    "execution.freeze.json": "02e9deaf3893a12547f0503fe76beb25191e123f93458f941720a526e2f4a37b",
+    "formal_blacklist.freeze.json": "5c5f7a224ce06c13ba18288e66cbdb211b057edf81d69e5cc53d965c5cdff545",
+    "graph.freeze.json": "231930d67ea4e29deb74dcbfa3f62917345cca9c4dfcecd057db190cea18b535",
+    "grouped_cv_folds.freeze.json": "0cac6b895e3724ed613d9b604a0f6ea8094b395c90c6ebf32077412af83130fc",
+    "instance_split.freeze.json": "eb17d59273a2c368523f597e3eff2f8a5f24ce106301e62020385b11c8b7184e",
+    "interface.freeze.json": "09030114c0f80ac3e57953a7894bf518c45e9914a58ff56e21e4b91393aafbb1",
+    "matched_qd1_qb1_execution.freeze.json": "a9c81a84e58a6f6d608a327d66f3070cfa542ee9050fd7b0a3f2f1bbbe1cd823",
+    "protected_blacklist.freeze.json": "2a597faa1bf147f0f0079f6535d81cb892582b2d9adbea635e487138bc25c1a9",
+    "q0_milestone_execution.freeze.json": "4c4e13551935ed1e8c83c01b10691124da666e88973b5dce6f3fc73fc35a073d",
+    "qgr1_force_on_execution.freeze.json": "166cdccbcdd2f46b54fb1d63a5d1b3d852dbac7980e63195a91313453845959b",
+    "qgr1_primary_context.freeze.json": "16733c961790d39d0abdbc63b66d89fcaafee73226df571fa2c39bc30bd01533",
+    "source.freeze.json": "f64463261e79ebdef0f00f5aba7c78e175f0298064b2715e04cbbb941eb89128",
+    "v2_preaction_import.freeze.json": "6888493869b3ca9ce2d3dd07b8c8688b84360a93a53a5307f4f8b744f752a280"
+  },
+  "immutable": true,
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_freeze_registry.v3",
+  "v2_modified": false
+}

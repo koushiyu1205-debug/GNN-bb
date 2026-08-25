@@ -1,0 +1,38 @@
+{
+  "arm_outcomes_imported": 0,
+  "counts_by_scale": {
+    "30": {
+      "contexts": 39,
+      "instances": 25,
+      "multiplicity_histogram": {
+        "1": 12,
+        "2": 12,
+        "3": 1
+      }
+    },
+    "50": {
+      "contexts": 61,
+      "instances": 25,
+      "multiplicity_histogram": {
+        "1": 1,
+        "2": 12,
+        "3": 12
+      }
+    }
+  },
+  "deduplication_key": [
+    "instance_content_hash",
+    "state_hash"
+  ],
+  "new_candidates_generated": 0,
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_v2_preaction_import.v3",
+  "source_r1_import": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_interaction_gat_queue_selector_v2_20260807/r1_preaction_import.freeze.json",
+  "source_r1_import_sha256": "a738c62942994d1e10025ad3e390dd46e24bb3e985b4288d6b7d93e6a2b54aad",
+  "source_root_screen_index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_interaction_gat_queue_selector_v2_20260807/root_screen_snapshot_index.current.json",
+  "source_root_screen_index_sha256": "a52d17b0ed2db46aa065d0124d2a54086e0d9c269c778e95ec43cd1dfe406043",
+  "source_v2_root": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_interaction_gat_queue_selector_v2_20260807",
+  "source_v2_terminal": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_interaction_gat_queue_selector_v2_20260807/terminal_decision.json",
+  "source_v2_terminal_sha256": "3bb71e77ce0a5f6a124fa9d7357812e15d2d888c26c5556aaaea7b7701d67db5",
+  "status": "FROZEN_BEFORE_ANY_V3_ARM_OUTCOME",
+  "tree_snapshots_imported": 0
+}

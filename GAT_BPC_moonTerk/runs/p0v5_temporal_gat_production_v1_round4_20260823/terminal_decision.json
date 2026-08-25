@@ -1,0 +1,20 @@
+{
+  "deployment_authorized": false,
+  "detail": {
+    "arm_outcome_count": 0,
+    "audit": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round4_20260823/context_collection_capacity_early_terminal.audit.json",
+    "audit_sha256": "790a5e342a2dca9b3b7de091c460678c5f8e9e3cd731db7cd199fe5c28f501c4",
+    "completed_scale30_train_instances_with_snapshot": 26,
+    "inflight_scale30_train_instances_with_snapshot": 1,
+    "maximum_possible_scale30_train_snapshot_instances": 31,
+    "minimum_determined_instances_gate": 32,
+    "unattempted_scale30_train_instances": 4,
+    "unexecuted_collection_tasks_not_treated_as_outcomes": true
+  },
+  "development_only": true,
+  "production_switch_authorized": false,
+  "reason": "NO_PASSING_TEMPORAL_TRIAL_K_SCALE30_MAX_SNAPSHOT_INSTANCE_CAPACITY_31_LT_32",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_terminal.v1",
+  "stage": "CONTEXT_COLLECTION",
+  "status": "TERMINATED_NEGATIVE"
+}

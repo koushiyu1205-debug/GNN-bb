@@ -1,0 +1,11 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_freeze_supersession.v1",
+  "superseded_freeze": "qg2_positive_net_e2e_controller_freeze.json",
+  "superseded_freeze_sha256": "e964d6f30ecc44d606e1a6a59b879a39f5ff5c49ca6a7f1d2c2f0ab27ddb35d9",
+  "replacement_freeze": "qg2_positive_net_e2e_controller_freeze_v2.json",
+  "replacement_freeze_sha256": "97fa65b3c1399bf09c9556177847b955bfe1b200e2a704cd39ba7c95980fc19b",
+  "reason": "v1 changed the historical five-percent analyzer hash; v2 restores that analyzer byte-for-byte and binds an independent positive-net analyzer",
+  "runtime_uses_replacement_only": true,
+  "production_switch_authorized": false,
+  "fallback_action": "Q0"
+}

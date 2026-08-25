@@ -1,0 +1,23 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_interrupted_collection.v1",
+  "collection_id": "qg2_clean_v2_pre_final_tests",
+  "status": "INTERRUPTED_AND_ARCHIVED_DIAGNOSTIC_ONLY",
+  "interrupted_at_local": "2026-08-01T21:31:49+08:00",
+  "archived_at_local": "2026-08-01T21:34:24+08:00",
+  "reason": "user_requested_one_final_post_test_fresh_process_collection",
+  "completed_scale30_rows": 6,
+  "snapshot_json_count": 7,
+  "partial_instance_present": true,
+  "oracle_eligible": false,
+  "training_eligible": false,
+  "must_not_be_indexed_into_restarted_clean_v2": true,
+  "retention": "preserved_in_place_for_diagnostics_and_audit_only",
+  "stopped_controller_pids": [
+    3771916,
+    3774614,
+    3774732,
+    3774841,
+    3776534,
+    3782272
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "artifact_sha256": {
+    "config.freeze.json": "6d7a7c50408e08bc050ac495ae6cdbd4650e7b44512e9fe1f6259a88553b2235",
+    "coverage_evidence.freeze.json": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed",
+    "research_contract.freeze.json": "395f60543599d16ac269fea043a8e0e10eb824d4c5d7df3b52f034edd7b7a6d8",
+    "source.freeze.json": "b42af03d1ae9fc3b66d77fd9a94152a22febc9e928f2545b2a0122af24d5063d",
+    "v7_preaction_import.freeze.json": "80bb0541318caacba7edca6d247d89bb942ac19897c5993334595514ec4841fa"
+  },
+  "frozen_before_qpd1_wall_outcomes": true,
+  "immutable": true,
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_observability_bootstrap.v1"
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_freeze_supersession.v1",
+  "superseded_freeze": "qg2_positive_net_candidate_finalizer_freeze_v2.json",
+  "superseded_freeze_sha256": "049c2254833d44b5c68a00558f5969e5c69bbfcbd888940bcf8b00ef64ca0eee",
+  "replacement_freeze": "qg2_positive_net_candidate_finalizer_freeze_v3.json",
+  "replacement_freeze_sha256": "00beb4b4aa0b1fb0ab1ce18624e16e8f75c52eda390e7b54e5b03897a38012b4",
+  "reason": "v3 also binds the report-only GAT-versus-best-Linear-MLP advantage claim without making it a deployment gate",
+  "runtime_uses_replacement_only": true,
+  "production_switch_authorized": false,
+  "fallback_action": "Q0"
+}

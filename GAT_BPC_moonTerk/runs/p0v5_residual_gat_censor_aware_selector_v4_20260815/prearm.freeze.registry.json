@@ -1,0 +1,15 @@
+{
+  "arm_outcomes_present_at_freeze": 0,
+  "artifact_sha256": {
+    "config.freeze.json": "399a9773540590488534a0c197122c6fa263377994b3abea9de0c5a021a084df",
+    "formal_blacklist.freeze.json": "c1a16c797cd5e0650d72e0b2ddc24ed984a7df097a80d6788b87f70a6b8e42ba",
+    "graph.freeze.json": "8479eef52c7d8610aecaf2429ee5e08da00f42a6d0fa35bf397de8fbb31d4405",
+    "instance_census.freeze.json": "6d994b489626eddff5549379bcbe4be385e55357bc155ac7f452421f6a533487",
+    "interface.freeze.json": "362ff637dcdcecad66da16af53809aaff0a14c0957acce7d9a14cbe9ad40a47e",
+    "root_collection.execution.freeze.json": "15117d3767b7024eb22f2bcf0cc11f850da7c0868b3501746b97a95756c18af4",
+    "source.freeze.json": "de892561f33edb34eaf822e7b1ca8fbbb98b44f85aea717502a604ddd264bf0d",
+    "v3_diagnostic_only.freeze.json": "75608db760e208e9722b5c7e34a71cf23748fae641e3f8c2b2f3e32618923c10"
+  },
+  "immutable": true,
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_prearm_registry.v4"
+}

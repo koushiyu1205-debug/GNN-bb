@@ -1,0 +1,24 @@
+{
+  "action_universe": [
+    "Q0",
+    "QD1"
+  ],
+  "checkpoint_schema": "lunar_ice_bpc.p0v5_interaction_gat_qd1_checkpoint.v1",
+  "dataset_schema": "lunar_ice_bpc.p0v5_interaction_gat_qd1_training_dataset.v1",
+  "feature_schema": "lunar_ice_bpc.p0v5_interaction_gat_queue_features.v2",
+  "graph_schema": "lunar_ice_bpc.p0v5_root_interaction_graph.v1",
+  "manifest_schema": "lunar_ice_bpc.p0v5_root_interaction_gat_qd1_runtime_manifest.v1",
+  "model_outputs": [
+    "benefit_probability",
+    "conditional_positive_gain",
+    "adverse_probability"
+  ],
+  "permanent_forced_veto_arms": [
+    "QB1",
+    "QGR1"
+  ],
+  "ranker_fields_forbidden": true,
+  "root_only_authority": true,
+  "runtime_policy": "P0V5_ROOT_INTERACTION_GAT_QD1_SELECTOR_V6",
+  "schema_version": "lunar_ice_bpc.p0v5_minimal_interaction_gat_interface.v6"
+}

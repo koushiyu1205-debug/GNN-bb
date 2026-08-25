@@ -1,0 +1,38 @@
+{
+  "artifact_sha256": {
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_instance_split.json": "578c049ae1fbb3d6addd1350a88da8dfac0d9c5575483727a51e7c0c6303d53d",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v4_realmap_gat_first_20260806/realmap_v4_oracle_execution_freeze.json": "5c0746ad7c2404255e61f6f810f4df82d013c6b0e7ea36ac5791dc93febb264d",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat_smoke/training_curve.jsonl": "757ac1b6e5d8d64ecd91ffa8142bb3542580531f18f21ec612a4befceb573a10",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/label_gat_smoke/training_report.json": "55796195895471ab47c12af9254edc32236ffa3eee10774fc70f32c49b7eb90d",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/trace_selection_freeze.json": "8b60f45bd02efb8b7cebd0b678128f7e210363757cb341e17d044f922f8856f3",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/trace_supervision_corpus.json": "78010eccb3eea87ff37321a6a30782ad8041a4881e8ae0ff18b6c68b9f986054",
+    "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v5_trace_first_20260807/trace_training_view.json": "2bb8ab76ce25fc16fcb8596d0fa80f82afac0c19f10ba7f4ae7ae3ab45c13dd1"
+  },
+  "created_after_one_epoch_smoke": true,
+  "created_before_formal_training": true,
+  "deployable": false,
+  "development_only": true,
+  "model_order": [
+    "label_gat",
+    "context_gat",
+    "mlp",
+    "linear"
+  ],
+  "production_switch_authorized": false,
+  "random_or_leaked_qo2_on_critical_path": false,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_label_gat_training_freeze.v1",
+  "source_sha256": {
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/analyze_p0v5_qg2_v4_instance_balanced_gat_attribution.py": "d7f50982faa90ec764bf10197008286fc1ae872a8ef7d6091b2170deb45ae6ee",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/calibrate_p0v5_qg2_v4_instance_balanced_gat_force_on.py": "e01f81a44ea512fb63a0cb79e89f8b0e504b810397c0bc005e5d66b8993c4970",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/collect_p0v5_qg2_v5_trace_corpus.py": "c011948d4ea85f195fe45921879e2b71fa31705460e8720932a797f155157e13",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/finalize_p0v5_qg2_v5_bounded_trace_corpus.py": "b99be3388e2a1f8fdf03bcd434d6764dcc130842cb272b91f22a26880a5cf63e",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/run_p0v5_qg2_v5_label_gat_first.py": "4918b00e0592dc390413b7d3c55691bf2c425041b8ed0c62c4609e6e6b21f779",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/train_p0v5_qg2_v3_rankers.py": "5483ac3c70e494f4a8e425b7b48ff39f6c08e94cc5c4d749509c31404303fd52",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/train_p0v5_qg2_v4_instance_balanced_rankers.py": "18b5473934fcbcdc1eb6d7c8140bd1f12539026a35ea211517c1d2f4e058c8d7",
+    "/home/kai/work/GAT_BPC_moonTerk/scripts/train_p0v5_qg2_v5_label_gat.py": "9474baa66a2356f4a546cccbd12cf066865badb3a4d83c96b04a170a6c2a24fa",
+    "/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/guidance/instance_balanced_learning.py": "6ea502f049aeffc3a3d479a68ea9fc5641a9b5cbecb3cd8a98bef5bc331f3026",
+    "/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/guidance/proof_queue_label_state_gat_v3.py": "b5063cbff11cdfcf19e743dc4d27601e0711cd17e45befd473adc31ebccef7e8",
+    "/home/kai/work/GAT_BPC_moonTerk/src/lunar_ice_bpc/guidance/qg2_admission_supervision_v3.py": "eb680a0446ca65a63b9d356fae6ed24e3045062a19b7b8636c8b80dfce803cb2",
+    "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_v5_trace_first.py": "ca5f9d97ab7fc8b72f68ae6c3491018fcea6339562d8a577d9ef70a5810c6e25"
+  }
+}

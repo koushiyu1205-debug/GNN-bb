@@ -1,0 +1,25 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_positive_net_e2e_freeze.v1",
+  "generated_at": "2026-08-05T21:58:37+08:00",
+  "development_only": true,
+  "deployable": false,
+  "production_switch_authorized": false,
+  "formal_experiment_authority_requires_positive_net_e2e": true,
+  "evaluation_gate_policy": "positive_net_exact_safe.v1",
+  "minimum_speedup_gate_enabled": false,
+  "per_scale_maximum_ratio": 1.03,
+  "combined_scale30_50_ratio_must_be_below": 1.0,
+  "selected_censor_or_unsafe_is_hard_veto": true,
+  "fallback_action": "Q0",
+  "all_arms_rejected_action": "Q0",
+  "frozen_file_sha256": {
+    "scripts/run_p0v5_qg2_positive_net_e2e_after_calibration.py": "ce3b48abc2340a6bb5ee71a6ea926923b59565e00eba7237b343a23d856667ce",
+    "scripts/evaluate_p0v5_qg2_positive_net_calibration.py": "3b5cc9b1167a9818f63d9774260dafefad09612c2554313f437ffd7d93e7d3df",
+    "scripts/analyze_p0v5_qg2_paired_acceptance.py": "ac0b62a20e524ffafad558ca3056b7eb0fb0b78107d9004eaf05df1a32845476",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py": "7b526e1e382175b96e0faaf4b5b9d3d4eeba87f8fb0083d0f31155b338d4a205",
+    "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_positive_net_evaluation_runtime_integration_freeze.json": "974e62c0cbd11e060a5a134f9ec989aeb6552816bdc06fe8b7d9d6e49b3bde3d",
+    "runs/p0v5_qg2_label_state_gat_20260801/training_qg2_action_surface_v2_training_only_v2/training_report.json": "b0da69137fa74f13de3b52c3660bad5b67c2df60813c4d5fdc7e9dfcb37e3bc1",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_training_only_v2_selective_oracle_evidence.json": "c499417fe3e130cb1e76bd66be091f4c0795e03cc83028df7b35e74fe79d7bb3"
+  }
+}

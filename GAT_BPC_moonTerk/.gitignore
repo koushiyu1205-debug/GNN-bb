@@ -7,6 +7,13 @@
 /build/native-spprc-bidirectional-feasibility-v1/
 /build/native-spprc-memory-opt-v2/
 /build/native-spprc-memory-opt/
+/build/native-spprc-context-queue-portfolio-v1/
+/build/native-spprc-counterfactual-prefix-v8/
+/build/native-spprc-counterfactual-prefix-v8r1/
+/build/native-spprc-frontier-gat-v7/
+/build/native-spprc-residual-gat-v4/
+/build/native-spprc-temporal-frontier-v10-asan/
+/build/native-spprc-temporal-frontier-v10/
 /.venv-native-spprc/
 /src/*.egg-info/
 /data/gat_p0v2/development_instances/scale_*/instance_*_logical_graph.json

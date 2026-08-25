@@ -1,0 +1,9 @@
+{
+  "current_stage": "REPRESENTATION_PREFIX",
+  "deployment_authorized": false,
+  "development_only": true,
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_state.v8",
+  "status": "READY",
+  "terminal": false
+}

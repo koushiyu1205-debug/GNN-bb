@@ -1,0 +1,20 @@
+{
+  "deployment_authorized": false,
+  "detail": {
+    "audit": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_temporal_gat_production_v1_round2_20260819/train_trial_early_terminal.audit.json",
+    "audit_sha256": "860aca3580c462d8f2a75636235075014ccb6592716786f5994f3ed092028f02",
+    "differential_redlines": [
+      "nondeterministic_frontier_telemetry:temporal_s30_03a03c5919fac98b_0:30:128:CONTINUE_QD1",
+      "nondeterministic_frontier_telemetry:temporal_s30_03a03c5919fac98b_0:30:128:MIGRATE_BACK_TO_Q0"
+    ],
+    "published_task_count": 41,
+    "scheduled_task_count": 3186,
+    "unexecuted_tasks_not_treated_as_outcomes": true
+  },
+  "development_only": true,
+  "production_switch_authorized": false,
+  "reason": "TEMPORAL_TRIAL_EXACT_DIFFERENTIAL_REDLINE",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_terminal.v1",
+  "stage": "TRAIN_TRIALS",
+  "status": "TERMINATED_NEGATIVE"
+}

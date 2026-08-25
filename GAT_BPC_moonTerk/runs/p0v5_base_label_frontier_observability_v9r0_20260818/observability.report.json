@@ -1,0 +1,465 @@
+{
+  "baseline_v7r3": {
+    "gat_scale50_benefit_balanced_accuracy": 0.6090909090909091,
+    "gat_scale50_rank_accuracy": 0.525,
+    "similar_opposite_label_fraction": 0.6470588235294118
+  },
+  "best_simple_scale50_benefit_balanced_accuracy": 0.5727272727272728,
+  "decision": "FAIL",
+  "diagnostic_only": true,
+  "gate": {
+    "per_context_cost_fraction": true,
+    "scale50_benefit_balanced_accuracy": false,
+    "scale50_rank_accuracy": true,
+    "similar_opposite_fraction": false,
+    "simple_control_gap": true,
+    "topology_contribution": true,
+    "topology_not_worse": true,
+    "warm_cost_p99": true
+  },
+  "maximum_per_context_fraction_of_qpf0": 0.012023505888319578,
+  "metrics": {
+    "gat": {
+      "30": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 1.0,
+            "brier": 0.10392340568742445,
+            "negative_count": 17,
+            "positive_count": 2,
+            "recall": 1.0,
+            "specificity": 1.0
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5285714285714286,
+            "brier": 0.17858882897724737,
+            "negative_count": 5,
+            "positive_count": 14,
+            "recall": 0.8571428571428571,
+            "specificity": 0.2
+          },
+          "count": 19,
+          "rank_accuracy": 0.7368421052631579
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 1.0,
+            "brier": 0.10791446094852926,
+            "negative_count": 14,
+            "positive_count": 1,
+            "recall": 1.0,
+            "specificity": 1.0
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5340909090909092,
+            "brier": 0.20091394396743045,
+            "negative_count": 4,
+            "positive_count": 11,
+            "recall": 0.8181818181818182,
+            "specificity": 0.25
+          },
+          "count": 15,
+          "rank_accuracy": 0.6666666666666666
+        }
+      },
+      "50": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.7556818181818181,
+            "brier": 0.14918334394470642,
+            "negative_count": 11,
+            "positive_count": 8,
+            "recall": 0.875,
+            "specificity": 0.6363636363636364
+          },
+          "benefit": {
+            "balanced_accuracy": 0.6346153846153846,
+            "brier": 0.15602581423298445,
+            "negative_count": 13,
+            "positive_count": 6,
+            "recall": 0.5,
+            "specificity": 0.7692307692307693
+          },
+          "count": 19,
+          "rank_accuracy": 0.631578947368421
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.7619047619047619,
+            "brier": 0.14983714606171247,
+            "negative_count": 9,
+            "positive_count": 7,
+            "recall": 0.8571428571428571,
+            "specificity": 0.6666666666666666
+          },
+          "benefit": {
+            "balanced_accuracy": 0.6636363636363636,
+            "brier": 0.1540380214713522,
+            "negative_count": 11,
+            "positive_count": 5,
+            "recall": 0.6,
+            "specificity": 0.7272727272727273
+          },
+          "count": 16,
+          "rank_accuracy": 0.6875
+        }
+      },
+      "combined_instance_rank_accuracy": 0.6774193548387096
+    },
+    "linear": {
+      "30": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.5,
+            "brier": 0.14903338230598118,
+            "negative_count": 17,
+            "positive_count": 2,
+            "recall": 0.0,
+            "specificity": 1.0
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5642857142857143,
+            "brier": 0.16834055695889896,
+            "negative_count": 5,
+            "positive_count": 14,
+            "recall": 0.9285714285714286,
+            "specificity": 0.2
+          },
+          "count": 19,
+          "rank_accuracy": 0.7894736842105263
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.5,
+            "brier": 0.13471606096288255,
+            "negative_count": 14,
+            "positive_count": 1,
+            "recall": 0.0,
+            "specificity": 1.0
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5795454545454546,
+            "brier": 0.1836037506557457,
+            "negative_count": 4,
+            "positive_count": 11,
+            "recall": 0.9090909090909091,
+            "specificity": 0.25
+          },
+          "count": 15,
+          "rank_accuracy": 0.7333333333333333
+        }
+      },
+      "50": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.7215909090909092,
+            "brier": 0.1639423268509781,
+            "negative_count": 11,
+            "positive_count": 8,
+            "recall": 0.625,
+            "specificity": 0.8181818181818182
+          },
+          "benefit": {
+            "balanced_accuracy": 0.641025641025641,
+            "brier": 0.24319101772397467,
+            "negative_count": 13,
+            "positive_count": 6,
+            "recall": 0.6666666666666666,
+            "specificity": 0.6153846153846154
+          },
+          "count": 19,
+          "rank_accuracy": 0.5263157894736842
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.6746031746031746,
+            "brier": 0.16465856026127512,
+            "negative_count": 9,
+            "positive_count": 7,
+            "recall": 0.5714285714285714,
+            "specificity": 0.7777777777777778
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5727272727272728,
+            "brier": 0.2557623601173887,
+            "negative_count": 11,
+            "positive_count": 5,
+            "recall": 0.6,
+            "specificity": 0.5454545454545454
+          },
+          "count": 16,
+          "rank_accuracy": 0.5625
+        }
+      },
+      "combined_instance_rank_accuracy": 0.6451612903225806
+    },
+    "mlp": {
+      "30": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.5,
+            "brier": 0.12846536586324422,
+            "negative_count": 17,
+            "positive_count": 2,
+            "recall": 0.0,
+            "specificity": 1.0
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5642857142857143,
+            "brier": 0.15835235460606112,
+            "negative_count": 5,
+            "positive_count": 14,
+            "recall": 0.9285714285714286,
+            "specificity": 0.2
+          },
+          "count": 19,
+          "rank_accuracy": 0.631578947368421
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.5,
+            "brier": 0.12006479328154097,
+            "negative_count": 14,
+            "positive_count": 1,
+            "recall": 0.0,
+            "specificity": 1.0
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5795454545454546,
+            "brier": 0.1642569402659773,
+            "negative_count": 4,
+            "positive_count": 11,
+            "recall": 0.9090909090909091,
+            "specificity": 0.25
+          },
+          "count": 15,
+          "rank_accuracy": 0.6
+        }
+      },
+      "50": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.5511363636363636,
+            "brier": 0.20429997332139732,
+            "negative_count": 11,
+            "positive_count": 8,
+            "recall": 0.375,
+            "specificity": 0.7272727272727273
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5576923076923077,
+            "brier": 0.21402139598190653,
+            "negative_count": 13,
+            "positive_count": 6,
+            "recall": 0.5,
+            "specificity": 0.6153846153846154
+          },
+          "count": 19,
+          "rank_accuracy": 0.5789473684210527
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.5317460317460317,
+            "brier": 0.19753381163619352,
+            "negative_count": 9,
+            "positive_count": 7,
+            "recall": 0.2857142857142857,
+            "specificity": 0.7777777777777778
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5727272727272728,
+            "brier": 0.20445196043268274,
+            "negative_count": 11,
+            "positive_count": 5,
+            "recall": 0.6,
+            "specificity": 0.5454545454545454
+          },
+          "count": 16,
+          "rank_accuracy": 0.625
+        }
+      },
+      "combined_instance_rank_accuracy": 0.6129032258064516
+    },
+    "no_message": {
+      "30": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.5,
+            "brier": 0.12846536586324422,
+            "negative_count": 17,
+            "positive_count": 2,
+            "recall": 0.0,
+            "specificity": 1.0
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5642857142857143,
+            "brier": 0.15835235460606112,
+            "negative_count": 5,
+            "positive_count": 14,
+            "recall": 0.9285714285714286,
+            "specificity": 0.2
+          },
+          "count": 19,
+          "rank_accuracy": 0.631578947368421
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.5,
+            "brier": 0.12006479328154097,
+            "negative_count": 14,
+            "positive_count": 1,
+            "recall": 0.0,
+            "specificity": 1.0
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5795454545454546,
+            "brier": 0.1642569402659773,
+            "negative_count": 4,
+            "positive_count": 11,
+            "recall": 0.9090909090909091,
+            "specificity": 0.25
+          },
+          "count": 15,
+          "rank_accuracy": 0.6
+        }
+      },
+      "50": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.5511363636363636,
+            "brier": 0.20429997332139732,
+            "negative_count": 11,
+            "positive_count": 8,
+            "recall": 0.375,
+            "specificity": 0.7272727272727273
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5576923076923077,
+            "brier": 0.21402139598190653,
+            "negative_count": 13,
+            "positive_count": 6,
+            "recall": 0.5,
+            "specificity": 0.6153846153846154
+          },
+          "count": 19,
+          "rank_accuracy": 0.5789473684210527
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.5317460317460317,
+            "brier": 0.19753381163619352,
+            "negative_count": 9,
+            "positive_count": 7,
+            "recall": 0.2857142857142857,
+            "specificity": 0.7777777777777778
+          },
+          "benefit": {
+            "balanced_accuracy": 0.5727272727272728,
+            "brier": 0.20445196043268274,
+            "negative_count": 11,
+            "positive_count": 5,
+            "recall": 0.6,
+            "specificity": 0.5454545454545454
+          },
+          "count": 16,
+          "rank_accuracy": 0.625
+        }
+      },
+      "combined_instance_rank_accuracy": 0.6129032258064516
+    },
+    "shuffled_topology": {
+      "30": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.9705882352941176,
+            "brier": 0.13759169439322405,
+            "negative_count": 17,
+            "positive_count": 2,
+            "recall": 1.0,
+            "specificity": 0.9411764705882353
+          },
+          "benefit": {
+            "balanced_accuracy": 0.4642857142857143,
+            "brier": 0.16057965039547936,
+            "negative_count": 5,
+            "positive_count": 14,
+            "recall": 0.9285714285714286,
+            "specificity": 0.0
+          },
+          "count": 19,
+          "rank_accuracy": 0.5789473684210527
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.9642857142857143,
+            "brier": 0.13320092449444243,
+            "negative_count": 14,
+            "positive_count": 1,
+            "recall": 1.0,
+            "specificity": 0.9285714285714286
+          },
+          "benefit": {
+            "balanced_accuracy": 0.45454545454545453,
+            "brier": 0.17685716383589126,
+            "negative_count": 4,
+            "positive_count": 11,
+            "recall": 0.9090909090909091,
+            "specificity": 0.0
+          },
+          "count": 15,
+          "rank_accuracy": 0.6
+        }
+      },
+      "50": {
+        "context": {
+          "adverse": {
+            "balanced_accuracy": 0.6931818181818181,
+            "brier": 0.18294025032777933,
+            "negative_count": 11,
+            "positive_count": 8,
+            "recall": 0.75,
+            "specificity": 0.6363636363636364
+          },
+          "benefit": {
+            "balanced_accuracy": 0.6794871794871795,
+            "brier": 0.1713381787595561,
+            "negative_count": 13,
+            "positive_count": 6,
+            "recall": 0.6666666666666666,
+            "specificity": 0.6923076923076923
+          },
+          "count": 19,
+          "rank_accuracy": 0.5789473684210527
+        },
+        "instance": {
+          "adverse": {
+            "balanced_accuracy": 0.6904761904761905,
+            "brier": 0.17800398033579323,
+            "negative_count": 9,
+            "positive_count": 7,
+            "recall": 0.7142857142857143,
+            "specificity": 0.6666666666666666
+          },
+          "benefit": {
+            "balanced_accuracy": 0.7181818181818183,
+            "brier": 0.1777379357530532,
+            "negative_count": 11,
+            "positive_count": 5,
+            "recall": 0.8,
+            "specificity": 0.6363636363636364
+          },
+          "count": 16,
+          "rank_accuracy": 0.625
+        }
+      },
+      "combined_instance_rank_accuracy": 0.6129032258064516
+    }
+  },
+  "passed": false,
+  "performance_authority": false,
+  "reason": "BASE_LABEL_FRONTIER_NOT_IDENTIFIABLE",
+  "scale50_similar_opposite_label_fraction": 0.4117647058823529,
+  "scale50_topology_rank_drop": 0.0625,
+  "schema_version": "lunar_ice_bpc.p0v5_base_label_frontier_observability_report.v1",
+  "warm_graph_plus_ensemble_inference_p99_ms": 9.796103119887114
+}

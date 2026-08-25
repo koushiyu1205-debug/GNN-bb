@@ -1,0 +1,21 @@
+{
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "detail": {
+    "gate": {
+      "per_context_cost_fraction": true,
+      "scale50_benefit_balanced_accuracy": false,
+      "scale50_rank_accuracy": true,
+      "similar_opposite_fraction": false,
+      "simple_control_gap": true,
+      "topology_contribution": true,
+      "topology_not_worse": true,
+      "warm_cost_p99": true
+    },
+    "report": "observability.report.json"
+  },
+  "development_only": true,
+  "production_switch_authorized": false,
+  "reason": "BASE_LABEL_FRONTIER_NOT_IDENTIFIABLE",
+  "schema_version": "lunar_ice_bpc.p0v5_base_label_frontier_terminal.v1"
+}

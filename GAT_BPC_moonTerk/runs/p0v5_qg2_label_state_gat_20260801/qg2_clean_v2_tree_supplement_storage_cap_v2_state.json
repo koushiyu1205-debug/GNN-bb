@@ -1,0 +1,20 @@
+{
+  "coverage": {
+    "30": {
+      "branch_or_cut_context_count": 2,
+      "context_count": 166,
+      "instance_count": 119,
+      "root_context_count": 160
+    },
+    "50": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 178,
+      "instance_count": 109,
+      "root_context_count": 178
+    }
+  },
+  "expansion_permitted": false,
+  "plan": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_tree_supplement_freeze_storage_cap_v3.json",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_tree_supplement_state.v1",
+  "status": "COMPLETED_WITH_BRANCH_CUT_CONTEXT"
+}

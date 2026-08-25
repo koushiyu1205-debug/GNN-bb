@@ -4,13 +4,18 @@
 #include <array>
 #include <cassert>
 #include <bit>
+#include <bitset>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <list>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <numeric>
+#include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <tuple>
@@ -229,6 +234,997 @@ double reduced_cost(const Model& model, const State& state) {
            model.risk_coefficient * state.raw_risk +
            model.completion_coefficient * state.raw_weighted_completion -
            state.task_dual_reward - model.fleet_dual - state.cut_dual_reward;
+}
+
+double finite_ratio(double numerator, double denominator) {
+    const double scale = std::max(1.0e-12, std::abs(denominator));
+    return numerator / scale;
+}
+
+double signed_log1p(double value) {
+    return std::copysign(std::log1p(std::abs(value)), value);
+}
+
+std::array<double, kLabelStateFeatureCount> label_state_features(
+    const Model& model,
+    const State& state,
+    double partial_reduced_cost
+) {
+    const double task_count = std::max(1.0, static_cast<double>(model.tasks.size()));
+    const double max_trip = std::max(1.0, static_cast<double>(model.max_tasks_per_trip));
+    const double positive_scale = std::max(1.0, model.positive_task_dual_sum);
+    const double positive_reward =
+        ng_dssr_active(model)
+            ? 0.0
+            : state.auxiliary.regular.positive_task_dual_reward;
+    return {
+        static_cast<double>(state.visited_count) / task_count,
+        static_cast<double>(state.task_visit_count) / task_count,
+        static_cast<double>(state.sortie_task_count) / max_trip,
+        static_cast<double>(state.sortie_count) / task_count,
+        state.at_depot ? 1.0 : 0.0,
+        finite_ratio(state.global_time, model.horizon),
+        finite_ratio(
+            std::max(0.0, model.horizon - state.global_time),
+            model.horizon),
+        finite_ratio(state.sortie_demand, model.capacity),
+        finite_ratio(state.sortie_energy, model.energy_limit),
+        finite_ratio(state.sortie_shadow, model.shadow_limit),
+        finite_ratio(state.task_dual_reward, model.absolute_dual_sum),
+        finite_ratio(state.cut_dual_reward, model.absolute_dual_sum),
+        positive_reward / positive_scale,
+        std::max(0.0, model.positive_task_dual_sum - positive_reward) /
+            positive_scale,
+        signed_log1p(partial_reduced_cost),
+    };
+}
+
+double qg2_label_state_priority(
+    const Model& model,
+    const State& state,
+    double partial_reduced_cost
+) {
+    if (!model.guidance_label_state_enabled) {
+        return 0.0;
+    }
+    const auto features = label_state_features(
+        model, state, partial_reduced_cost);
+    double score = state.guidance_score;
+    if (
+        !state.at_depot &&
+        state.last_task_index < model.tasks.size()
+    ) {
+        score += model.tasks[state.last_task_index].guidance_priority;
+    }
+    for (std::size_t index = 0; index < features.size(); ++index) {
+        score += model.guidance_label_state_coefficients[index] *
+                 features[index];
+    }
+    return score;
+}
+
+double frontier_sigmoid(double value) {
+    if (value >= 0.0) {
+        const double z = std::exp(-value);
+        return 1.0 / (1.0 + z);
+    }
+    const double z = std::exp(value);
+    return z / (1.0 + z);
+}
+
+double frontier_calibrated_probability(
+    double probability,
+    const FrontierProbabilityCalibration& calibration
+) {
+    if (calibration.constant) {
+        return calibration.probability;
+    }
+    const double bounded = std::clamp(probability, 1.0e-7, 1.0 - 1.0e-7);
+    const double logit = std::log(bounded / (1.0 - bounded));
+    return frontier_sigmoid(calibration.a * logit + calibration.b);
+}
+
+const FrontierDenseTensor& frontier_tensor(
+    const FrontierGatSeedModel& model,
+    const std::string& name,
+    std::initializer_list<std::size_t> shape
+) {
+    const auto found = model.tensors.find(name);
+    if (found == model.tensors.end()) {
+        throw std::invalid_argument("frontier GAT tensor missing: " + name);
+    }
+    const std::vector<std::size_t> expected(shape);
+    if (found->second.shape != expected) {
+        throw std::invalid_argument("frontier GAT tensor shape mismatch: " + name);
+    }
+    const auto count = std::accumulate(
+        expected.begin(), expected.end(), std::size_t{1},
+        std::multiplies<>{});
+    if (found->second.values.size() != count ||
+        std::ranges::any_of(found->second.values, [](double value) {
+            return !std::isfinite(value);
+        })) {
+        throw std::invalid_argument("frontier GAT tensor values invalid: " + name);
+    }
+    return found->second;
+}
+
+std::vector<double> frontier_dense(
+    const std::vector<double>& input,
+    const FrontierDenseTensor& weight,
+    const FrontierDenseTensor& bias
+) {
+    const auto output_size = weight.shape.at(0);
+    const auto input_size = weight.shape.at(1);
+    if (input.size() != input_size || bias.shape != std::vector<std::size_t>{output_size}) {
+        throw std::invalid_argument("frontier dense shape mismatch");
+    }
+    std::vector<double> output(output_size, 0.0);
+    for (std::size_t row = 0; row < output_size; ++row) {
+        double value = bias.values[row];
+        for (std::size_t column = 0; column < input_size; ++column) {
+            value += weight.values[row * input_size + column] * input[column];
+        }
+        output[row] = value;
+    }
+    return output;
+}
+
+void frontier_relu(std::vector<double>* values) {
+    for (double& value : *values) {
+        value = std::max(0.0, value);
+    }
+}
+
+void frontier_layer_norm(
+    std::vector<double>* values,
+    const FrontierDenseTensor& weight,
+    const FrontierDenseTensor& bias,
+    double epsilon
+) {
+    if (values->empty() || weight.values.size() != values->size() ||
+        bias.values.size() != values->size()) {
+        throw std::invalid_argument("frontier LayerNorm shape mismatch");
+    }
+    const double mean = std::accumulate(values->begin(), values->end(), 0.0) /
+                        static_cast<double>(values->size());
+    double variance = 0.0;
+    for (const double value : *values) {
+        variance += (value - mean) * (value - mean);
+    }
+    variance /= static_cast<double>(values->size());
+    const double inverse = 1.0 / std::sqrt(variance + epsilon);
+    for (std::size_t index = 0; index < values->size(); ++index) {
+        values->at(index) =
+            (values->at(index) - mean) * inverse * weight.values[index] +
+            bias.values[index];
+    }
+}
+
+std::vector<std::vector<double>> frontier_gat_layer(
+    const std::vector<std::vector<double>>& nodes,
+    const std::vector<std::vector<double>>& encoded_edges,
+    const std::vector<FrontierGraphEdge>& edges,
+    const FrontierGatSeedModel& model,
+    std::size_t layer,
+    double layer_norm_epsilon
+) {
+    const std::string prefix = "layers." + std::to_string(layer) + ".";
+    const auto& q_weight = frontier_tensor(
+        model, prefix + "q.weight", {kFrontierHiddenSize, kFrontierHiddenSize});
+    const auto& q_bias = frontier_tensor(
+        model, prefix + "q.bias", {kFrontierHiddenSize});
+    const auto& k_weight = frontier_tensor(
+        model, prefix + "k.weight", {kFrontierHiddenSize, kFrontierHiddenSize});
+    const auto& k_bias = frontier_tensor(
+        model, prefix + "k.bias", {kFrontierHiddenSize});
+    const auto& v_weight = frontier_tensor(
+        model, prefix + "v.weight", {kFrontierHiddenSize, kFrontierHiddenSize});
+    const auto& v_bias = frontier_tensor(
+        model, prefix + "v.bias", {kFrontierHiddenSize});
+    const auto& edge_weight = frontier_tensor(
+        model, prefix + "edge_attention.weight",
+        {kFrontierHeadCount, kFrontierHiddenSize});
+    const auto& edge_bias = frontier_tensor(
+        model, prefix + "edge_attention.bias", {kFrontierHeadCount});
+    const auto& out_weight = frontier_tensor(
+        model, prefix + "output.weight",
+        {kFrontierHiddenSize, kFrontierHiddenSize});
+    const auto& out_bias = frontier_tensor(
+        model, prefix + "output.bias", {kFrontierHiddenSize});
+    const auto& norm_weight = frontier_tensor(
+        model, prefix + "layer_norm.weight", {kFrontierHiddenSize});
+    const auto& norm_bias = frontier_tensor(
+        model, prefix + "layer_norm.bias", {kFrontierHiddenSize});
+
+    std::vector<std::vector<double>> queries;
+    std::vector<std::vector<double>> keys;
+    std::vector<std::vector<double>> values;
+    queries.reserve(nodes.size());
+    keys.reserve(nodes.size());
+    values.reserve(nodes.size());
+    for (const auto& node : nodes) {
+        queries.push_back(frontier_dense(node, q_weight, q_bias));
+        keys.push_back(frontier_dense(node, k_weight, k_bias));
+        values.push_back(frontier_dense(node, v_weight, v_bias));
+    }
+    std::vector<std::vector<double>> edge_logits;
+    edge_logits.reserve(encoded_edges.size());
+    for (const auto& edge : encoded_edges) {
+        edge_logits.push_back(frontier_dense(edge, edge_weight, edge_bias));
+    }
+
+    constexpr std::size_t head_size =
+        kFrontierHiddenSize / kFrontierHeadCount;
+    std::vector<std::vector<std::size_t>> incoming(nodes.size());
+    for (std::size_t edge_index = 0; edge_index < edges.size(); ++edge_index) {
+        if (edges[edge_index].source >= nodes.size() ||
+            edges[edge_index].target >= nodes.size()) {
+            throw std::invalid_argument("frontier graph endpoint out of range");
+        }
+        incoming[edges[edge_index].target].push_back(edge_index);
+    }
+    std::vector<std::vector<double>> output(
+        nodes.size(), std::vector<double>(kFrontierHiddenSize, 0.0));
+    for (std::size_t target = 0; target < nodes.size(); ++target) {
+        for (std::size_t head = 0; head < kFrontierHeadCount; ++head) {
+            std::vector<double> logits;
+            logits.reserve(incoming[target].size());
+            double maximum = -std::numeric_limits<double>::infinity();
+            for (const auto edge_index : incoming[target]) {
+                const auto source = edges[edge_index].source;
+                double score = edge_logits[edge_index][head];
+                for (std::size_t offset = 0; offset < head_size; ++offset) {
+                    const auto hidden_index = head * head_size + offset;
+                    score += queries[target][hidden_index] * keys[source][hidden_index] /
+                             std::sqrt(static_cast<double>(head_size));
+                }
+                score = score >= 0.0 ? score : 0.2 * score;
+                logits.push_back(score);
+                maximum = std::max(maximum, score);
+            }
+            double denominator = 0.0;
+            for (double& value : logits) {
+                value = std::exp(value - maximum);
+                denominator += value;
+            }
+            if (!(denominator > 0.0) || !std::isfinite(denominator)) {
+                throw std::invalid_argument("frontier attention softmax invalid");
+            }
+            for (std::size_t local = 0; local < incoming[target].size(); ++local) {
+                const auto edge_index = incoming[target][local];
+                const auto source = edges[edge_index].source;
+                const double probability = logits[local] / denominator;
+                for (std::size_t offset = 0; offset < head_size; ++offset) {
+                    const auto hidden_index = head * head_size + offset;
+                    output[target][hidden_index] +=
+                        probability * values[source][hidden_index];
+                }
+            }
+        }
+        output[target] = frontier_dense(output[target], out_weight, out_bias);
+        for (std::size_t index = 0; index < kFrontierHiddenSize; ++index) {
+            output[target][index] += nodes[target][index];
+        }
+        frontier_layer_norm(
+            &output[target], norm_weight, norm_bias, layer_norm_epsilon);
+        frontier_relu(&output[target]);
+    }
+    return output;
+}
+
+std::array<double, 3> frontier_gat_forward(
+    const FrontierGatSeedModel& model,
+    const FrontierGatBundle& bundle,
+    const FrontierProbeTelemetry& graph
+) {
+    const auto& node_weight = frontier_tensor(
+        model, "node_encoder.weight",
+        {kFrontierHiddenSize, kFrontierNodeFeatureCount});
+    const auto& node_bias = frontier_tensor(
+        model, "node_encoder.bias", {kFrontierHiddenSize});
+    const auto& edge_weight = frontier_tensor(
+        model, "edge_encoder.weight",
+        {kFrontierHiddenSize, kFrontierEdgeFeatureCount});
+    const auto& edge_bias = frontier_tensor(
+        model, "edge_encoder.bias", {kFrontierHiddenSize});
+    const auto& context_weight = frontier_tensor(
+        model, "context_encoder.weight",
+        {kFrontierHiddenSize, kFrontierContextFeatureCount});
+    const auto& context_bias = frontier_tensor(
+        model, "context_encoder.bias", {kFrontierHiddenSize});
+    const auto& pool_weight = frontier_tensor(
+        model, "attention_pool.weight", {1U, kFrontierHiddenSize});
+    const auto& pool_bias = frontier_tensor(
+        model, "attention_pool.bias", {1U});
+    const auto& head0_weight = frontier_tensor(
+        model, "head.0.weight", {32U, 96U});
+    const auto& head0_bias = frontier_tensor(
+        model, "head.0.bias", {32U});
+    const auto& head2_weight = frontier_tensor(
+        model, "head.2.weight", {3U, 32U});
+    const auto& head2_bias = frontier_tensor(
+        model, "head.2.bias", {3U});
+
+    auto normalize = [](double value, double mean, double scale) {
+        if (!std::isfinite(value) || !std::isfinite(mean) ||
+            !std::isfinite(scale) || !(scale > 0.0)) {
+            throw std::invalid_argument("frontier normalization invalid");
+        }
+        return (value - mean) / scale;
+    };
+    if (bundle.node_mean.size() != kFrontierNodeFeatureCount ||
+        bundle.node_scale.size() != kFrontierNodeFeatureCount ||
+        bundle.edge_mean.size() != kFrontierEdgeFeatureCount ||
+        bundle.edge_scale.size() != kFrontierEdgeFeatureCount ||
+        bundle.context_mean.size() != kFrontierContextFeatureCount ||
+        bundle.context_scale.size() != kFrontierContextFeatureCount) {
+        throw std::invalid_argument("frontier normalization shape mismatch");
+    }
+    std::vector<std::vector<double>> nodes;
+    nodes.reserve(graph.node_features.size());
+    for (const auto& raw : graph.node_features) {
+        std::vector<double> row(kFrontierNodeFeatureCount);
+        for (std::size_t index = 0; index < row.size(); ++index) {
+            row[index] = normalize(
+                raw[index], bundle.node_mean[index], bundle.node_scale[index]);
+        }
+        nodes.push_back(frontier_dense(row, node_weight, node_bias));
+        frontier_relu(&nodes.back());
+    }
+    std::vector<std::vector<double>> encoded_edges;
+    encoded_edges.reserve(graph.edges.size());
+    for (const auto& raw : graph.edges) {
+        std::vector<double> row(kFrontierEdgeFeatureCount);
+        for (std::size_t index = 0; index < row.size(); ++index) {
+            row[index] = normalize(
+                raw.features[index], bundle.edge_mean[index], bundle.edge_scale[index]);
+        }
+        encoded_edges.push_back(frontier_dense(row, edge_weight, edge_bias));
+        frontier_relu(&encoded_edges.back());
+    }
+    nodes = frontier_gat_layer(
+        nodes, encoded_edges, graph.edges, model, 0U,
+        bundle.layer_norm_epsilon);
+    nodes = frontier_gat_layer(
+        nodes, encoded_edges, graph.edges, model, 1U,
+        bundle.layer_norm_epsilon);
+
+    std::vector<double> node_mean(kFrontierHiddenSize, 0.0);
+    std::vector<double> node_max(
+        kFrontierHiddenSize, -std::numeric_limits<double>::infinity());
+    std::vector<double> attention_scores;
+    attention_scores.reserve(nodes.size());
+    double max_attention = -std::numeric_limits<double>::infinity();
+    for (const auto& node : nodes) {
+        for (std::size_t index = 0; index < kFrontierHiddenSize; ++index) {
+            node_mean[index] += node[index] / static_cast<double>(nodes.size());
+            node_max[index] = std::max(node_max[index], node[index]);
+        }
+        const double score = frontier_dense(node, pool_weight, pool_bias).front();
+        attention_scores.push_back(score);
+        max_attention = std::max(max_attention, score);
+    }
+    double attention_denominator = 0.0;
+    for (double& score : attention_scores) {
+        score = std::exp(score - max_attention);
+        attention_denominator += score;
+    }
+    std::vector<double> attention_pool(kFrontierHiddenSize, 0.0);
+    for (std::size_t node_index = 0; node_index < nodes.size(); ++node_index) {
+        const double probability =
+            attention_scores[node_index] / attention_denominator;
+        for (std::size_t hidden = 0; hidden < kFrontierHiddenSize; ++hidden) {
+            attention_pool[hidden] += probability * nodes[node_index][hidden];
+        }
+    }
+    std::vector<double> edge_mean(kFrontierHiddenSize, 0.0);
+    std::vector<double> edge_max(
+        kFrontierHiddenSize, -std::numeric_limits<double>::infinity());
+    for (const auto& edge : encoded_edges) {
+        for (std::size_t hidden = 0; hidden < kFrontierHiddenSize; ++hidden) {
+            edge_mean[hidden] +=
+                edge[hidden] / static_cast<double>(encoded_edges.size());
+            edge_max[hidden] = std::max(edge_max[hidden], edge[hidden]);
+        }
+    }
+    std::vector<double> raw_context(kFrontierContextFeatureCount);
+    for (std::size_t index = 0; index < raw_context.size(); ++index) {
+        raw_context[index] = normalize(
+            graph.context_features[index], bundle.context_mean[index],
+            bundle.context_scale[index]);
+    }
+    auto context = frontier_dense(raw_context, context_weight, context_bias);
+    frontier_relu(&context);
+    std::vector<double> pooled;
+    pooled.reserve(96U);
+    pooled.insert(pooled.end(), node_mean.begin(), node_mean.end());
+    pooled.insert(pooled.end(), node_max.begin(), node_max.end());
+    pooled.insert(pooled.end(), attention_pool.begin(), attention_pool.end());
+    pooled.insert(pooled.end(), edge_mean.begin(), edge_mean.end());
+    pooled.insert(pooled.end(), edge_max.begin(), edge_max.end());
+    pooled.insert(pooled.end(), context.begin(), context.end());
+    auto hidden = frontier_dense(pooled, head0_weight, head0_bias);
+    frontier_relu(&hidden);
+    const auto logits = frontier_dense(hidden, head2_weight, head2_bias);
+    return {
+        frontier_sigmoid(logits[0]),
+        frontier_sigmoid(logits[1]),
+        frontier_sigmoid(logits[2]),
+    };
+}
+
+bool frontier_bundle_is_valid(const FrontierGatBundle& bundle) {
+    return bundle.schema_version ==
+               "lunar_ice_bpc.p0v5_frontier_gat_native_bundle.v1" &&
+           bundle.graph_schema_version ==
+               "lunar_ice_bpc.p0v5_frontier_depth_rc_graph.v1" &&
+           bundle.feature_schema_version ==
+               "lunar_ice_bpc.p0v5_frontier_probe_features.v1" &&
+           bundle.models.size() == 3U &&
+           bundle.node_feature_names.size() == kFrontierNodeFeatureCount &&
+           bundle.edge_feature_names.size() == kFrontierEdgeFeatureCount &&
+           bundle.context_feature_names.size() == kFrontierContextFeatureCount &&
+           std::isfinite(bundle.minimum_benefit_probability) &&
+           std::isfinite(bundle.maximum_adverse_probability) &&
+           std::isfinite(bundle.minimum_expected_gain) &&
+           std::isfinite(bundle.adverse_penalty) &&
+           std::isfinite(bundle.maximum_disagreement) &&
+           bundle.minimum_benefit_probability >= 0.0 &&
+           bundle.minimum_benefit_probability <= 1.0 &&
+           bundle.maximum_adverse_probability >= 0.0 &&
+           bundle.maximum_adverse_probability <= 1.0 &&
+           bundle.minimum_expected_gain >= 0.0 &&
+           bundle.adverse_penalty >= 0.0 &&
+           bundle.maximum_disagreement >= 0.0 &&
+           bundle.maximum_disagreement <= 1.0 &&
+           std::isfinite(bundle.gain_scale) && bundle.gain_scale >= 0.0 &&
+           std::isfinite(bundle.benefit_calibration.probability) &&
+           std::isfinite(bundle.benefit_calibration.a) &&
+           std::isfinite(bundle.benefit_calibration.b) &&
+           std::isfinite(bundle.adverse_calibration.probability) &&
+           std::isfinite(bundle.adverse_calibration.a) &&
+           std::isfinite(bundle.adverse_calibration.b) &&
+           bundle.layer_norm_epsilon > 0.0;
+}
+
+struct TemporalEvalEdge {
+    std::size_t source = 0U;
+    std::size_t target = 0U;
+};
+
+bool temporal_group_is_valid(
+    const TemporalNormalizationGroup& group,
+    std::size_t width
+) {
+    return group.mean.size() == width && group.scale.size() == width &&
+           group.minimum.size() == width && group.maximum.size() == width &&
+           std::ranges::all_of(group.scale, [](double value) {
+               return std::isfinite(value) && value > 0.0;
+           }) &&
+           std::ranges::all_of(group.mean, [](double value) {
+               return std::isfinite(value);
+           }) &&
+           std::ranges::all_of(group.minimum, [](double value) {
+               return std::isfinite(value);
+           }) &&
+           std::ranges::all_of(group.maximum, [](double value) {
+               return std::isfinite(value);
+           }) &&
+           std::ranges::equal(
+               group.minimum, group.maximum,
+               [](double minimum, double maximum) {
+                   return minimum <= maximum;
+               });
+}
+
+bool temporal_bundle_is_valid(const TemporalGatBundle& bundle) {
+    return bundle.schema_version ==
+               "lunar_ice_bpc.p0v5_temporal_frontier_gat_bundle.v2" &&
+           bundle.graph_schema_version ==
+               "lunar_ice_bpc.p0v5_temporal_multires_frontier_graph.v2" &&
+           bundle.feature_schema_version ==
+               "lunar_ice_bpc.p0v5_temporal_multires_features.v2" &&
+           (bundle.selected_scale == 30U || bundle.selected_scale == 50U) &&
+           (bundle.controller_kind == "temporal_gat" ||
+            bundle.controller_kind == "no_message" ||
+            bundle.controller_kind == "linear" ||
+            bundle.controller_kind == "mlp") &&
+           bundle.models.size() == 3U &&
+           bundle.cell_node_feature_names.size() == kFrontierNodeFeatureCount &&
+           bundle.cell_edge_feature_names.size() == kFrontierEdgeFeatureCount &&
+           bundle.node_feature_names.size() == kTemporalGatNodeFeatureCount &&
+           bundle.edge_feature_names.size() == kTemporalGatEdgeFeatureCount &&
+           bundle.counter_feature_names.size() == kTemporalGatCounterFeatureCount &&
+           bundle.context_feature_names.size() == kFrontierContextFeatureCount &&
+           temporal_group_is_valid(bundle.cell_node, kFrontierNodeFeatureCount) &&
+           temporal_group_is_valid(bundle.cell_edge, kFrontierEdgeFeatureCount) &&
+           temporal_group_is_valid(bundle.node, kTemporalGatNodeFeatureCount) &&
+           temporal_group_is_valid(bundle.edge, kTemporalGatEdgeFeatureCount) &&
+           temporal_group_is_valid(bundle.counter, kTemporalGatCounterFeatureCount) &&
+           temporal_group_is_valid(bundle.context, kFrontierContextFeatureCount) &&
+           std::isfinite(bundle.minimum_benefit_probability) &&
+           bundle.minimum_benefit_probability >= 0.0 &&
+           bundle.minimum_benefit_probability <= 1.0 &&
+           std::isfinite(bundle.maximum_adverse_probability) &&
+           bundle.maximum_adverse_probability >= 0.0 &&
+           bundle.maximum_adverse_probability <= 1.0 &&
+           std::isfinite(bundle.minimum_expected_gain) &&
+           bundle.minimum_expected_gain >= 0.0 &&
+           std::isfinite(bundle.adverse_penalty) && bundle.adverse_penalty >= 0.0 &&
+           std::isfinite(bundle.maximum_disagreement) &&
+           bundle.maximum_disagreement >= 0.0 &&
+           bundle.maximum_disagreement <= 1.0 &&
+           std::isfinite(bundle.gain_scale) && bundle.gain_scale >= 0.0 &&
+           std::isfinite(bundle.benefit_calibration.probability) &&
+           std::isfinite(bundle.benefit_calibration.a) &&
+           std::isfinite(bundle.benefit_calibration.b) &&
+           std::isfinite(bundle.adverse_calibration.probability) &&
+           std::isfinite(bundle.adverse_calibration.a) &&
+           std::isfinite(bundle.adverse_calibration.b) &&
+           bundle.layer_norm_epsilon > 0.0;
+}
+
+std::vector<std::vector<double>> temporal_gat_layer(
+    const std::vector<std::vector<double>>& nodes,
+    const std::vector<std::vector<double>>& encoded_edges,
+    const std::vector<TemporalEvalEdge>& edges,
+    const FrontierGatSeedModel& model,
+    const std::string& prefix,
+    double epsilon
+) {
+    const auto& q_weight = frontier_tensor(
+        model, prefix + "q.weight",
+        {kTemporalGatHiddenSize, kTemporalGatHiddenSize});
+    const auto& q_bias = frontier_tensor(
+        model, prefix + "q.bias", {kTemporalGatHiddenSize});
+    const auto& k_weight = frontier_tensor(
+        model, prefix + "k.weight",
+        {kTemporalGatHiddenSize, kTemporalGatHiddenSize});
+    const auto& k_bias = frontier_tensor(
+        model, prefix + "k.bias", {kTemporalGatHiddenSize});
+    const auto& v_weight = frontier_tensor(
+        model, prefix + "v.weight",
+        {kTemporalGatHiddenSize, kTemporalGatHiddenSize});
+    const auto& v_bias = frontier_tensor(
+        model, prefix + "v.bias", {kTemporalGatHiddenSize});
+    const auto& edge_weight = frontier_tensor(
+        model, prefix + "edge_attention.weight",
+        {kTemporalGatHeadCount, kTemporalGatHiddenSize});
+    const auto& edge_bias = frontier_tensor(
+        model, prefix + "edge_attention.bias", {kTemporalGatHeadCount});
+    const auto& output_weight = frontier_tensor(
+        model, prefix + "output.weight",
+        {kTemporalGatHiddenSize, kTemporalGatHiddenSize});
+    const auto& output_bias = frontier_tensor(
+        model, prefix + "output.bias", {kTemporalGatHiddenSize});
+    const auto& norm_weight = frontier_tensor(
+        model, prefix + "norm.weight", {kTemporalGatHiddenSize});
+    const auto& norm_bias = frontier_tensor(
+        model, prefix + "norm.bias", {kTemporalGatHiddenSize});
+
+    std::vector<std::vector<double>> query, key, value, edge_logits;
+    query.reserve(nodes.size());
+    key.reserve(nodes.size());
+    value.reserve(nodes.size());
+    for (const auto& node : nodes) {
+        query.push_back(frontier_dense(node, q_weight, q_bias));
+        key.push_back(frontier_dense(node, k_weight, k_bias));
+        value.push_back(frontier_dense(node, v_weight, v_bias));
+    }
+    edge_logits.reserve(encoded_edges.size());
+    for (const auto& edge : encoded_edges) {
+        edge_logits.push_back(frontier_dense(edge, edge_weight, edge_bias));
+    }
+    std::vector<std::vector<std::size_t>> incoming(nodes.size());
+    for (std::size_t index = 0; index < edges.size(); ++index) {
+        if (edges[index].source >= nodes.size() ||
+            edges[index].target >= nodes.size()) {
+            throw std::invalid_argument("Temporal-GAT edge endpoint out of range");
+        }
+        incoming[edges[index].target].push_back(index);
+    }
+    constexpr std::size_t head_width =
+        kTemporalGatHiddenSize / kTemporalGatHeadCount;
+    std::vector<std::vector<double>> aggregate(
+        nodes.size(), std::vector<double>(kTemporalGatHiddenSize, 0.0));
+    for (std::size_t target = 0; target < nodes.size(); ++target) {
+        if (incoming[target].empty()) {
+            aggregate[target] = query[target];
+        } else {
+            for (std::size_t head = 0; head < kTemporalGatHeadCount; ++head) {
+                std::vector<double> logits;
+                double maximum = -std::numeric_limits<double>::infinity();
+                for (const auto edge_index : incoming[target]) {
+                    const auto source = edges[edge_index].source;
+                    double score = edge_logits[edge_index][head];
+                    for (std::size_t offset = 0; offset < head_width; ++offset) {
+                        const auto hidden = head * head_width + offset;
+                        score += query[target][hidden] * key[source][hidden] /
+                                 std::sqrt(static_cast<double>(head_width));
+                    }
+                    score = score >= 0.0 ? score : 0.2 * score;
+                    logits.push_back(score);
+                    maximum = std::max(maximum, score);
+                }
+                double denominator = 0.0;
+                for (auto& score : logits) {
+                    score = std::exp(score - maximum);
+                    denominator += score;
+                }
+                if (!(denominator > 0.0) || !std::isfinite(denominator)) {
+                    throw std::invalid_argument("Temporal-GAT attention invalid");
+                }
+                for (std::size_t local = 0; local < incoming[target].size(); ++local) {
+                    const auto source = edges[incoming[target][local]].source;
+                    const auto probability = logits[local] / denominator;
+                    for (std::size_t offset = 0; offset < head_width; ++offset) {
+                        const auto hidden = head * head_width + offset;
+                        aggregate[target][hidden] +=
+                            probability * value[source][hidden];
+                    }
+                }
+            }
+        }
+        aggregate[target] = frontier_dense(
+            aggregate[target], output_weight, output_bias);
+        for (std::size_t hidden = 0; hidden < kTemporalGatHiddenSize; ++hidden) {
+            aggregate[target][hidden] += nodes[target][hidden];
+        }
+        frontier_layer_norm(
+            &aggregate[target], norm_weight, norm_bias, epsilon);
+        frontier_relu(&aggregate[target]);
+    }
+    return aggregate;
+}
+
+std::vector<double> temporal_encode_graph(
+    const std::vector<std::vector<double>>& raw_nodes,
+    const std::vector<std::vector<double>>& raw_edge_features,
+    const std::vector<TemporalEvalEdge>& edges,
+    const TemporalNormalizationGroup& node_group,
+    const TemporalNormalizationGroup& edge_group,
+    const FrontierGatSeedModel& model,
+    const std::string& node_encoder,
+    const std::string& edge_encoder,
+    const std::string& layer_prefix,
+    const std::string& primary_attention_name,
+    const std::string& secondary_attention_name,
+    double epsilon,
+    bool no_message,
+    bool type_wise
+) {
+    if (raw_nodes.empty() || raw_edge_features.empty() ||
+        raw_edge_features.size() != edges.size()) {
+        throw std::invalid_argument("Temporal-GAT graph is empty or malformed");
+    }
+    const auto node_width = node_group.mean.size();
+    const auto edge_width = edge_group.mean.size();
+    const auto& node_weight = frontier_tensor(
+        model, node_encoder + ".weight", {kTemporalGatHiddenSize, node_width});
+    const auto& node_bias = frontier_tensor(
+        model, node_encoder + ".bias", {kTemporalGatHiddenSize});
+    const auto& edge_weight = frontier_tensor(
+        model, edge_encoder + ".weight", {kTemporalGatHiddenSize, edge_width});
+    const auto& edge_bias = frontier_tensor(
+        model, edge_encoder + ".bias", {kTemporalGatHiddenSize});
+    auto normalize = [](double value, double mean, double scale) {
+        if (!std::isfinite(value) || !(scale > 0.0)) {
+            throw std::invalid_argument("Temporal-GAT normalization invalid");
+        }
+        return (value - mean) / scale;
+    };
+    std::vector<std::vector<double>> nodes;
+    for (const auto& raw : raw_nodes) {
+        if (raw.size() != node_width) {
+            throw std::invalid_argument("Temporal-GAT node width mismatch");
+        }
+        std::vector<double> row(node_width);
+        for (std::size_t index = 0; index < node_width; ++index) {
+            row[index] = normalize(
+                raw[index], node_group.mean[index], node_group.scale[index]);
+        }
+        nodes.push_back(frontier_dense(row, node_weight, node_bias));
+        frontier_relu(&nodes.back());
+    }
+    std::vector<std::vector<double>> encoded_edges;
+    for (const auto& raw : raw_edge_features) {
+        if (raw.size() != edge_width) {
+            throw std::invalid_argument("Temporal-GAT edge width mismatch");
+        }
+        std::vector<double> row(edge_width);
+        for (std::size_t index = 0; index < edge_width; ++index) {
+            row[index] = normalize(
+                raw[index], edge_group.mean[index], edge_group.scale[index]);
+        }
+        encoded_edges.push_back(frontier_dense(row, edge_weight, edge_bias));
+        frontier_relu(&encoded_edges.back());
+    }
+    if (!no_message) {
+        for (std::size_t layer = 0; layer < 2U; ++layer) {
+            nodes = temporal_gat_layer(
+                nodes, encoded_edges, edges, model,
+                layer_prefix + "." + std::to_string(layer) + ".", epsilon);
+        }
+    }
+    const auto pool = [&](const std::vector<std::size_t>& selected,
+                          const std::string& attention_name) {
+        if (selected.empty()) {
+            throw std::invalid_argument(
+                "Temporal-GAT type-wise pool is empty");
+        }
+        const auto& attention_weight = frontier_tensor(
+            model, attention_name + ".weight",
+            {1U, kTemporalGatHiddenSize});
+        const auto& attention_bias = frontier_tensor(
+            model, attention_name + ".bias", {1U});
+        std::vector<double> mean(kTemporalGatHiddenSize, 0.0);
+        std::vector<double> maximum(
+            kTemporalGatHiddenSize,
+            -std::numeric_limits<double>::infinity());
+        std::vector<double> scores;
+        scores.reserve(selected.size());
+        double maximum_score = -std::numeric_limits<double>::infinity();
+        for (const auto node_index : selected) {
+            const auto& node = nodes.at(node_index);
+            for (std::size_t index = 0; index < kTemporalGatHiddenSize; ++index) {
+                mean[index] += node[index] /
+                               static_cast<double>(selected.size());
+                maximum[index] = std::max(maximum[index], node[index]);
+            }
+            const auto score = frontier_dense(
+                node, attention_weight, attention_bias).front();
+            scores.push_back(score);
+            maximum_score = std::max(maximum_score, score);
+        }
+        double denominator = 0.0;
+        for (auto& score : scores) {
+            score = std::exp(score - maximum_score);
+            denominator += score;
+        }
+        if (!(denominator > 0.0) || !std::isfinite(denominator)) {
+            throw std::invalid_argument(
+                "Temporal-GAT type-wise attention invalid");
+        }
+        std::vector<double> attention(kTemporalGatHiddenSize, 0.0);
+        for (std::size_t local = 0; local < selected.size(); ++local) {
+            const auto probability = scores[local] / denominator;
+            const auto& node = nodes[selected[local]];
+            for (std::size_t hidden = 0; hidden < kTemporalGatHiddenSize; ++hidden) {
+                attention[hidden] += probability * node[hidden];
+            }
+        }
+        std::vector<double> output;
+        output.reserve(3U * kTemporalGatHiddenSize);
+        output.insert(output.end(), mean.begin(), mean.end());
+        output.insert(output.end(), maximum.begin(), maximum.end());
+        output.insert(output.end(), attention.begin(), attention.end());
+        return output;
+    };
+    std::vector<std::size_t> primary;
+    std::vector<std::size_t> secondary;
+    primary.reserve(nodes.size());
+    secondary.reserve(nodes.size());
+    for (std::size_t index = 0; index < nodes.size(); ++index) {
+        if (!type_wise) {
+            primary.push_back(index);
+            continue;
+        }
+        if (raw_nodes[index].size() <= 25U) {
+            throw std::invalid_argument(
+                "Temporal-GAT node type features missing");
+        }
+        const bool is_label = raw_nodes[index][24] > 0.5;
+        const bool is_task = raw_nodes[index][25] > 0.5;
+        if (is_label == is_task) {
+            throw std::invalid_argument(
+                "Temporal-GAT node type is not one-hot");
+        }
+        (is_label ? primary : secondary).push_back(index);
+    }
+    auto output = pool(primary, primary_attention_name);
+    if (type_wise) {
+        const auto secondary_output = pool(
+            secondary, secondary_attention_name);
+        output.insert(
+            output.end(), secondary_output.begin(), secondary_output.end());
+    }
+    return output;
+}
+
+std::array<double, kTemporalGatCounterFeatureCount> temporal_counter_values(
+    const FrontierProbeTelemetry& telemetry
+) {
+    std::array<double, kTemporalGatCounterFeatureCount> values{};
+    const auto& left = telemetry.trial_start_snapshot;
+    const auto& right = telemetry.trial_end_snapshot;
+    const std::array<double, 9> start{
+        static_cast<double>(left.processed_labels),
+        static_cast<double>(left.extended_labels),
+        static_cast<double>(left.dominated_labels),
+        static_cast<double>(left.dominance_candidate_checks),
+        static_cast<double>(left.subset_dominance_candidate_checks),
+        static_cast<double>(left.subset_dominance_rejected_labels),
+        static_cast<double>(left.frontier_size),
+        static_cast<double>(left.max_visited_bucket_size),
+        static_cast<double>(left.negative_label_event_count),
+    };
+    const std::array<double, 9> end{
+        static_cast<double>(right.processed_labels),
+        static_cast<double>(right.extended_labels),
+        static_cast<double>(right.dominated_labels),
+        static_cast<double>(right.dominance_candidate_checks),
+        static_cast<double>(right.subset_dominance_candidate_checks),
+        static_cast<double>(right.subset_dominance_rejected_labels),
+        static_cast<double>(right.frontier_size),
+        static_cast<double>(right.max_visited_bucket_size),
+        static_cast<double>(right.negative_label_event_count),
+    };
+    for (std::size_t index = 0; index < start.size(); ++index) {
+        values[2U * index] = end[index] - start[index];
+        values[2U * index + 1U] = (end[index] + 1.0) / (start[index] + 1.0);
+    }
+    const double start_rc = std::isfinite(left.best_true_reduced_cost)
+                                ? left.best_true_reduced_cost : 0.0;
+    const double end_rc = std::isfinite(right.best_true_reduced_cost)
+                              ? right.best_true_reduced_cost : 0.0;
+    values[18] = end_rc - start_rc;
+    values[19] = std::abs(end_rc - start_rc);
+    const auto start_count = telemetry.trial_start_label_graph.frontier_size;
+    const auto end_count = telemetry.trial_end_label_graph.frontier_size;
+    const auto survival = telemetry.temporal_surviving_label_count;
+    values[20] = static_cast<double>(survival) /
+                 static_cast<double>(std::max<std::size_t>(1U, start_count));
+    values[21] = static_cast<double>(
+        start_count + end_count - 2U * std::min(
+            survival, std::min(start_count, end_count))) /
+        static_cast<double>(std::max<std::size_t>(1U, start_count + end_count));
+    values[22] = static_cast<double>(telemetry.temporal_new_label_count) /
+                 static_cast<double>(std::max<std::size_t>(1U, start_count));
+    // Wall time is telemetry, not a model feature: excluding it keeps the
+    // response vector and its hash deterministic across identical requests.
+    values[23] = 0.0;
+    return values;
+}
+
+std::array<double, 3> temporal_gat_forward(
+    const FrontierGatSeedModel& model,
+    const TemporalGatBundle& bundle,
+    const FrontierProbeSnapshot& cell_t0,
+    const FrontierProbeSnapshot& cell_tk,
+    const TemporalPortableGraph& graph_t0,
+    const TemporalPortableGraph& graph_tk,
+    const std::array<double, kTemporalGatCounterFeatureCount>& counters,
+    const std::array<double, kFrontierContextFeatureCount>& context,
+    std::size_t scale
+) {
+    if (bundle.controller_kind == "linear" ||
+        bundle.controller_kind == "mlp") {
+        std::vector<double> features;
+        features.reserve(54U);
+        for (std::size_t index = 0; index < counters.size(); ++index) {
+            features.push_back((counters[index] - bundle.counter.mean[index]) /
+                               bundle.counter.scale[index]);
+        }
+        for (std::size_t index = 0; index < context.size(); ++index) {
+            features.push_back((context[index] - bundle.context.mean[index]) /
+                               bundle.context.scale[index]);
+        }
+        features.push_back(scale == 30U ? 1.0 : 0.0);
+        features.push_back(scale == 50U ? 1.0 : 0.0);
+        std::vector<double> logits;
+        if (bundle.controller_kind == "linear") {
+            logits = frontier_dense(
+                features, frontier_tensor(model, "weight", {3U, 54U}),
+                frontier_tensor(model, "bias", {3U}));
+        } else {
+            auto hidden = frontier_dense(
+                features, frontier_tensor(model, "0.weight", {64U, 54U}),
+                frontier_tensor(model, "0.bias", {64U}));
+            frontier_relu(&hidden);
+            logits = frontier_dense(
+                hidden, frontier_tensor(model, "2.weight", {3U, 64U}),
+                frontier_tensor(model, "2.bias", {3U}));
+        }
+        return {frontier_sigmoid(logits[0]), frontier_sigmoid(logits[1]),
+                frontier_sigmoid(logits[2])};
+    }
+    const bool no_message = bundle.controller_kind == "no_message";
+    auto cell = [&](const FrontierProbeSnapshot& graph) {
+        std::vector<std::vector<double>> nodes;
+        std::vector<std::vector<double>> edge_features;
+        std::vector<TemporalEvalEdge> edges;
+        for (const auto& node : graph.node_features) {
+            nodes.emplace_back(node.begin(), node.end());
+        }
+        for (const auto& edge : graph.edges) {
+            edge_features.emplace_back(edge.features.begin(), edge.features.end());
+            edges.push_back({edge.source, edge.target});
+        }
+        return temporal_encode_graph(
+            nodes, edge_features, edges, bundle.cell_node, bundle.cell_edge,
+            model, "cell_node", "cell_edge", "shared_layers",
+            "cell_attention", "", bundle.layer_norm_epsilon, no_message,
+            false);
+    };
+    auto label = [&](const TemporalPortableGraph& graph) {
+        std::vector<std::vector<double>> nodes;
+        std::vector<std::vector<double>> edge_features;
+        std::vector<TemporalEvalEdge> edges;
+        for (const auto& node : graph.node_features) {
+            nodes.emplace_back(node.begin(), node.end());
+        }
+        for (const auto& edge : graph.edges) {
+            edge_features.emplace_back(edge.features.begin(), edge.features.end());
+            edges.push_back({edge.source, edge.target});
+        }
+        return temporal_encode_graph(
+            nodes, edge_features, edges, bundle.node, bundle.edge,
+            model, "label_node", "label_edge", "shared_layers",
+            "label_attention", "task_attention", bundle.layer_norm_epsilon,
+            no_message, true);
+    };
+    const auto c0 = cell(cell_t0);
+    const auto ck = cell(cell_tk);
+    const auto l0 = label(graph_t0);
+    const auto lk = label(graph_tk);
+    std::vector<double> combined;
+    combined.reserve(1206U);
+    auto append_temporal = [&](const auto& left, const auto& right) {
+        combined.insert(combined.end(), left.begin(), left.end());
+        combined.insert(combined.end(), right.begin(), right.end());
+        for (std::size_t index = 0; index < left.size(); ++index) {
+            combined.push_back(right[index] - left[index]);
+        }
+        for (std::size_t index = 0; index < left.size(); ++index) {
+            combined.push_back(std::abs(right[index] - left[index]));
+        }
+    };
+    append_temporal(c0, ck);
+    append_temporal(l0, lk);
+    for (std::size_t index = 0; index < counters.size(); ++index) {
+        combined.push_back(
+            (counters[index] - bundle.counter.mean[index]) /
+            bundle.counter.scale[index]);
+    }
+    for (std::size_t index = 0; index < context.size(); ++index) {
+        combined.push_back(
+            (context[index] - bundle.context.mean[index]) /
+            bundle.context.scale[index]);
+    }
+    combined.push_back(scale == 30U ? 1.0 : 0.0);
+    combined.push_back(scale == 50U ? 1.0 : 0.0);
+    const auto& trunk0_weight = frontier_tensor(
+        model, "trunk.0.weight", {128U, 1206U});
+    const auto& trunk0_bias = frontier_tensor(model, "trunk.0.bias", {128U});
+    const auto& trunk2_weight = frontier_tensor(
+        model, "trunk.2.weight", {64U, 128U});
+    const auto& trunk2_bias = frontier_tensor(model, "trunk.2.bias", {64U});
+    auto hidden = frontier_dense(combined, trunk0_weight, trunk0_bias);
+    frontier_relu(&hidden);
+    hidden = frontier_dense(hidden, trunk2_weight, trunk2_bias);
+    frontier_relu(&hidden);
+    const auto prefix = "scale_heads." + std::to_string(scale);
+    const auto& head_weight = frontier_tensor(
+        model, prefix + ".weight", {3U, 64U});
+    const auto& head_bias = frontier_tensor(model, prefix + ".bias", {3U});
+    const auto logits = frontier_dense(hidden, head_weight, head_bias);
+    return {
+        frontier_sigmoid(logits[0]), frontier_sigmoid(logits[1]),
+        frontier_sigmoid(logits[2]),
+    };
+}
+
+std::int64_t reduced_cost_bucket(double value, double width) {
+    const long double bucket = std::floor(
+        static_cast<long double>(value) /
+        static_cast<long double>(width));
+    const auto minimum = static_cast<long double>(
+        std::numeric_limits<std::int64_t>::min());
+    const auto maximum = static_cast<long double>(
+        std::numeric_limits<std::int64_t>::max());
+    return static_cast<std::int64_t>(
+        std::clamp(bucket, minimum, maximum));
 }
 
 bool visited(const State& state, std::size_t task_index) {
@@ -458,7 +1454,9 @@ class JourneyExtension final : public rcspp::ExtensionFunction<JourneyResource> 
                 std::max(0.0, task.dual);
         }
         if (model_->guidance_task_arc_enabled) {
-            state->guidance_score += task.guidance_priority;
+            if (!model_->guidance_label_state_enabled) {
+                state->guidance_score += task.guidance_priority;
+            }
             if (action.model_arc_index < model_->arcs.size()) {
                 state->guidance_score +=
                     model_->arcs[action.model_arc_index].guidance_priority;
@@ -746,9 +1744,30 @@ struct VisitedKeyHash {
 struct ProofQueuePotentialTrace {
     ProofQueuePotentialTrace(
         std::size_t task_count,
-        std::size_t arc_count
+        std::size_t arc_count,
+        bool label_trace,
+        std::size_t label_trace_limit,
+        double bucket_width,
+        LabelTraceSamplingMode sampling_mode,
+        std::uint64_t sampling_seed,
+        std::size_t preference_cap,
+        std::size_t surface_cap,
+        std::size_t surface_label_cap,
+        std::size_t witness_cap,
+        std::size_t witness_ancestor_cap_value
     )
-        : task_rows(task_count), arc_rows(arc_count) {
+        : task_rows(task_count),
+          arc_rows(arc_count),
+          label_trace_enabled(label_trace),
+          max_label_trace_rows(label_trace_limit),
+          guidance_bucket_width(bucket_width),
+          label_trace_sampling_mode(sampling_mode),
+          label_trace_seed(sampling_seed),
+          preference_cap_per_family(preference_cap),
+          surface_reservoir_count(surface_cap),
+          surface_labels_per_bucket(surface_label_cap),
+          witness_route_cap(witness_cap),
+          witness_ancestor_cap(witness_ancestor_cap_value) {
         for (std::size_t index = 0; index < task_rows.size(); ++index) {
             task_rows[index].task_index = index;
         }
@@ -757,8 +1776,564 @@ struct ProofQueuePotentialTrace {
         }
     }
 
+    struct SurfaceClass {
+        bool terminal = false;
+        std::size_t visited_count = 0;
+        std::int64_t reduced_cost_bucket = 0;
+
+        bool operator==(const SurfaceClass&) const = default;
+    };
+
+    struct SurfaceClassHash {
+        std::size_t operator()(const SurfaceClass& value) const noexcept {
+            auto seed = std::hash<std::size_t>{}(value.visited_count);
+            seed ^= std::hash<std::int64_t>{}(value.reduced_cost_bucket) +
+                    0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+            seed ^= std::hash<bool>{}(value.terminal) +
+                    0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+            return seed;
+        }
+    };
+
+    struct RankedLabel {
+        std::uint64_t key = 0;
+        LabelStateTraceRow row;
+    };
+
+    struct RankedSurface {
+        std::uint64_t key = 0;
+        SurfaceClass surface;
+    };
+
+    struct RankedSurfaceLess {
+        bool operator()(const RankedSurface& lhs, const RankedSurface& rhs) const {
+            return std::tie(
+                       lhs.key,
+                       lhs.surface.terminal,
+                       lhs.surface.visited_count,
+                       lhs.surface.reduced_cost_bucket) <
+                   std::tie(
+                       rhs.key,
+                       rhs.surface.terminal,
+                       rhs.surface.visited_count,
+                       rhs.surface.reduced_cost_bucket);
+        }
+    };
+
+    struct PreferenceSample {
+        std::uint64_t key = 0;
+        LabelStateTraceRow winner;
+        LabelStateTraceRow loser;
+        LabelPreferenceKind kind = LabelPreferenceKind::ExistingDominator;
+    };
+
+    struct PreferenceSampleLess {
+        bool operator()(const PreferenceSample& lhs, const PreferenceSample& rhs) const {
+            return std::tie(
+                       lhs.key,
+                       lhs.winner.label_id,
+                       lhs.loser.label_id,
+                       lhs.kind) <
+                   std::tie(
+                       rhs.key,
+                       rhs.winner.label_id,
+                       rhs.loser.label_id,
+                       rhs.kind);
+        }
+    };
+
+    static std::uint64_t mix64(std::uint64_t value) {
+        value += 0x9e3779b97f4a7c15ULL;
+        value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+        value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
+        return value ^ (value >> 31U);
+    }
+
+    std::uint64_t ranked_key(
+        std::uint64_t tag,
+        std::uint64_t first,
+        std::uint64_t second = 0,
+        std::uint64_t third = 0
+    ) const {
+        auto value = mix64(label_trace_seed ^ tag);
+        value = mix64(value ^ mix64(first));
+        value = mix64(value ^ mix64(second));
+        return mix64(value ^ mix64(third));
+    }
+
+    LabelStateTraceRow make_label_row(
+        const rcspp::Label<Composition>& label,
+        const Model& model,
+        double priority
+    ) const {
+        const auto& state = label.get_resource()
+                                .template get_component<JourneyResource>(0)
+                                .get_value()
+                                .get_value()
+                                .state();
+        const double partial_cost = label.get_cost();
+        LabelStateTraceRow row;
+        row.label_id = label.id;
+        if (label.prev_label != nullptr) {
+            row.parent_label_id = label.prev_label->id;
+        }
+        if (label.get_end_node() != nullptr) {
+            row.current_node_id = label.get_end_node()->id;
+        }
+        row.last_task_index = state.last_task_index;
+        row.visited_count = state.visited_count;
+        if (!ng_dssr_active(model)) {
+            row.last_model_arc_index =
+                state.auxiliary.regular.last_model_arc_index;
+        }
+        row.reduced_cost_bucket = reduced_cost_bucket(
+            partial_cost, guidance_bucket_width);
+        row.partial_reduced_cost = partial_cost;
+        row.label_state_priority = priority;
+        row.can_terminate = state.at_depot && state.task_visit_count > 0;
+        row.features = label_state_features(model, state, partial_cost);
+        return row;
+    }
+
+    static bool ranked_label_less(
+        const RankedLabel& lhs,
+        const RankedLabel& rhs
+    ) {
+        return std::tie(lhs.key, lhs.row.label_id) <
+               std::tie(rhs.key, rhs.row.label_id);
+    }
+
+    void record_surface_label(LabelStateTraceRow row) {
+        const SurfaceClass surface{
+            .terminal = row.can_terminate,
+            .visited_count = row.visited_count,
+            .reduced_cost_bucket = row.reduced_cost_bucket,
+        };
+        if (seen_surface_classes.insert(surface).second) {
+            ++surface_seen_count;
+        }
+        auto found = surface_rows.find(surface);
+        if (found == surface_rows.end()) {
+            const RankedSurface candidate{
+                .key = ranked_key(
+                    0x53555246414345ULL,
+                    surface.terminal ? 1U : 0U,
+                    surface.visited_count,
+                    static_cast<std::uint64_t>(surface.reduced_cost_bucket)),
+                .surface = surface,
+            };
+            if (surface_rows.size() >= surface_reservoir_count) {
+                if (
+                    surface_heap.empty() ||
+                    !RankedSurfaceLess{}(candidate, surface_heap.top())
+                ) {
+                    return;
+                }
+                surface_rows.erase(surface_heap.top().surface);
+                surface_heap.pop();
+            }
+            surface_heap.push(candidate);
+            found = surface_rows.emplace(
+                surface, std::vector<RankedLabel>{}).first;
+        }
+        auto& values = found->second;
+        if (std::ranges::any_of(values, [&](const RankedLabel& value) {
+                return value.row.label_id == row.label_id;
+            })) {
+            return;
+        }
+        RankedLabel candidate{
+            .key = ranked_key(0x4c4142454cULL, row.label_id),
+            .row = std::move(row),
+        };
+        if (values.size() < surface_labels_per_bucket) {
+            values.push_back(std::move(candidate));
+            return;
+        }
+        const auto worst = std::max_element(
+            values.begin(), values.end(), ranked_label_less);
+        if (ranked_label_less(candidate, *worst)) {
+            *worst = std::move(candidate);
+        }
+    }
+
+    template <typename Queue>
+    static void retain_bottom_k(
+        Queue& values,
+        PreferenceSample sample,
+        std::size_t capacity
+    ) {
+        if (values.size() < capacity) {
+            values.push(std::move(sample));
+        } else if (PreferenceSampleLess{}(sample, values.top())) {
+            values.pop();
+            values.push(std::move(sample));
+        }
+    }
+
+    void record_label(
+        const rcspp::Label<Composition>& label,
+        const Model& model,
+        double priority,
+        bool preserve_negative_ancestor = false
+    ) {
+        if (!label_trace_enabled) {
+            return;
+        }
+        if (
+            label_trace_sampling_mode ==
+            LabelTraceSamplingMode::QGR1StratifiedReservoirV1
+        ) {
+            record_surface_label(make_label_row(label, model, priority));
+            return;
+        }
+        const auto found = label_row_by_id.find(label.id);
+        if (found != label_row_by_id.end()) {
+            auto& row = label_rows[found->second];
+            if (label.prev_label != nullptr) {
+                row.parent_label_id = label.prev_label->id;
+            }
+            return;
+        }
+        if (
+            label_rows.size() >= max_label_trace_rows &&
+            !preserve_negative_ancestor
+        ) {
+            label_trace_truncated = true;
+            return;
+        }
+        const auto& state = label.get_resource()
+                                .template get_component<JourneyResource>(0)
+                                .get_value()
+                                .get_value()
+                                .state();
+        const double partial_cost = label.get_cost();
+        LabelStateTraceRow row;
+        row.label_id = label.id;
+        if (label.prev_label != nullptr) {
+            row.parent_label_id = label.prev_label->id;
+        }
+        if (label.get_end_node() != nullptr) {
+            row.current_node_id = label.get_end_node()->id;
+        }
+        row.last_task_index = state.last_task_index;
+        row.visited_count = state.visited_count;
+        if (!ng_dssr_active(model)) {
+            row.last_model_arc_index =
+                state.auxiliary.regular.last_model_arc_index;
+        }
+        row.reduced_cost_bucket = reduced_cost_bucket(
+            partial_cost, guidance_bucket_width);
+        row.partial_reduced_cost = partial_cost;
+        row.label_state_priority = priority;
+        row.can_terminate = state.at_depot && state.task_visit_count > 0;
+        row.features = label_state_features(model, state, partial_cost);
+        label_row_by_id.emplace(label.id, label_rows.size());
+        label_rows.push_back(std::move(row));
+    }
+
+    void record_preference(
+        const rcspp::Label<Composition>& winner,
+        const rcspp::Label<Composition>& loser,
+        const Model& model,
+        LabelPreferenceKind kind
+    ) {
+        if (!label_trace_enabled) {
+            return;
+        }
+        if (
+            label_trace_sampling_mode ==
+            LabelTraceSamplingMode::QGR1StratifiedReservoirV1
+        ) {
+            auto winner_row = make_label_row(
+                winner,
+                model,
+                qg2_label_state_priority(
+                    model,
+                    winner.get_resource()
+                        .template get_component<JourneyResource>(0)
+                        .get_value()
+                        .get_value()
+                        .state(),
+                    winner.get_cost()));
+            auto loser_row = make_label_row(
+                loser,
+                model,
+                qg2_label_state_priority(
+                    model,
+                    loser.get_resource()
+                        .template get_component<JourneyResource>(0)
+                        .get_value()
+                        .get_value()
+                        .state(),
+                    loser.get_cost()));
+            PreferenceSample sample{
+                .key = ranked_key(
+                    kind == LabelPreferenceKind::ExistingDominator
+                        ? 0x4558495354494e47ULL
+                        : 0x494e434f4d494e47ULL,
+                    winner.id,
+                    loser.id),
+                .winner = std::move(winner_row),
+                .loser = std::move(loser_row),
+                .kind = kind,
+            };
+            if (kind == LabelPreferenceKind::ExistingDominator) {
+                ++existing_preference_seen;
+                retain_bottom_k(
+                    existing_preference_samples,
+                    std::move(sample),
+                    preference_cap_per_family);
+            } else {
+                ++incoming_preference_seen;
+                retain_bottom_k(
+                    incoming_preference_samples,
+                    std::move(sample),
+                    preference_cap_per_family);
+            }
+            return;
+        }
+        record_label(
+            winner,
+            model,
+            qg2_label_state_priority(model,
+                                     winner.get_resource()
+                                         .template get_component<JourneyResource>(0)
+                                         .get_value()
+                                         .get_value()
+                                         .state(),
+                                     winner.get_cost()));
+        record_label(
+            loser,
+            model,
+            qg2_label_state_priority(model,
+                                     loser.get_resource()
+                                         .template get_component<JourneyResource>(0)
+                                         .get_value()
+                                         .get_value()
+                                         .state(),
+                                     loser.get_cost()));
+        if (preference_rows.size() >= max_label_trace_rows) {
+            label_trace_truncated = true;
+            return;
+        }
+        preference_rows.push_back({
+            .winner_label_id = winner.id,
+            .loser_label_id = loser.id,
+            .kind = kind,
+        });
+    }
+
+    void record_negative_witness(
+        const rcspp::Label<Composition>& end_label,
+        const Model& model,
+        double reduced_cost_value,
+        std::size_t solution_index,
+        double elapsed_seconds
+    ) {
+        if (!label_trace_enabled) {
+            return;
+        }
+        if (
+            label_trace_sampling_mode ==
+            LabelTraceSamplingMode::QGR1StratifiedReservoirV1
+        ) {
+            ++witness_seen_count;
+            if (witness_rows.size() >= witness_route_cap) {
+                label_trace_incomplete = true;
+                label_trace_truncated = true;
+                return;
+            }
+            std::vector<LabelStateTraceRow> chain;
+            const auto* cursor = &end_label;
+            while (cursor != nullptr) {
+                const auto& state = cursor->get_resource()
+                                        .template get_component<JourneyResource>(0)
+                                        .get_value()
+                                        .get_value()
+                                        .state();
+                chain.push_back(make_label_row(
+                    *cursor,
+                    model,
+                    qg2_label_state_priority(
+                        model, state, cursor->get_cost())));
+                cursor = cursor->prev_label;
+            }
+            std::ranges::reverse(chain);
+            std::size_t additions = 0;
+            for (const auto& value : chain) {
+                additions += !witness_label_rows.contains(value.label_id);
+            }
+            if (witness_label_rows.size() + additions > witness_ancestor_cap) {
+                label_trace_incomplete = true;
+                label_trace_truncated = true;
+                return;
+            }
+            NegativeWitnessTraceRow row;
+            row.solution_index = solution_index;
+            row.reduced_cost = reduced_cost_value;
+            row.elapsed_seconds = std::max(0.0, elapsed_seconds);
+            for (const auto& value : chain) {
+                witness_label_rows.emplace(value.label_id, value);
+                row.ancestor_label_ids.push_back(value.label_id);
+            }
+            witness_rows.push_back(std::move(row));
+            return;
+        }
+        if (witness_rows.size() >= 512U) {
+            label_trace_truncated = true;
+            return;
+        }
+        NegativeWitnessTraceRow row;
+        row.solution_index = solution_index;
+        row.reduced_cost = reduced_cost_value;
+        row.elapsed_seconds = std::max(0.0, elapsed_seconds);
+        const auto* cursor = &end_label;
+        while (cursor != nullptr) {
+            const auto& state = cursor->get_resource()
+                                    .template get_component<JourneyResource>(0)
+                                    .get_value()
+                                    .get_value()
+                                    .state();
+            record_label(
+                *cursor,
+                model,
+                qg2_label_state_priority(
+                    model, state, cursor->get_cost()),
+                true);
+            row.ancestor_label_ids.push_back(cursor->id);
+            cursor = cursor->prev_label;
+        }
+        std::ranges::reverse(row.ancestor_label_ids);
+        witness_rows.push_back(std::move(row));
+    }
+
+    void finalize_label_trace() {
+        if (
+            !label_trace_enabled ||
+            label_trace_sampling_mode !=
+                LabelTraceSamplingMode::QGR1StratifiedReservoirV1
+        ) {
+            return;
+        }
+        std::unordered_map<std::uint64_t, LabelStateTraceRow> retained =
+            witness_label_rows;
+        for (const auto& [surface, values] : surface_rows) {
+            static_cast<void>(surface);
+            for (const auto& value : values) {
+                retained.emplace(value.row.label_id, value.row);
+            }
+        }
+        auto drain_preferences = [&](auto& samples) {
+            std::vector<PreferenceSample> ordered;
+            ordered.reserve(samples.size());
+            while (!samples.empty()) {
+                ordered.push_back(samples.top());
+                samples.pop();
+            }
+            std::ranges::sort(ordered, PreferenceSampleLess{});
+            for (const auto& sample : ordered) {
+                retained.emplace(sample.winner.label_id, sample.winner);
+                retained.emplace(sample.loser.label_id, sample.loser);
+                preference_rows.push_back({
+                    .winner_label_id = sample.winner.label_id,
+                    .loser_label_id = sample.loser.label_id,
+                    .kind = sample.kind,
+                });
+            }
+        };
+        drain_preferences(existing_preference_samples);
+        existing_preference_retained = preference_rows.size();
+        drain_preferences(incoming_preference_samples);
+        incoming_preference_retained =
+            preference_rows.size() - existing_preference_retained;
+        std::ranges::sort(preference_rows, [](const auto& lhs, const auto& rhs) {
+            return std::tie(lhs.kind, lhs.winner_label_id, lhs.loser_label_id) <
+                   std::tie(rhs.kind, rhs.winner_label_id, rhs.loser_label_id);
+        });
+        preference_rows.erase(
+            std::unique(
+                preference_rows.begin(),
+                preference_rows.end(),
+                [](const auto& lhs, const auto& rhs) {
+                    return lhs.kind == rhs.kind &&
+                           lhs.winner_label_id == rhs.winner_label_id &&
+                           lhs.loser_label_id == rhs.loser_label_id;
+                }),
+            preference_rows.end());
+        label_rows.clear();
+        label_rows.reserve(retained.size());
+        for (auto& [label_id, row] : retained) {
+            static_cast<void>(label_id);
+            label_rows.push_back(std::move(row));
+        }
+        std::ranges::sort(label_rows, [](const auto& lhs, const auto& rhs) {
+            return lhs.label_id < rhs.label_id;
+        });
+        if (label_rows.size() > max_label_trace_rows) {
+            label_trace_incomplete = true;
+            label_trace_truncated = true;
+            label_rows.resize(max_label_trace_rows);
+        }
+        surface_retained_count = surface_rows.size();
+        surface_label_retained_count = 0;
+        for (const auto& [surface, values] : surface_rows) {
+            static_cast<void>(surface);
+            surface_label_retained_count += values.size();
+        }
+        witness_retained_count = witness_rows.size();
+        witness_ancestor_retained_count = witness_label_rows.size();
+        final_label_row_count = label_rows.size();
+    }
+
     std::vector<TaskDominanceTraceRow> task_rows;
     std::vector<TaskDominanceTraceRow> arc_rows;
+    bool label_trace_enabled = false;
+    bool label_trace_truncated = false;
+    bool label_trace_incomplete = false;
+    std::size_t max_label_trace_rows = 0;
+    double guidance_bucket_width = 0.01;
+    LabelTraceSamplingMode label_trace_sampling_mode =
+        LabelTraceSamplingMode::PrefixV1;
+    std::uint64_t label_trace_seed = 0;
+    std::size_t preference_cap_per_family = 0;
+    std::size_t surface_reservoir_count = 0;
+    std::size_t surface_labels_per_bucket = 0;
+    std::size_t witness_route_cap = 0;
+    std::size_t witness_ancestor_cap = 0;
+    std::size_t existing_preference_seen = 0;
+    std::size_t incoming_preference_seen = 0;
+    std::size_t existing_preference_retained = 0;
+    std::size_t incoming_preference_retained = 0;
+    std::size_t surface_seen_count = 0;
+    std::size_t surface_retained_count = 0;
+    std::size_t surface_label_retained_count = 0;
+    std::size_t witness_seen_count = 0;
+    std::size_t witness_retained_count = 0;
+    std::size_t witness_ancestor_retained_count = 0;
+    std::size_t final_label_row_count = 0;
+    std::vector<LabelStateTraceRow> label_rows;
+    std::vector<LabelPreferenceTraceRow> preference_rows;
+    std::vector<NegativeWitnessTraceRow> witness_rows;
+    std::unordered_map<std::uint64_t, std::size_t> label_row_by_id;
+    std::unordered_map<
+        SurfaceClass,
+        std::vector<RankedLabel>,
+        SurfaceClassHash> surface_rows;
+    std::priority_queue<
+        RankedSurface,
+        std::vector<RankedSurface>,
+        RankedSurfaceLess> surface_heap;
+    std::unordered_set<SurfaceClass, SurfaceClassHash> seen_surface_classes;
+    std::priority_queue<
+        PreferenceSample,
+        std::vector<PreferenceSample>,
+        PreferenceSampleLess> existing_preference_samples;
+    std::priority_queue<
+        PreferenceSample,
+        std::vector<PreferenceSample>,
+        PreferenceSampleLess> incoming_preference_samples;
+    std::unordered_map<std::uint64_t, LabelStateTraceRow> witness_label_rows;
 };
 
 struct DssrPressureMonitor {
@@ -1159,6 +2734,11 @@ class VisitedLabelList {
         if (trace_ == nullptr) {
             return;
         }
+        trace_->record_preference(
+            winner,
+            removed,
+            *model_,
+            LabelPreferenceKind::IncomingDominator);
         const auto& winner_state = state(winner);
         const auto& removed_state = state(removed);
         if (winner_state.last_task_index < trace_->task_rows.size()) {
@@ -1200,6 +2780,11 @@ class VisitedLabelList {
         if (trace_ == nullptr) {
             return;
         }
+        trace_->record_preference(
+            *winner,
+            rejected,
+            *model_,
+            LabelPreferenceKind::ExistingDominator);
         const auto& winner_state = state(*winner);
         const auto& rejected_state = state(rejected);
         if (winner_state.last_task_index < trace_->task_rows.size()) {
@@ -1429,12 +3014,140 @@ class AuditedBestFirstDominance final
                               rcspp::AlgorithmParams<LabelList> params,
                               std::shared_ptr<const Model> model,
                               ProofQueuePolicy proof_queue_policy,
-                              double proof_queue_guidance_bucket_width)
+                              double proof_queue_guidance_bucket_width,
+                              double negative_epsilon,
+                              std::shared_ptr<ProofQueuePotentialTrace> trace,
+                              FrontierProbeConfig frontier_probe,
+                              CounterfactualPrefixConfig counterfactual_prefix)
         : Base(factory, std::move(params)),
           model_(std::move(model)),
           proof_queue_policy_(proof_queue_policy),
           proof_queue_guidance_bucket_width_(
-              proof_queue_guidance_bucket_width) {}
+              proof_queue_guidance_bucket_width),
+          negative_epsilon_(std::abs(negative_epsilon)),
+          trace_(std::move(trace)),
+          frontier_probe_config_(std::move(frontier_probe)),
+          counterfactual_prefix_config_(std::move(counterfactual_prefix)),
+          guidance_stats_(std::make_shared<GuidanceStats>()),
+          unprocessed_experimental_(
+              GreaterCachedKey{guidance_stats_}) {
+        const auto& observation_boundaries =
+            frontier_probe_config_.observation_boundaries;
+        if (!observation_boundaries.empty()) {
+            if (frontier_probe_config_.mode == FrontierProbeMode::Disabled ||
+                observation_boundaries.front() == 0U ||
+                !std::ranges::is_sorted(observation_boundaries) ||
+                std::ranges::adjacent_find(observation_boundaries) !=
+                    observation_boundaries.end() ||
+                observation_boundaries.back() >
+                    frontier_probe_config_.processed_label_boundary) {
+                throw std::invalid_argument(
+                    "frontier observation boundaries require an enabled "
+                    "probe and must be strictly increasing, positive, and "
+                    "not exceed the decision boundary");
+            }
+        }
+        frontier_probe_telemetry_.enabled =
+            frontier_probe_config_.mode != FrontierProbeMode::Disabled;
+        frontier_probe_telemetry_.boundary =
+            frontier_probe_config_.processed_label_boundary;
+        frontier_probe_telemetry_.trial_pop_budget =
+            frontier_probe_config_.trial_pop_budget;
+        frontier_probe_telemetry_.observation_boundaries =
+            frontier_probe_config_.observation_boundaries;
+        frontier_probe_telemetry_.context_features =
+            frontier_probe_config_.context_features;
+        switch (frontier_probe_config_.mode) {
+            case FrontierProbeMode::Disabled:
+                frontier_probe_telemetry_.mode = "disabled";
+                break;
+            case FrontierProbeMode::CollectForceQ0:
+                frontier_probe_telemetry_.mode = "collect_force_q0";
+                break;
+            case FrontierProbeMode::ForceQD1:
+                frontier_probe_telemetry_.mode = "force_qd1";
+                break;
+            case FrontierProbeMode::Learned:
+                frontier_probe_telemetry_.mode = "learned";
+                break;
+            case FrontierProbeMode::CollectTrial:
+                frontier_probe_telemetry_.mode = "collect_trial";
+                break;
+            case FrontierProbeMode::ForceTrialContinue:
+                frontier_probe_telemetry_.mode = "force_trial_continue";
+                break;
+            case FrontierProbeMode::ForceTrialRevert:
+                frontier_probe_telemetry_.mode = "force_trial_revert";
+                break;
+            case FrontierProbeMode::LearnedAfterTrial:
+                frontier_probe_telemetry_.mode = "learned_after_trial";
+                break;
+        }
+        if (temporal_trial_mode()) {
+            if (frontier_probe_config_.trial_pop_budget == 0U) {
+                throw std::invalid_argument(
+                    "temporal frontier trial requires a positive pop budget");
+            }
+            if (frontier_probe_config_.problem_scale != 30U &&
+                frontier_probe_config_.problem_scale != 50U) {
+                throw std::invalid_argument(
+                    "temporal frontier trial is authorized only for scale30/50");
+            }
+            if (!frontier_probe_config_.require_root_cg ||
+                !frontier_probe_config_.fail_closed_on_ood) {
+                throw std::invalid_argument(
+                    "temporal frontier trial requires root-only and "
+                    "fail-closed OOD policies");
+            }
+            if (frontier_probe_config_.require_root_cg &&
+                frontier_probe_config_.pricing_lifecycle != "root_cg") {
+                throw std::invalid_argument(
+                    "temporal frontier trial is authorized only for root_cg");
+            }
+            if (frontier_probe_config_.mode ==
+                FrontierProbeMode::LearnedAfterTrial) {
+                const auto is_sha256 = [](const std::string& value) {
+                    return value.size() == 64U && std::ranges::all_of(
+                        value, [](const unsigned char item) {
+                            return std::isxdigit(item) != 0;
+                        });
+                };
+                if (!is_sha256(frontier_probe_config_.manifest_sha256) ||
+                    !is_sha256(frontier_probe_config_.bundle_file_sha256) ||
+                    !is_sha256(
+                        frontier_probe_config_.temporal_bundle.bundle_sha256)) {
+                    throw std::invalid_argument(
+                        "learned temporal trial requires immutable manifest, "
+                        "bundle-file, and canonical bundle bindings");
+                }
+            }
+        }
+        auto& counterfactual = counterfactual_prefix_telemetry_;
+        counterfactual.enabled =
+            counterfactual_prefix_config_.mode !=
+            CounterfactualPrefixMode::Disabled;
+        counterfactual.processed_label_boundary =
+            counterfactual_prefix_config_.processed_label_boundary;
+        counterfactual.rollout_checkpoints =
+            counterfactual_prefix_config_.rollout_checkpoints;
+        counterfactual.maximum_rollout_budget =
+            counterfactual_prefix_config_.maximum_rollout_budget;
+        counterfactual.public_routes_forbidden =
+            counterfactual_prefix_config_.public_routes_forbidden;
+        counterfactual.certificate_forbidden =
+            counterfactual_prefix_config_.certificate_forbidden;
+        switch (counterfactual_prefix_config_.mode) {
+            case CounterfactualPrefixMode::Disabled:
+                counterfactual.mode = "disabled";
+                break;
+            case CounterfactualPrefixMode::Q0Prefix:
+                counterfactual.mode = "counterfactual_q0_prefix";
+                break;
+            case CounterfactualPrefixMode::QD1Prefix:
+                counterfactual.mode = "counterfactual_qd1_prefix";
+                break;
+        }
+    }
 
     [[nodiscard]] std::size_t extended_labels() const { return this->num_extended_labels_; }
     [[nodiscard]] std::size_t processed_labels() const { return processed_labels_; }
@@ -1499,6 +3212,8 @@ class AuditedBestFirstDominance final
     }
     void begin_best_reduced_cost_trace(Clock::time_point started, bool enabled) {
         trace_started_ = started;
+        counterfactual_request_started_ = started;
+        counterfactual_timing_started_ = true;
         trace_enabled_ = enabled;
         best_reduced_cost_ = std::numeric_limits<double>::infinity();
         best_reduced_cost_event_count_total_ = 0;
@@ -1513,16 +3228,83 @@ class AuditedBestFirstDominance final
     [[nodiscard]] bool best_reduced_cost_events_truncated() const {
         return best_reduced_cost_event_count_total_ > best_reduced_cost_events_.size();
     }
+    [[nodiscard]] std::size_t label_state_scored_count() const {
+        return guidance_stats_->label_state_scored_count;
+    }
+    [[nodiscard]] std::size_t guidance_nonzero_score_count() const {
+        return guidance_stats_->nonzero_score_count;
+    }
+    [[nodiscard]] std::size_t guidance_ordering_decision_count() const {
+        return guidance_stats_->ordering_decision_count;
+    }
+    [[nodiscard]] std::size_t guidance_reordered_label_hash_count() const {
+        return guidance_stats_->reordered_label_hashes.count();
+    }
+    [[nodiscard]] std::size_t guidance_bucket_hash_count() const {
+        return guidance_stats_->bucket_hashes.count();
+    }
+    [[nodiscard]] double label_state_scoring_estimated_wall_seconds() const {
+        if (guidance_stats_->scoring_sample_count == 0U) {
+            return 0.0;
+        }
+        return guidance_stats_->scoring_sample_wall_seconds *
+               static_cast<double>(guidance_stats_->label_state_scored_count) /
+               static_cast<double>(guidance_stats_->scoring_sample_count);
+    }
+    [[nodiscard]] double first_true_negative_wall_time_seconds() const {
+        return first_true_negative_wall_time_seconds_;
+    }
+    [[nodiscard]] std::size_t labels_processed_before_first_true_negative() const {
+        return labels_processed_before_first_true_negative_;
+    }
+    [[nodiscard]] const FrontierProbeTelemetry& frontier_probe_telemetry() const {
+        return frontier_probe_telemetry_;
+    }
+    [[nodiscard]] const CounterfactualPrefixTelemetry&
+    counterfactual_prefix_telemetry() const {
+        return counterfactual_prefix_telemetry_;
+    }
     void release_request_memory() { release_label_memory(); }
 
   private:
+    [[nodiscard]] bool temporal_trial_mode() const {
+        return frontier_probe_config_.mode == FrontierProbeMode::CollectTrial ||
+               frontier_probe_config_.mode ==
+                   FrontierProbeMode::ForceTrialContinue ||
+               frontier_probe_config_.mode ==
+                   FrontierProbeMode::ForceTrialRevert ||
+               frontier_probe_config_.mode ==
+                   FrontierProbeMode::LearnedAfterTrial;
+    }
     void extract_solution(const Label& end_label) override {
         const auto size_before = this->solutions_.size();
         Base::extract_solution(end_label);
-        if (!trace_enabled_ || this->solutions_.size() == size_before) {
+        if (this->solutions_.size() == size_before) {
             return;
         }
         const double reduced_cost = end_label.get_cost();
+        const auto elapsed =
+            std::chrono::duration<double>(Clock::now() - trace_started_).count();
+        const bool true_negative =
+            reduced_cost < -negative_epsilon_;
+        if (
+            true_negative &&
+            !std::isfinite(first_true_negative_wall_time_seconds_)
+        ) {
+            first_true_negative_wall_time_seconds_ = std::max(0.0, elapsed);
+            labels_processed_before_first_true_negative_ = processed_labels_;
+        }
+        if (trace_ != nullptr && true_negative) {
+            trace_->record_negative_witness(
+                end_label,
+                *model_,
+                reduced_cost,
+                this->solutions_.size() - 1U,
+                elapsed);
+        }
+        if (!trace_enabled_) {
+            return;
+        }
         constexpr double improvement_epsilon = 1.0e-12;
         if (!(reduced_cost < best_reduced_cost_ - improvement_epsilon)) {
             return;
@@ -1532,8 +3314,6 @@ class AuditedBestFirstDominance final
         if (best_reduced_cost_events_.size() >= max_best_reduced_cost_events_) {
             return;
         }
-        const auto elapsed =
-            std::chrono::duration<double>(Clock::now() - trace_started_).count();
         best_reduced_cost_events_.push_back(BestReducedCostEvent{
             .elapsed_seconds = std::max(0.0, elapsed),
             .extended_labels = this->num_extended_labels_,
@@ -1579,12 +3359,25 @@ class AuditedBestFirstDominance final
         bool can_terminate = false;
         double primary_key = 0.0;
         double secondary_key = 0.0;
+        std::int64_t reduced_cost_bucket = 0;
         double guidance_score = 0.0;
         double partial_cost = 0.0;
         std::uint64_t creation_sequence_id = 0;
     };
 
+    struct GuidanceStats {
+        std::size_t label_state_scored_count = 0;
+        std::size_t nonzero_score_count = 0;
+        std::size_t ordering_decision_count = 0;
+        std::size_t scoring_sample_count = 0;
+        double scoring_sample_wall_seconds = 0.0;
+        std::bitset<4096> bucket_hashes;
+        std::bitset<65536> reordered_label_hashes;
+    };
+
     struct GreaterCachedKey {
+        std::shared_ptr<GuidanceStats> stats;
+
         bool operator()(
             const CachedQueueEntry& lhs,
             const CachedQueueEntry& rhs
@@ -1605,11 +3398,31 @@ class AuditedBestFirstDominance final
             ) {
                 return lhs.secondary_key > rhs.secondary_key;
             }
+            if (lhs.reduced_cost_bucket != rhs.reduced_cost_bucket) {
+                return lhs.reduced_cost_bucket > rhs.reduced_cost_bucket;
+            }
             if (
                 std::abs(lhs.guidance_score - rhs.guidance_score) >
                 key_epsilon
             ) {
-                return lhs.guidance_score < rhs.guidance_score;
+                const bool guided_lhs_after =
+                    lhs.guidance_score < rhs.guidance_score;
+                const bool q0_lhs_after =
+                    std::abs(lhs.partial_cost - rhs.partial_cost) >
+                            key_epsilon
+                        ? lhs.partial_cost > rhs.partial_cost
+                        : lhs.creation_sequence_id >
+                              rhs.creation_sequence_id;
+                if (stats != nullptr && guided_lhs_after != q0_lhs_after) {
+                    ++stats->ordering_decision_count;
+                    stats->reordered_label_hashes.set(
+                        lhs.creation_sequence_id %
+                        stats->reordered_label_hashes.size());
+                    stats->reordered_label_hashes.set(
+                        rhs.creation_sequence_id %
+                        stats->reordered_label_hashes.size());
+                }
+                return guided_lhs_after;
             }
             if (
                 std::abs(lhs.partial_cost - rhs.partial_cost) >
@@ -1624,7 +3437,1804 @@ class AuditedBestFirstDominance final
         }
     };
 
+    struct FrontierLabelRecord {
+        Pair value;
+        std::uint64_t creation_sequence_id = 0;
+        double partial_cost = 0.0;
+        std::size_t depth_bin = 0;
+        std::size_t rc_bin = 0;
+        std::size_t cell = 0;
+        bool terminal = false;
+        std::size_t visited_count = 0;
+        std::size_t last_task_index = std::numeric_limits<std::size_t>::max();
+        std::size_t q0_rank = 0;
+        std::size_t qd1_rank = 0;
+        std::uint64_t dominance_surface_hash = 0;
+    };
+
+    static std::uint64_t frontier_mix(std::uint64_t value) {
+        value += 0x9e3779b97f4a7c15ULL;
+        value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+        value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
+        return value ^ (value >> 31U);
+    }
+
+    static std::size_t frontier_depth_bin(
+        std::size_t visited_count,
+        std::size_t scale
+    ) {
+        const double value = static_cast<double>(visited_count) /
+                             static_cast<double>(std::max<std::size_t>(1U, scale));
+        constexpr std::array<double, 7> limits{
+            0.05, 0.10, 0.20, 0.30, 0.40, 0.55, 0.75};
+        return static_cast<std::size_t>(
+            std::lower_bound(limits.begin(), limits.end(), value) - limits.begin());
+    }
+
+    static double frontier_mean(const std::vector<double>& values) {
+        return values.empty()
+                   ? 0.0
+                   : std::accumulate(values.begin(), values.end(), 0.0) /
+                         static_cast<double>(values.size());
+    }
+
+    static double frontier_std(
+        const std::vector<double>& values,
+        double mean
+    ) {
+        if (values.empty()) {
+            return 0.0;
+        }
+        double value = 0.0;
+        for (const double item : values) {
+            value += (item - mean) * (item - mean);
+        }
+        return std::sqrt(value / static_cast<double>(values.size()));
+    }
+
+    std::vector<FrontierLabelRecord> frontier_records() const {
+        std::vector<FrontierLabelRecord> records;
+        auto append_record = [&](const Pair& value, std::uint64_t creation_id) {
+            const auto& state = value.first->get_resource()
+                                    .template get_component<JourneyResource>(0)
+                                    .get_value()
+                                    .get_value()
+                                    .state();
+            std::uint64_t surface_hash = frontier_mix(
+                state.cut_state.packed_overlap ^
+                (state.at_depot ? 0xd3f04a5aULL : 0x19b87c61ULL));
+            for (const auto word : dominance_visited_key(*model_, state)) {
+                surface_hash ^= frontier_mix(word + surface_hash);
+            }
+            surface_hash ^= frontier_mix(
+                static_cast<std::uint64_t>(state.last_task_index));
+            records.push_back(FrontierLabelRecord{
+                .value = value,
+                .creation_sequence_id = creation_id,
+                .partial_cost = value.first->get_cost(),
+                .terminal = state.at_depot && state.task_visit_count > 0,
+                .visited_count = state.visited_count,
+                .last_task_index = state.last_task_index,
+                .dominance_surface_hash = surface_hash,
+            });
+        };
+        if (proof_queue_policy_ == ProofQueuePolicy::Q0PartialCost) {
+            auto queue = unprocessed_q0_;
+            records.reserve(queue.size());
+            while (!queue.empty()) {
+                const auto value = queue.top();
+                queue.pop();
+                const auto found = creation_sequence_ids_.find(value.first);
+                if (found == creation_sequence_ids_.end()) {
+                    throw std::runtime_error(
+                        "frontier creation sequence binding missing");
+                }
+                append_record(value, found->second);
+            }
+        } else {
+            auto queue = unprocessed_experimental_;
+            records.reserve(queue.size());
+            while (!queue.empty()) {
+                const auto entry = queue.top();
+                queue.pop();
+                append_record(entry.value, entry.creation_sequence_id);
+            }
+        }
+        std::vector<std::size_t> order(records.size());
+        std::iota(order.begin(), order.end(), 0U);
+        std::ranges::sort(order, [&records](std::size_t lhs, std::size_t rhs) {
+            return std::tie(
+                       records[lhs].partial_cost,
+                       records[lhs].creation_sequence_id) <
+                   std::tie(
+                       records[rhs].partial_cost,
+                       records[rhs].creation_sequence_id);
+        });
+        for (std::size_t rank = 0; rank < order.size(); ++rank) {
+            auto& record = records[order[rank]];
+            record.q0_rank = rank;
+            record.rc_bin = std::min<std::size_t>(
+                7U, (8U * rank) / std::max<std::size_t>(1U, order.size()));
+            record.depth_bin = frontier_depth_bin(
+                record.visited_count, model_->tasks.size());
+            record.cell = record.depth_bin * 8U + record.rc_bin;
+        }
+        std::ranges::sort(order, [&records](std::size_t lhs, std::size_t rhs) {
+            return std::tuple{
+                       !records[lhs].terminal,
+                       std::numeric_limits<std::size_t>::max() -
+                           records[lhs].visited_count,
+                       records[lhs].partial_cost,
+                       records[lhs].creation_sequence_id} <
+                   std::tuple{
+                       !records[rhs].terminal,
+                       std::numeric_limits<std::size_t>::max() -
+                           records[rhs].visited_count,
+                       records[rhs].partial_cost,
+                       records[rhs].creation_sequence_id};
+        });
+        for (std::size_t rank = 0; rank < order.size(); ++rank) {
+            records[order[rank]].qd1_rank = rank;
+        }
+        return records;
+    }
+
+    CounterfactualFrontierGraph build_counterfactual_label_graph() const {
+        const auto started = Clock::now();
+        auto records = frontier_records();
+        CounterfactualFrontierGraph graph;
+        graph.frontier_size = records.size();
+        if (records.empty()) {
+            graph.build_wall_seconds =
+                std::chrono::duration<double>(Clock::now() - started).count();
+            return graph;
+        }
+
+        const auto cap = std::min(
+            counterfactual_prefix_config_.label_sample_cap,
+            kCounterfactualLabelSampleCap);
+        std::unordered_set<std::size_t> selected;
+        selected.reserve(cap);
+        auto add_family = [&](std::vector<std::size_t> candidates,
+                              std::size_t family_cap,
+                              std::size_t* family_count,
+                              bool hash_order) {
+            if (hash_order) {
+                std::ranges::sort(candidates, [&](std::size_t lhs, std::size_t rhs) {
+                    return std::tuple{
+                               frontier_mix(
+                                   records[lhs].creation_sequence_id ^
+                                   counterfactual_prefix_config_.sampling_seed),
+                               records[lhs].creation_sequence_id} <
+                           std::tuple{
+                               frontier_mix(
+                                   records[rhs].creation_sequence_id ^
+                                   counterfactual_prefix_config_.sampling_seed),
+                               records[rhs].creation_sequence_id};
+                });
+            }
+            std::size_t accepted = 0;
+            for (const auto index : candidates) {
+                if (selected.size() >= cap || accepted >= family_cap) {
+                    break;
+                }
+                if (selected.insert(index).second) {
+                    ++accepted;
+                }
+            }
+            *family_count += accepted;
+        };
+
+        std::vector<std::size_t> terminal;
+        std::vector<std::size_t> q0(records.size());
+        std::vector<std::size_t> qd1(records.size());
+        std::vector<std::size_t> deepest(records.size());
+        std::iota(q0.begin(), q0.end(), 0U);
+        qd1 = q0;
+        deepest = q0;
+        for (std::size_t index = 0; index < records.size(); ++index) {
+            if (records[index].terminal) {
+                terminal.push_back(index);
+            }
+        }
+        std::ranges::sort(q0, [&](std::size_t lhs, std::size_t rhs) {
+            return std::tuple{
+                       !records[lhs].terminal,
+                       records[lhs].partial_cost,
+                       records[lhs].creation_sequence_id} <
+                   std::tuple{
+                       !records[rhs].terminal,
+                       records[rhs].partial_cost,
+                       records[rhs].creation_sequence_id};
+        });
+        for (std::size_t rank = 0; rank < q0.size(); ++rank) {
+            records[q0[rank]].q0_rank = rank;
+        }
+        std::ranges::sort(qd1, [&](std::size_t lhs, std::size_t rhs) {
+            return std::tuple{
+                       !records[lhs].terminal,
+                       std::numeric_limits<std::size_t>::max() -
+                           records[lhs].visited_count,
+                       records[lhs].partial_cost,
+                       records[lhs].creation_sequence_id} <
+                   std::tuple{
+                       !records[rhs].terminal,
+                       std::numeric_limits<std::size_t>::max() -
+                           records[rhs].visited_count,
+                       records[rhs].partial_cost,
+                       records[rhs].creation_sequence_id};
+        });
+        for (std::size_t rank = 0; rank < qd1.size(); ++rank) {
+            records[qd1[rank]].qd1_rank = rank;
+        }
+        std::ranges::sort(deepest, [&](std::size_t lhs, std::size_t rhs) {
+            return std::tuple{
+                       std::numeric_limits<std::size_t>::max() -
+                           records[lhs].visited_count,
+                       records[lhs].partial_cost,
+                       records[lhs].creation_sequence_id} <
+                   std::tuple{
+                       std::numeric_limits<std::size_t>::max() -
+                           records[rhs].visited_count,
+                       records[rhs].partial_cost,
+                       records[rhs].creation_sequence_id};
+        });
+        add_family(
+            std::move(terminal), 32U, &graph.terminal_family_count, true);
+        add_family(q0, 32U, &graph.q0_family_count, false);
+        add_family(qd1, 32U, &graph.qd1_family_count, false);
+        add_family(deepest, 32U, &graph.deepest_family_count, false);
+
+        std::array<std::vector<std::size_t>, kFrontierNodeCount> cells;
+        for (std::size_t index = 0; index < records.size(); ++index) {
+            cells[records[index].cell].push_back(index);
+        }
+        for (auto& cell : cells) {
+            if (cell.empty()) {
+                continue;
+            }
+            add_family(
+                std::move(cell), 2U, &graph.depth_rc_family_count, true);
+        }
+        std::vector<std::size_t> remainder(records.size());
+        std::iota(remainder.begin(), remainder.end(), 0U);
+        add_family(
+            std::move(remainder), cap, &graph.bottom_k_family_count, true);
+
+        std::vector<std::size_t> sample(selected.begin(), selected.end());
+        std::ranges::sort(sample, [&](std::size_t lhs, std::size_t rhs) {
+            return records[lhs].creation_sequence_id <
+                   records[rhs].creation_sequence_id;
+        });
+        graph.sampled_label_count = sample.size();
+        graph.label_nodes.reserve(sample.size());
+        std::unordered_map<const Label*, std::uint64_t> active_ids;
+        active_ids.reserve(records.size());
+        for (const auto& record : records) {
+            active_ids.emplace(record.value.first, record.creation_sequence_id);
+        }
+        std::unordered_map<std::uint64_t, std::size_t> sample_index;
+        sample_index.reserve(sample.size());
+        const double count_scale = static_cast<double>(records.size());
+        const double creation_scale = static_cast<double>(
+            std::max<std::uint64_t>(1U, next_creation_sequence_id_));
+        for (const auto record_index : sample) {
+            const auto& record = records[record_index];
+            const auto& state = record.value.first->get_resource()
+                                    .template get_component<JourneyResource>(0)
+                                    .get_value()
+                                    .get_value()
+                                    .state();
+            auto features = std::array<double,
+                kCounterfactualLabelNodeFeatureCount>{};
+            const auto label_features = label_state_features(
+                *model_, state, record.partial_cost);
+            std::copy(
+                label_features.begin(), label_features.end(), features.begin());
+            features[15] = record.terminal ? 1.0 : 0.0;
+            features[16] = static_cast<double>(
+                next_creation_sequence_id_ - 1U -
+                std::min(
+                    next_creation_sequence_id_ - 1U,
+                    record.creation_sequence_id)) / creation_scale;
+            features[17] = static_cast<double>(record.q0_rank) /
+                           std::max(1.0, count_scale - 1.0);
+            features[18] = static_cast<double>(record.qd1_rank) /
+                           std::max(1.0, count_scale - 1.0);
+            features[19] = features[18] - features[17];
+            features[20] = record.last_task_index < model_->tasks.size()
+                               ? static_cast<double>(record.last_task_index + 1U) /
+                                     static_cast<double>(model_->tasks.size())
+                               : 0.0;
+            features[21] = record.last_task_index < model_->tasks.size()
+                               ? 1.0
+                               : 0.0;
+            std::uint64_t parent_id =
+                std::numeric_limits<std::uint64_t>::max();
+            const auto parent = active_ids.find(record.value.first->prev_label);
+            if (parent != active_ids.end()) {
+                parent_id = parent->second;
+            }
+            features[23] = branch_terminal_feasible(*model_, state) ? 1.0 : 0.0;
+            sample_index.emplace(
+                record.creation_sequence_id, graph.label_nodes.size());
+            graph.label_nodes.push_back(CounterfactualLabelNode{
+                .creation_sequence_id = record.creation_sequence_id,
+                .parent_creation_sequence_id = parent_id,
+                .last_task_index = record.last_task_index,
+                .depth_rc_cell = record.cell,
+                .dominance_surface_hash = record.dominance_surface_hash,
+                .features = features,
+            });
+        }
+        for (auto& node : graph.label_nodes) {
+            node.features[22] = sample_index.contains(
+                                    node.parent_creation_sequence_id)
+                                    ? 1.0
+                                    : 0.0;
+        }
+
+        struct EdgeKey {
+            std::size_t source = 0;
+            std::size_t target = 0;
+            std::size_t type = 0;
+            auto operator<=>(const EdgeKey&) const = default;
+        };
+        std::map<EdgeKey, std::size_t> edges;
+        for (std::size_t index = 0; index < graph.label_nodes.size(); ++index) {
+            edges[{index, index, 0U}] = 1U;
+        }
+        for (std::size_t child = 0; child < graph.label_nodes.size(); ++child) {
+            const auto found = sample_index.find(
+                graph.label_nodes[child].parent_creation_sequence_id);
+            if (found == sample_index.end()) {
+                continue;
+            }
+            edges[{found->second, child, 1U}] = 1U;
+            edges[{child, found->second, 2U}] = 1U;
+        }
+        std::map<std::uint64_t, std::vector<std::size_t>> surfaces;
+        for (std::size_t index = 0; index < graph.label_nodes.size(); ++index) {
+            surfaces[graph.label_nodes[index].dominance_surface_hash]
+                .push_back(index);
+        }
+        for (auto& [surface, members] : surfaces) {
+            static_cast<void>(surface);
+            std::ranges::sort(members, [&](std::size_t lhs, std::size_t rhs) {
+                return std::tie(
+                           graph.label_nodes[lhs].features[14],
+                           graph.label_nodes[lhs].creation_sequence_id) <
+                       std::tie(
+                           graph.label_nodes[rhs].features[14],
+                           graph.label_nodes[rhs].creation_sequence_id);
+            });
+            for (std::size_t index = 1; index < members.size(); ++index) {
+                edges[{members[index - 1U], members[index], 3U}] = 1U;
+                edges[{members[index], members[index - 1U], 3U}] = 1U;
+            }
+        }
+        graph.label_edges.reserve(edges.size());
+        for (const auto& [key, count] : edges) {
+            CounterfactualLabelEdge edge;
+            edge.source = key.source;
+            edge.target = key.target;
+            edge.features[key.type] = 1.0;
+            edge.features[4] = std::log1p(static_cast<double>(count));
+            edge.features[5] = graph.label_nodes[key.target].features[0] -
+                               graph.label_nodes[key.source].features[0];
+            edge.features[6] = graph.label_nodes[key.target].features[14] -
+                               graph.label_nodes[key.source].features[14];
+            edge.features[7] =
+                graph.label_nodes[key.source].features[15] ==
+                        graph.label_nodes[key.target].features[15]
+                    ? 1.0
+                    : 0.0;
+            graph.label_edges.push_back(edge);
+        }
+
+        std::vector<double> rc;
+        std::vector<double> depth;
+        std::size_t terminal_count = 0;
+        rc.reserve(records.size());
+        depth.reserve(records.size());
+        for (const auto& record : records) {
+            rc.push_back(record.partial_cost / model_->absolute_dual_sum);
+            depth.push_back(
+                static_cast<double>(record.visited_count) /
+                static_cast<double>(
+                    std::max<std::size_t>(1U, model_->tasks.size())));
+            terminal_count += record.terminal ? 1U : 0U;
+        }
+        graph.context_features = counterfactual_prefix_config_.context_features;
+        auto& context = graph.context_features;
+        const auto rc_mean = frontier_mean(rc);
+        const auto depth_mean = frontier_mean(depth);
+        context[0] = std::log1p(static_cast<double>(model_->tasks.size()));
+        context[1] = std::log1p(static_cast<double>(records.size()));
+        context[2] = static_cast<double>(terminal_count) / count_scale;
+        context[3] = rc_mean;
+        context[4] = *std::ranges::min_element(rc);
+        context[5] = frontier_std(rc, rc_mean);
+        context[6] = depth_mean;
+        context[7] = frontier_std(depth, depth_mean);
+        context[8] = std::log1p(
+            static_cast<double>(dominance_candidate_checks()) /
+            static_cast<double>(std::max<std::size_t>(1U, processed_labels_)));
+        context[9] = std::log1p(
+            static_cast<double>(extended_labels()) /
+            static_cast<double>(std::max<std::size_t>(1U, processed_labels_)));
+        context[10] = std::log1p(
+            static_cast<double>(dominated_labels()) /
+            static_cast<double>(std::max<std::size_t>(1U, processed_labels_)));
+        context[11] = std::log1p(static_cast<double>(max_visited_bucket_size()));
+        context[12] = static_cast<double>(max_visited_bucket_size()) / count_scale;
+        context[13] = static_cast<double>(subset_dominance_candidate_checks()) /
+                      static_cast<double>(std::max<std::size_t>(1U, processed_labels_));
+        context[14] = static_cast<double>(subset_dominance_rejected_labels()) /
+                      static_cast<double>(std::max<std::size_t>(
+                          1U, subset_dominance_candidate_checks()));
+        context[21] = static_cast<double>(model_->branch_decisions.size());
+        context[22] = static_cast<double>(model_->cuts.size());
+        context[23] = std::log1p(std::accumulate(
+            model_->cuts.begin(), model_->cuts.end(), 0.0,
+            [](double total, const auto& cut) {
+                return total + std::abs(cut.dual);
+            }));
+        context[26] = model_->positive_task_dual_sum / model_->absolute_dual_sum;
+        context[27] = model_->fleet_dual / model_->absolute_dual_sum;
+
+        std::array<std::uint64_t, 4> digest{
+            0xcbf29ce484222325ULL,
+            0x84222325cbf29ce4ULL,
+            0x9e3779b97f4a7c15ULL,
+            0x6a09e667f3bcc909ULL,
+        };
+        auto digest_value = [&digest](std::uint64_t value) {
+            for (std::size_t index = 0; index < digest.size(); ++index) {
+                digest[index] ^= frontier_mix(
+                    value + index * 0x100000001b3ULL);
+                digest[index] *= 0x100000001b3ULL;
+            }
+        };
+        digest_value(graph.frontier_size);
+        for (const auto& node : graph.label_nodes) {
+            digest_value(node.creation_sequence_id);
+            digest_value(node.parent_creation_sequence_id);
+            digest_value(node.last_task_index);
+            digest_value(node.depth_rc_cell);
+            digest_value(node.dominance_surface_hash);
+            for (const auto value : node.features) {
+                digest_value(std::bit_cast<std::uint64_t>(value));
+            }
+        }
+        for (const auto& edge : graph.label_edges) {
+            digest_value(edge.source);
+            digest_value(edge.target);
+            for (const auto value : edge.features) {
+                digest_value(std::bit_cast<std::uint64_t>(value));
+            }
+        }
+        for (const auto value : context) {
+            digest_value(std::bit_cast<std::uint64_t>(value));
+        }
+        std::ostringstream stream;
+        stream << std::hex << std::setfill('0');
+        for (const auto value : digest) {
+            stream << std::setw(16) << value;
+        }
+        graph.graph_hash = stream.str();
+        graph.build_wall_seconds =
+            std::chrono::duration<double>(Clock::now() - started).count();
+        return graph;
+    }
+
+    TemporalPortableGraph build_temporal_label_task_graph(
+        const CounterfactualFrontierGraph& native_graph
+    ) const {
+        TemporalPortableGraph graph;
+        graph.context_features = native_graph.context_features;
+        const auto label_count = native_graph.label_nodes.size();
+        graph.node_features.reserve(label_count + model_->tasks.size());
+        graph.creation_sequence_ids.reserve(label_count + model_->tasks.size());
+
+        std::vector<std::size_t> canonical_tasks(model_->tasks.size());
+        std::iota(canonical_tasks.begin(), canonical_tasks.end(), 0U);
+        std::ranges::sort(canonical_tasks, [&](std::size_t lhs, std::size_t rhs) {
+            return model_->tasks[lhs].id < model_->tasks[rhs].id;
+        });
+        std::unordered_map<std::size_t, std::size_t> canonical_by_original;
+        canonical_by_original.reserve(canonical_tasks.size());
+        for (std::size_t canonical = 0; canonical < canonical_tasks.size(); ++canonical) {
+            canonical_by_original.emplace(
+                model_->tasks[canonical_tasks[canonical]].index, canonical);
+        }
+
+        std::vector<std::size_t> last_task_by_label;
+        last_task_by_label.reserve(label_count);
+        for (const auto& node : native_graph.label_nodes) {
+            std::array<double, kTemporalGatNodeFeatureCount> features{};
+            std::copy(node.features.begin(), node.features.end(), features.begin());
+            features[24] = 1.0;
+            const auto found = canonical_by_original.find(node.last_task_index);
+            const auto canonical = found == canonical_by_original.end()
+                                       ? std::numeric_limits<std::size_t>::max()
+                                       : found->second;
+            if (canonical < canonical_tasks.size()) {
+                features[20] = static_cast<double>(canonical + 1U) /
+                               static_cast<double>(canonical_tasks.size());
+            } else {
+                features[20] = 0.0;
+            }
+            graph.node_features.push_back(features);
+            graph.creation_sequence_ids.push_back(node.creation_sequence_id);
+            last_task_by_label.push_back(canonical);
+        }
+
+        double horizon = 1.0;
+        double demand_scale = 1.0;
+        double energy_scale = 1.0;
+        double cost_scale = 1.0;
+        double dual_scale = 0.0;
+        for (const auto& task : model_->tasks) {
+            horizon = std::max(horizon, task.due_time);
+            demand_scale = std::max(demand_scale, task.demand);
+            energy_scale = std::max(energy_scale, task.service_energy);
+            cost_scale = std::max(cost_scale, std::abs(task.service_cost));
+            dual_scale += std::abs(task.dual);
+        }
+        dual_scale = std::max(1.0, dual_scale);
+        std::vector<std::size_t> branch_degree(model_->tasks.size(), 0U);
+        for (const auto& decision : model_->branch_decisions) {
+            const auto left = canonical_by_original.find(decision.task_a);
+            const auto right = canonical_by_original.find(decision.task_b);
+            if (decision.task_a_exists && left != canonical_by_original.end()) {
+                ++branch_degree[left->second];
+            }
+            if (decision.task_b_exists && right != canonical_by_original.end()) {
+                ++branch_degree[right->second];
+            }
+        }
+        std::vector<std::size_t> cut_degree(model_->tasks.size(), 0U);
+        for (const auto& cut : model_->cuts) {
+            for (std::size_t canonical = 0; canonical < canonical_tasks.size(); ++canonical) {
+                const auto original = model_->tasks[canonical_tasks[canonical]].index;
+                const auto word = original / 64U;
+                const auto bit = original % 64U;
+                if (word < cut.task_mask.size() &&
+                    ((cut.task_mask[word] >> bit) & 1U) != 0U) {
+                    ++cut_degree[canonical];
+                }
+            }
+        }
+        for (std::size_t canonical = 0; canonical < canonical_tasks.size(); ++canonical) {
+            const auto& task = model_->tasks[canonical_tasks[canonical]];
+            std::array<double, kTemporalGatNodeFeatureCount> features{};
+            features[25] = 1.0;
+            features[26] = task.demand / demand_scale;
+            features[27] = task.service_time / horizon;
+            features[28] = task.service_energy / energy_scale;
+            features[29] = task.service_cost / cost_scale;
+            features[30] = task.ready_time / horizon;
+            features[31] = task.due_time / horizon;
+            features[32] = task.local_shadow_score / horizon;
+            features[33] = task.local_thermal_risk;
+            features[34] = task.dual / dual_scale;
+            features[35] = static_cast<double>(branch_degree[canonical]) /
+                           std::max(1.0, static_cast<double>(
+                               model_->branch_decisions.size()));
+            features[36] = static_cast<double>(cut_degree[canonical]) /
+                           std::max(1.0, static_cast<double>(model_->cuts.size()));
+            features[37] = static_cast<double>(canonical + 1U) /
+                           static_cast<double>(canonical_tasks.size());
+            features[38] = 1.0;
+            features[39] = 1.0;
+            graph.node_features.push_back(features);
+            graph.creation_sequence_ids.push_back(
+                std::numeric_limits<std::uint64_t>::max());
+        }
+
+        using EdgeKey = std::tuple<std::size_t, std::size_t, std::size_t>;
+        std::map<EdgeKey, std::array<double, kTemporalGatEdgeFeatureCount>> edges;
+        for (const auto& edge : native_graph.label_edges) {
+            std::array<double, kTemporalGatEdgeFeatureCount> features{};
+            std::copy(edge.features.begin(), edge.features.end(), features.begin());
+            edges[{edge.source, edge.target, 0U}] = features;
+        }
+        for (std::size_t label = 0; label < last_task_by_label.size(); ++label) {
+            if (last_task_by_label[label] >= canonical_tasks.size()) {
+                continue;
+            }
+            std::array<double, kTemporalGatEdgeFeatureCount> features{};
+            features[8] = 1.0;
+            const auto task = label_count + last_task_by_label[label];
+            edges[{label, task, 1U}] = features;
+            edges[{task, label, 1U}] = features;
+        }
+        // Explicit fine-to-coarse membership relation: sampled labels in the
+        // same deterministic depth x partial-RC cell are joined in creation-
+        // ID order.  The complete 64-cell graph remains a separate resolution
+        // with shared message weights; this relation exposes membership to the
+        // label/task resolution without duplicating cell nodes.
+        std::map<std::size_t, std::vector<std::size_t>> labels_by_cell;
+        for (std::size_t label = 0; label < native_graph.label_nodes.size(); ++label) {
+            labels_by_cell[native_graph.label_nodes[label].depth_rc_cell]
+                .push_back(label);
+        }
+        for (auto& [cell, members] : labels_by_cell) {
+            static_cast<void>(cell);
+            std::ranges::sort(members, [&](std::size_t left, std::size_t right) {
+                return native_graph.label_nodes[left].creation_sequence_id <
+                       native_graph.label_nodes[right].creation_sequence_id;
+            });
+            for (std::size_t index = 1U; index < members.size(); ++index) {
+                std::array<double, kTemporalGatEdgeFeatureCount> features{};
+                features[10] = 1.0;
+                edges[{members[index - 1U], members[index], 3U}] = features;
+                edges[{members[index], members[index - 1U], 3U}] = features;
+            }
+        }
+
+        std::map<std::pair<std::size_t, std::size_t>, double> travel;
+        std::unordered_map<std::string, std::size_t> canonical_by_id;
+        for (std::size_t canonical = 0; canonical < canonical_tasks.size(); ++canonical) {
+            canonical_by_id.emplace(
+                model_->tasks[canonical_tasks[canonical]].id, canonical);
+        }
+        for (const auto& arc : model_->arcs) {
+            const auto source = canonical_by_id.find(arc.source);
+            const auto target = canonical_by_id.find(arc.target);
+            if (source == canonical_by_id.end() || target == canonical_by_id.end() ||
+                source->second == target->second) {
+                continue;
+            }
+            const auto key = std::pair{source->second, target->second};
+            const auto found = travel.find(key);
+            if (found == travel.end() || arc.travel_time < found->second) {
+                travel[key] = arc.travel_time;
+            }
+        }
+        auto add_task_interaction = [&](std::size_t left, std::size_t right,
+                                        std::size_t type) {
+            std::array<double, kTemporalGatEdgeFeatureCount> features{};
+            features[9] = 1.0;
+            edges[{label_count + left, label_count + right, type}] = features;
+        };
+        for (std::size_t source = 0; source < canonical_tasks.size(); ++source) {
+            std::vector<std::pair<double, std::size_t>> candidates;
+            for (std::size_t target = 0; target < canonical_tasks.size(); ++target) {
+                const auto found = travel.find({source, target});
+                if (source != target && found != travel.end()) {
+                    candidates.emplace_back(found->second, target);
+                }
+            }
+            std::ranges::sort(candidates, [&](const auto& lhs, const auto& rhs) {
+                return std::tie(lhs.first,
+                                model_->tasks[canonical_tasks[lhs.second]].id) <
+                       std::tie(rhs.first,
+                                model_->tasks[canonical_tasks[rhs.second]].id);
+            });
+            candidates.resize(std::min<std::size_t>(4U, candidates.size()));
+            for (const auto& [time, target] : candidates) {
+                static_cast<void>(time);
+                add_task_interaction(source, target, 2U);
+                add_task_interaction(target, source, 2U);
+            }
+        }
+        for (const auto& decision : model_->branch_decisions) {
+            const auto left = canonical_by_original.find(decision.task_a);
+            const auto right = canonical_by_original.find(decision.task_b);
+            if (decision.task_a_exists && decision.task_b_exists &&
+                left != canonical_by_original.end() &&
+                right != canonical_by_original.end()) {
+                add_task_interaction(left->second, right->second, 2U);
+                add_task_interaction(right->second, left->second, 2U);
+            }
+        }
+        for (const auto& cut : model_->cuts) {
+            std::vector<std::size_t> members;
+            for (std::size_t canonical = 0; canonical < canonical_tasks.size(); ++canonical) {
+                const auto original = model_->tasks[canonical_tasks[canonical]].index;
+                const auto word = original / 64U;
+                const auto bit = original % 64U;
+                if (word < cut.task_mask.size() &&
+                    ((cut.task_mask[word] >> bit) & 1U) != 0U) {
+                    members.push_back(canonical);
+                }
+            }
+            for (std::size_t left = 0; left < members.size(); ++left) {
+                for (std::size_t right = left + 1U; right < members.size(); ++right) {
+                    add_task_interaction(members[left], members[right], 2U);
+                    add_task_interaction(members[right], members[left], 2U);
+                }
+            }
+        }
+        for (std::size_t node = 0; node < graph.node_features.size(); ++node) {
+            std::array<double, kTemporalGatEdgeFeatureCount> features{};
+            features[0] = 1.0;
+            edges.try_emplace(EdgeKey{node, node, 5U}, features);
+        }
+        graph.edges.reserve(edges.size());
+        for (const auto& [key, features] : edges) {
+            graph.edges.push_back(TemporalGraphEdge{
+                .source = std::get<0>(key),
+                .target = std::get<1>(key),
+                .features = features,
+            });
+        }
+
+        std::array<std::uint64_t, 4> digest{
+            0xcbf29ce484222325ULL, 0x84222325cbf29ce4ULL,
+            0x9e3779b97f4a7c15ULL, 0x6a09e667f3bcc909ULL,
+        };
+        auto digest_value = [&digest](std::uint64_t value) {
+            for (std::size_t index = 0; index < digest.size(); ++index) {
+                digest[index] ^= frontier_mix(value + index * 0x100000001b3ULL);
+                digest[index] *= 0x100000001b3ULL;
+            }
+        };
+        for (std::size_t node = 0; node < graph.node_features.size(); ++node) {
+            digest_value(graph.creation_sequence_ids[node]);
+            for (const auto value : graph.node_features[node]) {
+                digest_value(std::bit_cast<std::uint64_t>(value));
+            }
+        }
+        for (const auto& edge : graph.edges) {
+            digest_value(edge.source);
+            digest_value(edge.target);
+            for (const auto value : edge.features) {
+                digest_value(std::bit_cast<std::uint64_t>(value));
+            }
+        }
+        std::ostringstream stream;
+        stream << std::hex << std::setfill('0');
+        for (const auto value : digest) {
+            stream << std::setw(16) << value;
+        }
+        graph.graph_hash = stream.str();
+        return graph;
+    }
+
+    void capture_counterfactual_endpoint(std::size_t rollout_budget) {
+        const auto records = frontier_records();
+        auto graph = build_counterfactual_label_graph();
+        std::unordered_set<std::uint64_t> current;
+        current.reserve(records.size());
+        std::size_t survival = 0;
+        for (const auto& record : records) {
+            current.insert(record.creation_sequence_id);
+            survival += counterfactual_base_label_ids_.contains(
+                            record.creation_sequence_id)
+                            ? 1U
+                            : 0U;
+        }
+        const auto base_count = counterfactual_base_label_ids_.size();
+        const auto new_count = graph.frontier_size > survival
+                                   ? graph.frontier_size - survival
+                                   : 0U;
+        counterfactual_prefix_telemetry_.endpoints.push_back(
+            CounterfactualPrefixEndpoint{
+                .rollout_budget = rollout_budget,
+                .processed_labels = processed_labels_,
+                .extended_labels = extended_labels(),
+                .dominated_labels = dominated_labels(),
+                .dominance_candidate_checks = dominance_candidate_checks(),
+                .subset_dominance_candidate_checks =
+                    subset_dominance_candidate_checks(),
+                .subset_dominance_rejected_labels =
+                    subset_dominance_rejected_labels(),
+                .frontier_size = graph.frontier_size,
+                .max_visited_bucket_size = max_visited_bucket_size(),
+                .negative_label_event_count =
+                    best_reduced_cost_event_count_total_,
+                .best_true_reduced_cost = best_reduced_cost_,
+                .base_label_survival_count = survival,
+                .new_label_count = new_count,
+                .frontier_churn = static_cast<double>(
+                    base_count + graph.frontier_size - 2U * survival) /
+                    static_cast<double>(std::max<std::size_t>(
+                        1U, base_count + graph.frontier_size)),
+                .request_elapsed_wall_seconds =
+                    counterfactual_timing_started_
+                        ? std::chrono::duration<double>(
+                              Clock::now() - counterfactual_request_started_)
+                              .count()
+                        : 0.0,
+                .rollout_elapsed_wall_seconds =
+                    counterfactual_boundary_timing_started_
+                        ? std::chrono::duration<double>(
+                              Clock::now() - counterfactual_boundary_started_)
+                              .count()
+                        : 0.0,
+                .graph_build_wall_seconds = graph.build_wall_seconds,
+                .graph = std::move(graph),
+            });
+    }
+
+    bool maybe_run_counterfactual_prefix() {
+        auto& config = counterfactual_prefix_config_;
+        auto& telemetry = counterfactual_prefix_telemetry_;
+        if (config.mode == CounterfactualPrefixMode::Disabled) {
+            return false;
+        }
+        if (!telemetry.reached_boundary &&
+            processed_labels_ == config.processed_label_boundary) {
+            telemetry.reached_boundary = true;
+            if (number_of_labels() == 0U) {
+                telemetry.stop_reason = "base_frontier_empty";
+                return false;
+            }
+            telemetry.base_graph = build_counterfactual_label_graph();
+            telemetry.base_graph_hash = telemetry.base_graph.graph_hash;
+            telemetry.base_graph_build_wall_seconds =
+                telemetry.base_graph.build_wall_seconds;
+            telemetry.base_request_elapsed_wall_seconds =
+                counterfactual_timing_started_
+                    ? std::chrono::duration<double>(
+                          Clock::now() - counterfactual_request_started_)
+                          .count()
+                    : 0.0;
+            counterfactual_boundary_started_ = Clock::now();
+            counterfactual_boundary_timing_started_ = true;
+            telemetry.base_processed_labels = processed_labels_;
+            telemetry.base_extended_labels = extended_labels();
+            telemetry.base_dominated_labels = dominated_labels();
+            telemetry.base_dominance_candidate_checks =
+                dominance_candidate_checks();
+            telemetry.base_subset_dominance_candidate_checks =
+                subset_dominance_candidate_checks();
+            telemetry.base_subset_dominance_rejected_labels =
+                subset_dominance_rejected_labels();
+            telemetry.base_max_visited_bucket_size =
+                max_visited_bucket_size();
+            telemetry.base_negative_label_event_count =
+                best_reduced_cost_event_count_total_;
+            telemetry.base_best_true_reduced_cost = best_reduced_cost_;
+            counterfactual_base_label_ids_.clear();
+            for (const auto& record : frontier_records()) {
+                counterfactual_base_label_ids_.insert(
+                    record.creation_sequence_id);
+            }
+            if (config.mode == CounterfactualPrefixMode::QD1Prefix) {
+                const auto migration_started = Clock::now();
+                migrate_counterfactual_frontier_to_qd1();
+                telemetry.migration_wall_seconds =
+                    std::chrono::duration<double>(
+                        Clock::now() - migration_started).count();
+                telemetry.switched_to_qd1 = true;
+            }
+        }
+        if (!telemetry.reached_boundary) {
+            return false;
+        }
+        while (counterfactual_checkpoint_index_ <
+               config.rollout_checkpoints.size()) {
+            const auto budget = config.rollout_checkpoints[
+                counterfactual_checkpoint_index_];
+            const auto target = config.processed_label_boundary + budget;
+            if (processed_labels_ < target) {
+                break;
+            }
+            capture_counterfactual_endpoint(budget);
+            ++counterfactual_checkpoint_index_;
+            if (budget == config.maximum_rollout_budget) {
+                telemetry.complete = true;
+                telemetry.truncated_diagnostic = true;
+                telemetry.request_elapsed_wall_seconds =
+                    counterfactual_timing_started_
+                        ? std::chrono::duration<double>(
+                              Clock::now() - counterfactual_request_started_)
+                              .count()
+                        : 0.0;
+                telemetry.stop_reason = "selected_rollout_checkpoint_reached";
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void build_frontier_graph() {
+        const auto started = Clock::now();
+        frontier_probe_telemetry_.graph_built = false;
+        frontier_probe_telemetry_.graph_hash.clear();
+        frontier_probe_telemetry_.frontier_size = 0;
+        frontier_probe_telemetry_.nonempty_node_count = 0;
+        frontier_probe_telemetry_.edge_count = 0;
+        frontier_probe_telemetry_.graph_build_wall_seconds = 0.0;
+        frontier_probe_telemetry_.node_features.clear();
+        frontier_probe_telemetry_.edges.clear();
+        auto records = frontier_records();
+        if (records.empty()) {
+            frontier_probe_telemetry_.decision_reason = "frontier_empty";
+            return;
+        }
+        frontier_probe_telemetry_.frontier_size = records.size();
+        frontier_probe_telemetry_.node_features.assign(
+            kFrontierNodeCount,
+            std::array<double, kFrontierNodeFeatureCount>{});
+        struct CellValues {
+            std::vector<double> rc;
+            std::vector<double> depth;
+            std::vector<double> age;
+            std::unordered_map<std::size_t, std::size_t> last_tasks;
+            std::size_t terminal_count = 0;
+        };
+        std::array<CellValues, kFrontierNodeCount> cells;
+        const double rc_scale = std::max(1.0, model_->absolute_dual_sum);
+        const double creation_scale = static_cast<double>(
+            std::max<std::uint64_t>(1U, next_creation_sequence_id_));
+        for (const auto& record : records) {
+            auto& cell = cells[record.cell];
+            cell.rc.push_back(record.partial_cost / rc_scale);
+            cell.depth.push_back(
+                static_cast<double>(record.visited_count) /
+                static_cast<double>(std::max<std::size_t>(1U, model_->tasks.size())));
+            cell.age.push_back(
+                static_cast<double>(
+                    next_creation_sequence_id_ - 1U -
+                    std::min(next_creation_sequence_id_ - 1U,
+                             record.creation_sequence_id)) /
+                creation_scale);
+            if (record.last_task_index != std::numeric_limits<std::size_t>::max()) {
+                ++cell.last_tasks[record.last_task_index];
+            }
+            cell.terminal_count += record.terminal ? 1U : 0U;
+        }
+        constexpr std::array<double, 8> depth_lower{
+            0.0, 0.05, 0.10, 0.20, 0.30, 0.40, 0.55, 0.75};
+        for (std::size_t cell_index = 0; cell_index < cells.size(); ++cell_index) {
+            const auto& cell = cells[cell_index];
+            auto& output = frontier_probe_telemetry_.node_features[cell_index];
+            if (cell.rc.empty()) {
+                output[14] = depth_lower[cell_index / 8U];
+                output[15] = (static_cast<double>(cell_index % 8U) + 0.5) / 8.0;
+                continue;
+            }
+            ++frontier_probe_telemetry_.nonempty_node_count;
+            const double count = static_cast<double>(cell.rc.size());
+            const double rc_mean = frontier_mean(cell.rc);
+            const double depth_mean = frontier_mean(cell.depth);
+            const double age_mean = frontier_mean(cell.age);
+            double entropy = 0.0;
+            for (const auto& [task, occurrences] : cell.last_tasks) {
+                static_cast<void>(task);
+                const double probability = static_cast<double>(occurrences) / count;
+                entropy -= probability * std::log(std::max(1.0e-12, probability));
+            }
+            output = {
+                1.0,
+                std::log1p(count),
+                count / static_cast<double>(records.size()),
+                static_cast<double>(cell.terminal_count) / count,
+                rc_mean,
+                *std::ranges::min_element(cell.rc),
+                *std::ranges::max_element(cell.rc),
+                frontier_std(cell.rc, rc_mean),
+                depth_mean,
+                frontier_std(cell.depth, depth_mean),
+                age_mean,
+                frontier_std(cell.age, age_mean),
+                static_cast<double>(cell.last_tasks.size()) /
+                    static_cast<double>(std::max<std::size_t>(1U, model_->tasks.size())),
+                entropy / std::log1p(
+                    static_cast<double>(std::max<std::size_t>(1U, model_->tasks.size()))),
+                depth_lower[cell_index / 8U],
+                (static_cast<double>(cell_index % 8U) + 0.5) / 8.0,
+            };
+        }
+
+        struct EdgeKey {
+            std::size_t source = 0;
+            std::size_t target = 0;
+            std::size_t type = 0;
+            auto operator<=>(const EdgeKey&) const = default;
+        };
+        std::map<EdgeKey, std::pair<std::size_t, std::size_t>> edge_counts;
+        for (std::size_t cell = 0; cell < kFrontierNodeCount; ++cell) {
+            edge_counts[{cell, cell, 0U}];
+            const auto depth = cell / 8U;
+            const auto rc = cell % 8U;
+            if (depth + 1U < 8U) {
+                edge_counts[{cell, cell + 8U, 1U}];
+                edge_counts[{cell + 8U, cell, 1U}];
+            }
+            if (rc + 1U < 8U) {
+                edge_counts[{cell, cell + 1U, 2U}];
+                edge_counts[{cell + 1U, cell, 2U}];
+            }
+        }
+        std::unordered_map<const Label*, const FrontierLabelRecord*> record_by_label;
+        record_by_label.reserve(records.size());
+        for (const auto& record : records) {
+            record_by_label.emplace(record.value.first, &record);
+        }
+        std::size_t transition_count = 0;
+        for (const auto& child : records) {
+            const auto* parent = child.value.first->prev_label;
+            const auto found = record_by_label.find(parent);
+            if (found == record_by_label.end()) {
+                continue;
+            }
+            const auto& parent_record = *found->second;
+            auto& forward = edge_counts[{parent_record.cell, child.cell, 3U}];
+            ++forward.first;
+            forward.second += parent_record.terminal == child.terminal ? 1U : 0U;
+            auto& reverse = edge_counts[{child.cell, parent_record.cell, 4U}];
+            ++reverse.first;
+            reverse.second += parent_record.terminal == child.terminal ? 1U : 0U;
+            ++transition_count;
+        }
+        frontier_probe_telemetry_.edges.clear();
+        frontier_probe_telemetry_.edges.reserve(edge_counts.size());
+        for (const auto& [key, counts] : edge_counts) {
+            FrontierGraphEdge edge;
+            edge.source = key.source;
+            edge.target = key.target;
+            edge.features[key.type] = 1.0;
+            if (key.type == 3U || key.type == 4U) {
+                edge.features[5] = std::log1p(static_cast<double>(counts.first));
+                edge.features[6] = static_cast<double>(counts.first) /
+                                   static_cast<double>(std::max<std::size_t>(1U, transition_count));
+                edge.features[9] = static_cast<double>(counts.second) /
+                                   static_cast<double>(std::max<std::size_t>(1U, counts.first));
+            }
+            edge.features[7] = static_cast<double>(key.target / 8U) -
+                               static_cast<double>(key.source / 8U);
+            edge.features[8] = static_cast<double>(key.target % 8U) -
+                               static_cast<double>(key.source % 8U);
+            frontier_probe_telemetry_.edges.push_back(edge);
+        }
+        frontier_probe_telemetry_.edge_count =
+            frontier_probe_telemetry_.edges.size();
+
+        std::vector<double> all_rc;
+        std::vector<double> all_depth;
+        all_rc.reserve(records.size());
+        all_depth.reserve(records.size());
+        std::size_t terminal_count = 0;
+        for (const auto& record : records) {
+            all_rc.push_back(record.partial_cost / rc_scale);
+            all_depth.push_back(
+                static_cast<double>(record.visited_count) /
+                static_cast<double>(std::max<std::size_t>(1U, model_->tasks.size())));
+            terminal_count += record.terminal ? 1U : 0U;
+        }
+        auto& context = frontier_probe_telemetry_.context_features;
+        const double rc_mean = frontier_mean(all_rc);
+        const double depth_mean = frontier_mean(all_depth);
+        context[0] = std::log1p(static_cast<double>(model_->tasks.size()));
+        context[1] = std::log1p(static_cast<double>(records.size()));
+        context[2] = static_cast<double>(terminal_count) /
+                     static_cast<double>(records.size());
+        context[3] = rc_mean;
+        context[4] = *std::ranges::min_element(all_rc);
+        context[5] = frontier_std(all_rc, rc_mean);
+        context[6] = depth_mean;
+        context[7] = frontier_std(all_depth, depth_mean);
+        context[8] = std::log1p(
+            static_cast<double>(dominance_candidate_checks()) /
+            static_cast<double>(std::max<std::size_t>(1U, processed_labels_)));
+        context[9] = std::log1p(
+            static_cast<double>(extended_labels()) /
+            static_cast<double>(std::max<std::size_t>(1U, processed_labels_)));
+        context[10] = std::log1p(
+            static_cast<double>(dominated_labels()) /
+            static_cast<double>(std::max<std::size_t>(1U, processed_labels_)));
+        context[11] = std::log1p(static_cast<double>(max_visited_bucket_size()));
+        context[12] = static_cast<double>(max_visited_bucket_size()) /
+                      static_cast<double>(records.size());
+        context[13] = static_cast<double>(subset_dominance_candidate_checks()) /
+                      static_cast<double>(std::max<std::size_t>(1U, processed_labels_));
+        context[14] = static_cast<double>(subset_dominance_rejected_labels()) /
+                      static_cast<double>(std::max<std::size_t>(
+                          1U, subset_dominance_candidate_checks()));
+        context[21] = static_cast<double>(model_->branch_decisions.size());
+        context[22] = static_cast<double>(model_->cuts.size());
+        double cut_dual_abs = 0.0;
+        for (const auto& cut : model_->cuts) {
+            cut_dual_abs += std::abs(cut.dual);
+        }
+        context[23] = std::log1p(cut_dual_abs);
+        context[26] = model_->positive_task_dual_sum / rc_scale;
+        context[27] = model_->fleet_dual / rc_scale;
+
+        std::array<std::uint64_t, 4> digest{
+            0xcbf29ce484222325ULL,
+            0x84222325cbf29ce4ULL,
+            0x9e3779b97f4a7c15ULL,
+            0x6a09e667f3bcc909ULL,
+        };
+        auto digest_value = [&digest](std::uint64_t value) {
+            for (std::size_t index = 0; index < digest.size(); ++index) {
+                digest[index] ^= frontier_mix(value + index * 0x100000001b3ULL);
+                digest[index] *= 0x100000001b3ULL;
+            }
+        };
+        for (const auto& node : frontier_probe_telemetry_.node_features) {
+            for (const double value : node) {
+                digest_value(std::bit_cast<std::uint64_t>(value));
+            }
+        }
+        for (const auto& edge : frontier_probe_telemetry_.edges) {
+            digest_value(edge.source);
+            digest_value(edge.target);
+            for (const double value : edge.features) {
+                digest_value(std::bit_cast<std::uint64_t>(value));
+            }
+        }
+        for (const double value : context) {
+            digest_value(std::bit_cast<std::uint64_t>(value));
+        }
+        std::ostringstream stream;
+        stream << std::hex << std::setfill('0');
+        for (const auto value : digest) {
+            stream << std::setw(16) << value;
+        }
+        frontier_probe_telemetry_.graph_hash = stream.str();
+        frontier_probe_telemetry_.graph_built = true;
+        frontier_probe_telemetry_.graph_build_wall_seconds =
+            std::chrono::duration<double>(Clock::now() - started).count();
+    }
+
+    bool frontier_graph_is_ood(const FrontierGatBundle& bundle) const {
+        auto outside = [](double value, const std::vector<double>& minimum,
+                          const std::vector<double>& maximum,
+                          std::size_t index) {
+            return index >= minimum.size() || index >= maximum.size() ||
+                   !std::isfinite(value) || value < minimum[index] ||
+                   value > maximum[index];
+        };
+        for (const auto& node : frontier_probe_telemetry_.node_features) {
+            for (std::size_t index = 0; index < node.size(); ++index) {
+                if (outside(node[index], bundle.node_min, bundle.node_max, index)) {
+                    return true;
+                }
+            }
+        }
+        for (const auto& edge : frontier_probe_telemetry_.edges) {
+            for (std::size_t index = 0; index < edge.features.size(); ++index) {
+                if (outside(edge.features[index], bundle.edge_min, bundle.edge_max, index)) {
+                    return true;
+                }
+            }
+        }
+        for (std::size_t index = 0;
+             index < frontier_probe_telemetry_.context_features.size(); ++index) {
+            if (outside(
+                    frontier_probe_telemetry_.context_features[index],
+                    bundle.context_min, bundle.context_max, index)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool learned_frontier_action() {
+        const auto started = Clock::now();
+        const auto& bundle = frontier_probe_config_.bundle;
+        if (!frontier_bundle_is_valid(bundle)) {
+            frontier_probe_telemetry_.fail_closed = true;
+            frontier_probe_telemetry_.decision_reason = "invalid_bundle";
+            return false;
+        }
+        if (frontier_graph_is_ood(bundle)) {
+            frontier_probe_telemetry_.fail_closed = true;
+            frontier_probe_telemetry_.inference_ood = true;
+            frontier_probe_telemetry_.ood_reason = "feature_outside_frozen_range";
+            frontier_probe_telemetry_.decision_reason = "frontier_ood";
+            return false;
+        }
+        try {
+            frontier_probe_telemetry_.seed_outputs.clear();
+            for (const auto& model : bundle.models) {
+                frontier_probe_telemetry_.seed_outputs.push_back(
+                    frontier_gat_forward(
+                        model, bundle, frontier_probe_telemetry_));
+            }
+            frontier_probe_telemetry_.model_called = true;
+            double benefit_sum = 0.0;
+            double benefit_min = 1.0;
+            double benefit_max = 0.0;
+            double gain_min = 1.0;
+            double gain_max = 0.0;
+            double adverse_min = 1.0;
+            double adverse_max = 0.0;
+            for (const auto& output : frontier_probe_telemetry_.seed_outputs) {
+                if (std::ranges::any_of(output, [](double value) {
+                        return !std::isfinite(value);
+                    })) {
+                    throw std::invalid_argument("nonfinite frontier GAT output");
+                }
+                benefit_sum += output[0];
+                benefit_min = std::min(benefit_min, output[0]);
+                benefit_max = std::max(benefit_max, output[0]);
+                gain_min = std::min(gain_min, output[1]);
+                gain_max = std::max(gain_max, output[1]);
+                adverse_min = std::min(adverse_min, output[2]);
+                adverse_max = std::max(adverse_max, output[2]);
+            }
+            auto& telemetry = frontier_probe_telemetry_;
+            telemetry.p_benefit = benefit_sum /
+                                  static_cast<double>(telemetry.seed_outputs.size());
+            telemetry.positive_gain = gain_min;
+            telemetry.p_adverse = adverse_max;
+            telemetry.disagreement = std::max({
+                benefit_max - benefit_min,
+                gain_max - gain_min,
+                adverse_max - adverse_min,
+            });
+            telemetry.p_benefit = frontier_calibrated_probability(
+                telemetry.p_benefit, bundle.benefit_calibration);
+            telemetry.p_adverse = frontier_calibrated_probability(
+                telemetry.p_adverse, bundle.adverse_calibration);
+            telemetry.positive_gain = std::clamp(
+                telemetry.positive_gain * bundle.gain_scale, 0.0, 1.0);
+            telemetry.expected_gain = telemetry.p_benefit * telemetry.positive_gain;
+            telemetry.risk_score = telemetry.expected_gain -
+                                   bundle.adverse_penalty * telemetry.p_adverse;
+            const bool selected =
+                telemetry.p_benefit >= bundle.minimum_benefit_probability &&
+                telemetry.p_adverse <= bundle.maximum_adverse_probability &&
+                telemetry.expected_gain >= bundle.minimum_expected_gain &&
+                telemetry.risk_score > 0.0 &&
+                telemetry.disagreement <= bundle.maximum_disagreement;
+            telemetry.decision_reason = selected
+                                            ? "learned_threshold_accept"
+                                            : "learned_threshold_reject";
+            telemetry.inference_wall_seconds =
+                std::chrono::duration<double>(Clock::now() - started).count();
+            return selected;
+        } catch (const std::exception& exception) {
+            frontier_probe_telemetry_.fail_closed = true;
+            frontier_probe_telemetry_.decision_reason =
+                std::string("model_fail_closed:") + exception.what();
+            frontier_probe_telemetry_.inference_wall_seconds =
+                std::chrono::duration<double>(Clock::now() - started).count();
+            return false;
+        }
+    }
+
+    bool temporal_graph_is_ood(
+        const TemporalGatBundle& bundle,
+        const std::array<double, kTemporalGatCounterFeatureCount>& counters,
+        const std::array<double, kFrontierContextFeatureCount>& context
+    ) const {
+        auto outside = [](double value,
+                          const TemporalNormalizationGroup& group,
+                          std::size_t index) {
+            return index >= group.minimum.size() ||
+                   !std::isfinite(value) ||
+                   value < group.minimum[index] ||
+                   value > group.maximum[index];
+        };
+        const auto cell_ood = [&](const FrontierProbeSnapshot& graph) {
+            for (const auto& node : graph.node_features) {
+                for (std::size_t index = 0; index < node.size(); ++index) {
+                    if (outside(node[index], bundle.cell_node, index)) {
+                        return true;
+                    }
+                }
+            }
+            for (const auto& edge : graph.edges) {
+                for (std::size_t index = 0; index < edge.features.size(); ++index) {
+                    if (outside(edge.features[index], bundle.cell_edge, index)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        const auto label_ood = [&](const TemporalPortableGraph& graph) {
+            for (const auto& node : graph.node_features) {
+                for (std::size_t index = 0; index < node.size(); ++index) {
+                    if (outside(node[index], bundle.node, index)) {
+                        return true;
+                    }
+                }
+            }
+            for (const auto& edge : graph.edges) {
+                for (std::size_t index = 0; index < edge.features.size(); ++index) {
+                    if (outside(edge.features[index], bundle.edge, index)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        const auto& telemetry = frontier_probe_telemetry_;
+        if (cell_ood(telemetry.trial_start_snapshot) ||
+            cell_ood(telemetry.trial_end_snapshot) ||
+            label_ood(telemetry.trial_start_temporal_graph) ||
+            label_ood(telemetry.trial_end_temporal_graph)) {
+            return true;
+        }
+        for (std::size_t index = 0; index < counters.size(); ++index) {
+            if (outside(counters[index], bundle.counter, index)) {
+                return true;
+            }
+        }
+        for (std::size_t index = 0; index < context.size(); ++index) {
+            if (outside(context[index], bundle.context, index)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool learned_temporal_action() {
+        const auto started = Clock::now();
+        const auto& bundle = frontier_probe_config_.temporal_bundle;
+        auto& telemetry = frontier_probe_telemetry_;
+        if (!temporal_bundle_is_valid(bundle) ||
+            bundle.selected_scale != frontier_probe_config_.problem_scale) {
+            telemetry.fail_closed = true;
+            telemetry.decision_reason = "invalid_temporal_bundle";
+            return false;
+        }
+        const auto counters = temporal_counter_values(telemetry);
+        const auto context = telemetry.trial_end_snapshot.context_features;
+        if (temporal_graph_is_ood(bundle, counters, context)) {
+            telemetry.fail_closed = true;
+            telemetry.inference_ood = true;
+            telemetry.ood_reason = "temporal_feature_outside_frozen_range";
+            telemetry.decision_reason = "temporal_frontier_ood";
+            return false;
+        }
+        try {
+            telemetry.seed_outputs.clear();
+            for (const auto& model : bundle.models) {
+                telemetry.seed_outputs.push_back(temporal_gat_forward(
+                    model, bundle, telemetry.trial_start_snapshot,
+                    telemetry.trial_end_snapshot,
+                    telemetry.trial_start_temporal_graph,
+                    telemetry.trial_end_temporal_graph,
+                    counters, context, bundle.selected_scale));
+            }
+            telemetry.model_called = true;
+            const auto decision = decide_temporal_gat_outputs(
+                bundle, telemetry.seed_outputs);
+            telemetry.p_benefit = decision.p_benefit;
+            telemetry.positive_gain = decision.positive_gain;
+            telemetry.p_adverse = decision.p_adverse;
+            telemetry.disagreement = decision.disagreement;
+            telemetry.expected_gain = decision.expected_gain;
+            telemetry.risk_score = decision.risk_score;
+            const bool evaluation_control =
+                bundle.controller_kind != "temporal_gat";
+            const bool selected = decision.continue_qd1;
+            telemetry.decision_reason = selected
+                ? (evaluation_control ? "temporal_control_accept"
+                                      : "temporal_learned_threshold_accept")
+                : (evaluation_control ? "temporal_control_reject"
+                                      : "temporal_learned_threshold_reject");
+            telemetry.inference_wall_seconds =
+                std::chrono::duration<double>(Clock::now() - started).count();
+            return selected;
+        } catch (const std::exception& exception) {
+            telemetry.fail_closed = true;
+            telemetry.decision_reason =
+                std::string("temporal_model_fail_closed:") + exception.what();
+            telemetry.inference_wall_seconds =
+                std::chrono::duration<double>(Clock::now() - started).count();
+            return false;
+        }
+    }
+
+    CachedQueueEntry qd1_entry(
+        const Pair& value,
+        std::uint64_t creation_sequence_id
+    ) const {
+        const auto& state = value.first->get_resource()
+                                .template get_component<JourneyResource>(0)
+                                .get_value()
+                                .get_value()
+                                .state();
+        return CachedQueueEntry{
+            .value = value,
+            .can_terminate = state.at_depot && state.task_visit_count > 0,
+            .primary_key = -static_cast<double>(state.visited_count),
+            .secondary_key = 0.0,
+            .reduced_cost_bucket = 0,
+            .guidance_score = 0.0,
+            .partial_cost = value.first->get_cost(),
+            .creation_sequence_id = creation_sequence_id,
+        };
+    }
+
+    void migrate_frontier_to_qd1() {
+        const auto started = Clock::now();
+        auto& telemetry = frontier_probe_telemetry_;
+        telemetry.frontier_before_migration = unprocessed_q0_.size();
+        std::unordered_set<std::uint64_t> identifiers;
+        identifiers.reserve(unprocessed_q0_.size());
+        while (!unprocessed_q0_.empty()) {
+            const auto value = unprocessed_q0_.top();
+            unprocessed_q0_.pop();
+            ++telemetry.drained_count;
+            const auto found = creation_sequence_ids_.find(value.first);
+            if (found == creation_sequence_ids_.end()) {
+                throw std::runtime_error(
+                    "frontier migration creation sequence missing");
+            }
+            const auto creation_id = found->second;
+            telemetry.creation_hash_before ^= frontier_mix(creation_id);
+            if (!identifiers.insert(creation_id).second) {
+                ++telemetry.duplicate_count;
+            }
+            unprocessed_experimental_.push(qd1_entry(value, creation_id));
+            telemetry.creation_hash_after ^= frontier_mix(creation_id);
+            ++telemetry.migrated_count;
+        }
+        if (telemetry.frontier_before_migration != telemetry.drained_count ||
+            telemetry.drained_count != telemetry.migrated_count ||
+            telemetry.migrated_count != unprocessed_experimental_.size() ||
+            telemetry.creation_hash_before != telemetry.creation_hash_after ||
+            telemetry.duplicate_count != 0U) {
+            throw std::runtime_error("frontier migration correctness redline");
+        }
+        proof_queue_policy_ = ProofQueuePolicy::QD1DeeperFirst;
+        telemetry.switched_to_qd1 = true;
+        telemetry.action = "SWITCH_QD1";
+        telemetry.migration_wall_seconds =
+            std::chrono::duration<double>(Clock::now() - started).count();
+    }
+
+    void migrate_frontier_back_to_q0() {
+        const auto started = Clock::now();
+        auto& telemetry = frontier_probe_telemetry_;
+        telemetry.reverse_frontier_before_migration =
+            unprocessed_experimental_.size();
+
+        // Build a complete staging queue from a copy. The shared staging
+        // primitive is also exercised by empty/single/large/duplicate/fault
+        // native tests. The live QD1 queue is untouched until every
+        // conservation and binding check has passed.
+        auto staged = detail::stage_atomic_frontier_migration(
+            unprocessed_experimental_,
+            decltype(unprocessed_q0_){},
+            [](const CachedQueueEntry& entry) {
+                return entry.creation_sequence_id;
+            },
+            [](const CachedQueueEntry& entry) {
+                return entry.value.first;
+            },
+            [](const CachedQueueEntry& entry) {
+                return entry.value;
+            },
+            [](std::uint64_t creation_id) {
+                return frontier_mix(creation_id);
+            });
+        telemetry.reverse_staged_count = staged.staged_count;
+        telemetry.reverse_migrated_count = staged.target.size();
+        telemetry.reverse_duplicate_count =
+            staged.duplicate_creation_id_count;
+        telemetry.reverse_creation_hash_before =
+            staged.creation_hash_before;
+        telemetry.reverse_creation_hash_after =
+            staged.creation_hash_after;
+
+        std::unordered_map<const Label*, std::uint64_t> staged_bindings;
+        staged_bindings.reserve(staged.bindings.size());
+        for (const auto& [label, creation_id] : staged.bindings) {
+            if (!staged_bindings.emplace(label, creation_id).second) {
+                ++telemetry.reverse_duplicate_count;
+            }
+        }
+        if (telemetry.reverse_frontier_before_migration !=
+                telemetry.reverse_staged_count ||
+            telemetry.reverse_staged_count !=
+                telemetry.reverse_migrated_count ||
+            telemetry.reverse_migrated_count != staged.target.size() ||
+            telemetry.reverse_creation_hash_before !=
+                telemetry.reverse_creation_hash_after ||
+            telemetry.reverse_duplicate_count != 0U ||
+            staged_bindings.size() != staged.target.size()) {
+            throw std::runtime_error(
+                "reverse frontier migration correctness redline");
+        }
+
+        unprocessed_q0_.swap(staged.target);
+        unprocessed_experimental_ = decltype(unprocessed_experimental_)(
+            GreaterCachedKey{guidance_stats_});
+        creation_sequence_ids_ = std::move(staged_bindings);
+        proof_queue_policy_ = ProofQueuePolicy::Q0PartialCost;
+        telemetry.migrated_back_to_q0 = true;
+        telemetry.action = "MIGRATE_BACK_TO_Q0";
+        telemetry.reverse_migration_wall_seconds =
+            std::chrono::duration<double>(Clock::now() - started).count();
+    }
+
+    void start_temporal_trial() {
+        auto& telemetry = frontier_probe_telemetry_;
+        telemetry.trial_started = true;
+        telemetry.trial_start_snapshot = current_frontier_snapshot(
+            frontier_probe_config_.processed_label_boundary);
+        telemetry.temporal_graph_build_wall_seconds =
+            telemetry.trial_start_snapshot.graph_build_wall_seconds;
+        const auto temporal_graph_started = Clock::now();
+        telemetry.trial_start_label_graph = build_counterfactual_label_graph();
+        telemetry.trial_start_temporal_graph = build_temporal_label_task_graph(
+            telemetry.trial_start_label_graph);
+        telemetry.temporal_graph_build_wall_seconds +=
+            std::chrono::duration<double>(
+                Clock::now() - temporal_graph_started).count();
+        temporal_trial_started_ = Clock::now();
+        migrate_frontier_to_qd1();
+        telemetry.action = "TRIAL_QD1";
+        telemetry.decision_reason = "temporal_trial_running";
+    }
+
+    void maybe_finish_temporal_trial() {
+        auto& telemetry = frontier_probe_telemetry_;
+        if (!temporal_trial_mode() || !telemetry.trial_started ||
+            telemetry.trial_completed ||
+            proof_queue_policy_ != ProofQueuePolicy::QD1DeeperFirst) {
+            return;
+        }
+        const auto target = frontier_probe_config_.processed_label_boundary +
+                            frontier_probe_config_.trial_pop_budget;
+        telemetry.trial_pops = processed_labels_ -
+                               frontier_probe_config_.processed_label_boundary;
+        if (processed_labels_ < target) {
+            return;
+        }
+        build_frontier_graph();
+        if (!frontier_probe_telemetry_.graph_built) {
+            telemetry.decision_reason = "trial_frontier_empty";
+            return;
+        }
+        telemetry.trial_end_snapshot = current_frontier_snapshot(target);
+        telemetry.temporal_graph_build_wall_seconds +=
+            telemetry.trial_end_snapshot.graph_build_wall_seconds;
+        const auto temporal_graph_started = Clock::now();
+        telemetry.trial_end_label_graph = build_counterfactual_label_graph();
+        telemetry.trial_end_temporal_graph = build_temporal_label_task_graph(
+            telemetry.trial_end_label_graph);
+        telemetry.temporal_graph_build_wall_seconds +=
+            std::chrono::duration<double>(
+                Clock::now() - temporal_graph_started).count();
+        std::unordered_set<std::uint64_t> start_ids;
+        for (std::uint64_t cell = 0; cell < kFrontierNodeCount; ++cell) {
+            telemetry.temporal_edges.push_back({0U, cell, cell});
+        }
+        for (const auto id :
+             telemetry.trial_start_temporal_graph.creation_sequence_ids) {
+            if (id != std::numeric_limits<std::uint64_t>::max()) {
+                start_ids.insert(id);
+            }
+        }
+        for (const auto id :
+             telemetry.trial_end_temporal_graph.creation_sequence_ids) {
+            if (id == std::numeric_limits<std::uint64_t>::max()) {
+                continue;
+            }
+            if (start_ids.contains(id)) {
+                ++telemetry.temporal_surviving_label_count;
+                telemetry.temporal_edges.push_back({1U, id, id});
+            } else {
+                ++telemetry.temporal_new_label_count;
+            }
+        }
+        const auto start_frontier =
+            telemetry.trial_start_label_graph.frontier_size;
+        const auto end_frontier =
+            telemetry.trial_end_label_graph.frontier_size;
+        telemetry.temporal_extended_label_delta =
+            telemetry.trial_end_snapshot.extended_labels -
+            telemetry.trial_start_snapshot.extended_labels;
+        telemetry.temporal_dominated_label_delta =
+            telemetry.trial_end_snapshot.dominated_labels -
+            telemetry.trial_start_snapshot.dominated_labels;
+        telemetry.temporal_survival_fraction =
+            static_cast<double>(telemetry.temporal_surviving_label_count) /
+            static_cast<double>(std::max<std::size_t>(1U, start_frontier));
+        telemetry.temporal_frontier_churn = static_cast<double>(
+            start_frontier + end_frontier - 2U * std::min(
+                telemetry.temporal_surviving_label_count,
+                std::min(start_frontier, end_frontier))) /
+            static_cast<double>(std::max<std::size_t>(
+                1U, start_frontier + end_frontier));
+        telemetry.temporal_cell_edge_count = kFrontierNodeCount;
+        telemetry.temporal_label_edge_count =
+            telemetry.temporal_surviving_label_count;
+        std::array<std::uint64_t, 4> temporal_digest{
+            0xcbf29ce484222325ULL, 0x84222325cbf29ce4ULL,
+            0x9e3779b97f4a7c15ULL, 0x6a09e667f3bcc909ULL,
+        };
+        for (const auto& edge : telemetry.temporal_edges) {
+            for (const auto value : edge) {
+                for (std::size_t index = 0; index < temporal_digest.size(); ++index) {
+                    temporal_digest[index] ^=
+                        frontier_mix(value + index * 0x100000001b3ULL);
+                    temporal_digest[index] *= 0x100000001b3ULL;
+                }
+            }
+        }
+        std::ostringstream temporal_stream;
+        temporal_stream << std::hex << std::setfill('0');
+        for (const auto value : temporal_digest) {
+            temporal_stream << std::setw(16) << value;
+        }
+        telemetry.temporal_edge_hash = temporal_stream.str();
+        telemetry.trial_completed = true;
+        telemetry.trial_wall_seconds = std::chrono::duration<double>(
+            Clock::now() - temporal_trial_started_).count();
+        telemetry.temporal_counter_features = temporal_counter_values(telemetry);
+        std::uint64_t counter_digest = 0xcbf29ce484222325ULL;
+        for (const auto value : telemetry.temporal_counter_features) {
+            counter_digest ^= frontier_mix(std::bit_cast<std::uint64_t>(value));
+            counter_digest *= 0x100000001b3ULL;
+        }
+        std::ostringstream counter_stream;
+        counter_stream << std::hex << std::setfill('0')
+                       << std::setw(16) << counter_digest;
+        telemetry.temporal_counter_hash = counter_stream.str();
+
+        bool continue_qd1 = false;
+        switch (frontier_probe_config_.mode) {
+            case FrontierProbeMode::ForceTrialContinue:
+                continue_qd1 = true;
+                telemetry.decision_reason = "forced_trial_continue";
+                break;
+            case FrontierProbeMode::LearnedAfterTrial:
+                continue_qd1 = learned_temporal_action();
+                break;
+            case FrontierProbeMode::CollectTrial:
+                telemetry.decision_reason = "collected_trial_revert";
+                break;
+            case FrontierProbeMode::ForceTrialRevert:
+                telemetry.decision_reason = "forced_trial_revert";
+                break;
+            default:
+                throw std::logic_error("non-trial mode reached trial decision");
+        }
+        if (continue_qd1) {
+            telemetry.action = "CONTINUE_QD1";
+        } else {
+            migrate_frontier_back_to_q0();
+        }
+    }
+
+    void migrate_counterfactual_frontier_to_qd1() {
+        const auto frontier_before = unprocessed_q0_.size();
+        std::size_t drained = 0;
+        std::size_t migrated = 0;
+        std::size_t duplicate = 0;
+        std::uint64_t hash_before = 0;
+        std::uint64_t hash_after = 0;
+        std::unordered_set<std::uint64_t> identifiers;
+        identifiers.reserve(frontier_before);
+        while (!unprocessed_q0_.empty()) {
+            const auto value = unprocessed_q0_.top();
+            unprocessed_q0_.pop();
+            ++drained;
+            const auto found = creation_sequence_ids_.find(value.first);
+            if (found == creation_sequence_ids_.end()) {
+                throw std::runtime_error(
+                    "counterfactual migration creation sequence missing");
+            }
+            const auto creation_id = found->second;
+            hash_before ^= frontier_mix(creation_id);
+            duplicate += identifiers.insert(creation_id).second ? 0U : 1U;
+            unprocessed_experimental_.push(qd1_entry(value, creation_id));
+            hash_after ^= frontier_mix(creation_id);
+            ++migrated;
+        }
+        if (frontier_before != drained || drained != migrated ||
+            migrated != unprocessed_experimental_.size() ||
+            hash_before != hash_after || duplicate != 0U) {
+            throw std::runtime_error(
+                "counterfactual frontier migration correctness redline");
+        }
+        proof_queue_policy_ = ProofQueuePolicy::QD1DeeperFirst;
+    }
+
+    [[nodiscard]] FrontierProbeSnapshot current_frontier_snapshot(
+        std::size_t boundary
+    ) const {
+        FrontierProbeSnapshot snapshot;
+        snapshot.reached = true;
+        snapshot.graph_built = frontier_probe_telemetry_.graph_built;
+        snapshot.boundary = boundary;
+        snapshot.processed_labels = processed_labels_;
+        snapshot.extended_labels = extended_labels();
+        snapshot.dominated_labels = dominated_labels();
+        snapshot.dominance_candidate_checks = dominance_candidate_checks();
+        snapshot.subset_dominance_candidate_checks =
+            subset_dominance_candidate_checks();
+        snapshot.subset_dominance_rejected_labels =
+            subset_dominance_rejected_labels();
+        snapshot.max_visited_bucket_size = max_visited_bucket_size();
+        snapshot.negative_label_event_count =
+            best_reduced_cost_event_count_total_;
+        snapshot.best_true_reduced_cost = best_reduced_cost_;
+        snapshot.graph_hash = frontier_probe_telemetry_.graph_hash;
+        snapshot.frontier_size = frontier_probe_telemetry_.frontier_size;
+        snapshot.nonempty_node_count =
+            frontier_probe_telemetry_.nonempty_node_count;
+        snapshot.edge_count = frontier_probe_telemetry_.edge_count;
+        snapshot.graph_build_wall_seconds =
+            frontier_probe_telemetry_.graph_build_wall_seconds;
+        snapshot.node_features = frontier_probe_telemetry_.node_features;
+        snapshot.edges = frontier_probe_telemetry_.edges;
+        snapshot.context_features = frontier_probe_telemetry_.context_features;
+        return snapshot;
+    }
+
+    void record_frontier_snapshot(std::size_t boundary) {
+        frontier_probe_telemetry_.snapshots.push_back(
+            current_frontier_snapshot(boundary));
+    }
+
+    void maybe_run_frontier_probe() {
+        if (frontier_probe_config_.mode == FrontierProbeMode::Disabled ||
+            proof_queue_policy_ != ProofQueuePolicy::Q0PartialCost) {
+            return;
+        }
+        const bool observation_due =
+            frontier_observation_index_ <
+                frontier_probe_config_.observation_boundaries.size() &&
+            processed_labels_ == frontier_probe_config_.observation_boundaries[
+                                     frontier_observation_index_];
+        const bool decision_due =
+            !frontier_probe_decided_ &&
+            processed_labels_ == frontier_probe_config_.processed_label_boundary;
+        if (!observation_due && !decision_due) {
+            return;
+        }
+        if (decision_due) {
+            frontier_probe_decided_ = true;
+            frontier_probe_telemetry_.reached = true;
+        }
+        if (unprocessed_q0_.empty()) {
+            frontier_probe_telemetry_.decision_reason = "frontier_empty";
+            if (observation_due) {
+                record_frontier_snapshot(
+                    frontier_probe_config_.observation_boundaries[
+                        frontier_observation_index_]);
+                ++frontier_observation_index_;
+            }
+            return;
+        }
+        build_frontier_graph();
+        if (observation_due) {
+            record_frontier_snapshot(
+                frontier_probe_config_.observation_boundaries[
+                    frontier_observation_index_]);
+            ++frontier_observation_index_;
+        }
+        if (!decision_due) {
+            return;
+        }
+        if (!frontier_probe_telemetry_.graph_built) {
+            return;
+        }
+        if (temporal_trial_mode()) {
+            start_temporal_trial();
+            return;
+        }
+        bool switch_to_qd1 = false;
+        if (frontier_probe_config_.mode == FrontierProbeMode::CollectForceQ0) {
+            frontier_probe_telemetry_.decision_reason = "forced_continue_q0";
+        } else if (frontier_probe_config_.mode == FrontierProbeMode::ForceQD1) {
+            frontier_probe_telemetry_.decision_reason = "forced_switch_qd1";
+            switch_to_qd1 = true;
+        } else if (frontier_probe_config_.mode == FrontierProbeMode::Learned) {
+            switch_to_qd1 = learned_frontier_action();
+        }
+        if (switch_to_qd1) {
+            migrate_frontier_to_qd1();
+        } else {
+            frontier_probe_telemetry_.action = "CONTINUE_Q0";
+            creation_sequence_ids_.clear();
+        }
+    }
+
     Pair next_label_iterator() override {
+        if (maybe_run_counterfactual_prefix()) {
+            return Pair{};
+        }
+        maybe_run_frontier_probe();
+        maybe_finish_temporal_trial();
         if (
             proof_queue_policy_ ==
             ProofQueuePolicy::Q0PartialCost
@@ -1635,14 +5245,53 @@ class AuditedBestFirstDominance final
             auto value = unprocessed_q0_.top();
             unprocessed_q0_.pop();
             ++processed_labels_;
+            if (frontier_probe_decided_) {
+                ++frontier_probe_telemetry_.q0_post_probe_pops;
+                if (temporal_trial_mode()) {
+                    creation_sequence_ids_.erase(value.first);
+                }
+            } else if (
+                frontier_probe_config_.mode != FrontierProbeMode::Disabled &&
+                counterfactual_prefix_config_.mode ==
+                    CounterfactualPrefixMode::Disabled
+            ) {
+                creation_sequence_ids_.erase(value.first);
+            }
             return value;
         }
         if (unprocessed_experimental_.empty()) {
+            if (temporal_trial_mode() &&
+                frontier_probe_telemetry_.trial_started &&
+                !frontier_probe_telemetry_.trial_completed) {
+                frontier_probe_telemetry_.trial_pops = processed_labels_ -
+                    frontier_probe_config_.processed_label_boundary;
+                frontier_probe_telemetry_.trial_wall_seconds =
+                    std::chrono::duration<double>(
+                        Clock::now() - temporal_trial_started_).count();
+                frontier_probe_telemetry_.action =
+                    "TRIAL_EXHAUSTED_BEFORE_DECISION";
+                frontier_probe_telemetry_.decision_reason =
+                    "frontier_exhausted_before_trial_budget";
+            }
             return Pair{};
         }
         auto entry = unprocessed_experimental_.top();
         unprocessed_experimental_.pop();
         ++processed_labels_;
+        if (frontier_probe_decided_ && frontier_probe_telemetry_.switched_to_qd1) {
+            ++frontier_probe_telemetry_.qd1_post_probe_pops;
+            if (frontier_probe_telemetry_.trial_started &&
+                !frontier_probe_telemetry_.trial_completed) {
+                frontier_probe_telemetry_.trial_pops = processed_labels_ -
+                    frontier_probe_config_.processed_label_boundary;
+            }
+        }
+        if (trace_ != nullptr) {
+            trace_->record_label(
+                *entry.value.first,
+                *model_,
+                entry.guidance_score);
+        }
         return entry.value;
     }
 
@@ -1662,6 +5311,16 @@ class AuditedBestFirstDominance final
         ) {
             // Keep the production Q0 container and comparator byte-for-byte
             // equivalent to the historical path.
+            if (trace_ != nullptr) {
+                trace_->record_label(*value.first, *model_, 0.0);
+            }
+            if ((frontier_probe_config_.mode != FrontierProbeMode::Disabled &&
+                 (!frontier_probe_decided_ || temporal_trial_mode())) ||
+                counterfactual_prefix_config_.mode !=
+                    CounterfactualPrefixMode::Disabled) {
+                creation_sequence_ids_[value.first] =
+                    next_creation_sequence_id_++;
+            }
             unprocessed_q0_.push(value);
             return;
         }
@@ -1673,6 +5332,8 @@ class AuditedBestFirstDominance final
         const double partial_cost = value.first->get_cost();
         double primary_key = 0.0;
         double secondary_key = 0.0;
+        std::int64_t rc_bucket = 0;
+        double guidance_score = state.guidance_score;
         if (
             proof_queue_policy_ ==
             ProofQueuePolicy::QD1DeeperFirst
@@ -1699,18 +5360,69 @@ class AuditedBestFirstDominance final
             primary_key = -static_cast<double>(state.visited_count);
             secondary_key = std::floor(
                 partial_cost / proof_queue_guidance_bucket_width_);
+        } else if (
+            proof_queue_policy_ ==
+                ProofQueuePolicy::QG2LabelStatePotential ||
+            proof_queue_policy_ ==
+                ProofQueuePolicy::QGR1DepthResidualGAT
+        ) {
+            const bool sample =
+                guidance_stats_->label_state_scored_count % 1024U == 0U;
+            const auto sample_started = sample ? Clock::now() : Clock::time_point{};
+            guidance_score = qg2_label_state_priority(
+                *model_, state, partial_cost);
+            if (sample) {
+                guidance_stats_->scoring_sample_wall_seconds +=
+                    std::chrono::duration<double>(
+                        Clock::now() - sample_started).count();
+                ++guidance_stats_->scoring_sample_count;
+            }
+            ++guidance_stats_->label_state_scored_count;
+            if (std::abs(guidance_score) > 1.0e-12) {
+                ++guidance_stats_->nonzero_score_count;
+            }
+            rc_bucket = reduced_cost_bucket(
+                partial_cost, proof_queue_guidance_bucket_width_);
+            if (
+                proof_queue_policy_ ==
+                ProofQueuePolicy::QGR1DepthResidualGAT
+            ) {
+                // QGR1 is a strict residual of QD1: learned scores may act
+                // only after terminal class, depth, and the narrow reduced-
+                // cost bucket have tied.  With zero scores this is the same
+                // deterministic total order as QD1 up to the deliberately
+                // cached creation-id tie break used by experimental queues.
+                primary_key = -static_cast<double>(state.visited_count);
+            }
+            const auto bucket_hash =
+                std::hash<std::int64_t>{}(rc_bucket) %
+                guidance_stats_->bucket_hashes.size();
+            guidance_stats_->bucket_hashes.set(bucket_hash);
         }
-        unprocessed_experimental_.push(CachedQueueEntry{
+        const auto creation_sequence_id = next_creation_sequence_id_++;
+        const auto entry = CachedQueueEntry{
             .value = value,
             .can_terminate = (
                 state.at_depot && state.task_visit_count > 0
             ),
             .primary_key = primary_key,
             .secondary_key = secondary_key,
-            .guidance_score = state.guidance_score,
+            .reduced_cost_bucket = rc_bucket,
+            .guidance_score = guidance_score,
             .partial_cost = partial_cost,
-            .creation_sequence_id = next_creation_sequence_id_++,
-        });
+            .creation_sequence_id = creation_sequence_id,
+        };
+        if (counterfactual_prefix_config_.mode !=
+            CounterfactualPrefixMode::Disabled) {
+            creation_sequence_ids_[value.first] = creation_sequence_id;
+        }
+        if (trace_ != nullptr) {
+            trace_->record_label(
+                *value.first,
+                *model_,
+                guidance_score);
+        }
+        unprocessed_experimental_.push(entry);
     }
 
     void prepareNextPhase() override {}
@@ -1725,10 +5437,29 @@ class AuditedBestFirstDominance final
     void release_label_memory() override {
         unprocessed_q0_ = decltype(unprocessed_q0_){};
         unprocessed_experimental_ =
-            decltype(unprocessed_experimental_){};
+            decltype(unprocessed_experimental_)(
+                GreaterCachedKey{guidance_stats_});
+        creation_sequence_ids_.clear();
+        counterfactual_base_label_ids_.clear();
         Base::release_label_memory();
     }
 
+    std::shared_ptr<const Model> model_;
+    ProofQueuePolicy proof_queue_policy_ =
+        ProofQueuePolicy::Q0PartialCost;
+    double proof_queue_guidance_bucket_width_ = 0.01;
+    double negative_epsilon_ = 1.0e-6;
+    std::shared_ptr<ProofQueuePotentialTrace> trace_;
+    FrontierProbeConfig frontier_probe_config_;
+    FrontierProbeTelemetry frontier_probe_telemetry_;
+    bool frontier_probe_decided_ = false;
+    std::size_t frontier_observation_index_ = 0;
+    CounterfactualPrefixConfig counterfactual_prefix_config_;
+    CounterfactualPrefixTelemetry counterfactual_prefix_telemetry_;
+    std::size_t counterfactual_checkpoint_index_ = 0;
+    std::unordered_set<std::uint64_t> counterfactual_base_label_ids_;
+    std::unordered_map<const Label*, std::uint64_t> creation_sequence_ids_;
+    std::shared_ptr<GuidanceStats> guidance_stats_;
     std::priority_queue<Pair, std::vector<Pair>, GreaterCost>
         unprocessed_q0_;
     std::priority_queue<
@@ -1736,15 +5467,19 @@ class AuditedBestFirstDominance final
         std::vector<CachedQueueEntry>,
         GreaterCachedKey
     > unprocessed_experimental_;
-    std::shared_ptr<const Model> model_;
-    ProofQueuePolicy proof_queue_policy_ =
-        ProofQueuePolicy::Q0PartialCost;
-    double proof_queue_guidance_bucket_width_ = 0.01;
     std::uint64_t next_creation_sequence_id_ = 0;
     std::size_t processed_labels_ = 0;
     static constexpr std::size_t max_best_reduced_cost_events_ = 512;
     Clock::time_point trace_started_{};
+    Clock::time_point counterfactual_request_started_{};
+    Clock::time_point counterfactual_boundary_started_{};
+    Clock::time_point temporal_trial_started_{};
+    bool counterfactual_timing_started_ = false;
+    bool counterfactual_boundary_timing_started_ = false;
     bool trace_enabled_ = false;
+    double first_true_negative_wall_time_seconds_ =
+        std::numeric_limits<double>::infinity();
+    std::size_t labels_processed_before_first_true_negative_ = 0;
     double best_reduced_cost_ = std::numeric_limits<double>::infinity();
     std::size_t best_reduced_cost_event_count_total_ = 0;
     std::vector<BestReducedCostEvent> best_reduced_cost_events_;
@@ -1824,6 +5559,10 @@ void refresh_dynamic_model(const Model& source, Model* target) {
     target->branch_decisions = source.branch_decisions;
     target->cuts = source.cuts;
     target->guidance_task_arc_enabled = source.guidance_task_arc_enabled;
+    target->guidance_label_state_enabled =
+        source.guidance_label_state_enabled;
+    target->guidance_label_state_coefficients =
+        source.guidance_label_state_coefficients;
     target->dssr_relaxation_enabled = source.dssr_relaxation_enabled;
     target->dssr_critical_task_mask = source.dssr_critical_task_mask;
     target->dssr_branch_task_mask = source.dssr_branch_task_mask;
@@ -1967,6 +5706,282 @@ Route reconstruct_route(const rcspp::Solution& solution, const Model& model,
 
 }  // namespace
 
+std::array<double, 3> evaluate_frontier_gat_seed(
+    const FrontierGatSeedModel& model,
+    const FrontierGatBundle& bundle,
+    const FrontierProbeTelemetry& graph
+) {
+    if (!frontier_bundle_is_valid(bundle)) {
+        throw std::invalid_argument("invalid V7 frontier GAT bundle");
+    }
+    return frontier_gat_forward(model, bundle, graph);
+}
+
+std::array<double, 3> evaluate_counterfactual_gat_seed(
+    const FrontierGatSeedModel& model,
+    const CounterfactualPortableBundle& bundle,
+    const CounterfactualPortableTriplet& triplet
+) {
+    if (bundle.schema_version !=
+            "lunar_ice_bpc.p0v5_counterfactual_prefix_gat_native_bundle.v1" ||
+        bundle.node_mean.size() != kCounterfactualPortableNodeFeatureCount ||
+        bundle.node_scale.size() != kCounterfactualPortableNodeFeatureCount ||
+        bundle.edge_mean.size() != kCounterfactualPortableEdgeFeatureCount ||
+        bundle.edge_scale.size() != kCounterfactualPortableEdgeFeatureCount ||
+        bundle.context_mean.size() != kFrontierContextFeatureCount ||
+        bundle.context_scale.size() != kFrontierContextFeatureCount ||
+        bundle.counter_mean.size() != kCounterfactualCounterFeatureCount ||
+        bundle.counter_scale.size() != kCounterfactualCounterFeatureCount ||
+        !(bundle.layer_norm_epsilon > 0.0)) {
+        throw std::invalid_argument("invalid V8 counterfactual GAT bundle");
+    }
+    auto normalize = [](double value, double mean, double scale) {
+        if (!std::isfinite(value) || !std::isfinite(mean) ||
+            !std::isfinite(scale) || !(scale > 0.0)) {
+            throw std::invalid_argument(
+                "counterfactual normalization value invalid");
+        }
+        return (value - mean) / scale;
+    };
+    const auto& node_weight = frontier_tensor(
+        model, "node_encoder.weight",
+        {kFrontierHiddenSize, kCounterfactualPortableNodeFeatureCount});
+    const auto& node_bias = frontier_tensor(
+        model, "node_encoder.bias", {kFrontierHiddenSize});
+    const auto& edge_weight = frontier_tensor(
+        model, "edge_encoder.weight",
+        {kFrontierHiddenSize, kCounterfactualPortableEdgeFeatureCount});
+    const auto& edge_bias = frontier_tensor(
+        model, "edge_encoder.bias", {kFrontierHiddenSize});
+    const auto& context_weight = frontier_tensor(
+        model, "context_encoder.weight",
+        {kFrontierHiddenSize, kFrontierContextFeatureCount});
+    const auto& context_bias = frontier_tensor(
+        model, "context_encoder.bias", {kFrontierHiddenSize});
+    const auto& pool_weight = frontier_tensor(
+        model, "attention_pool.weight", {1U, kFrontierHiddenSize});
+    const auto& pool_bias = frontier_tensor(
+        model, "attention_pool.bias", {1U});
+
+    auto encode = [&](const CounterfactualPortableGraph& graph) {
+        if (graph.node_features.empty() || graph.edges.empty()) {
+            throw std::invalid_argument(
+                "counterfactual portable graph cannot be empty");
+        }
+        std::vector<std::vector<double>> nodes;
+        nodes.reserve(graph.node_features.size());
+        for (const auto& raw : graph.node_features) {
+            if (raw.size() != kCounterfactualPortableNodeFeatureCount) {
+                throw std::invalid_argument(
+                    "counterfactual node feature shape mismatch");
+            }
+            std::vector<double> row(raw.size());
+            for (std::size_t index = 0; index < row.size(); ++index) {
+                row[index] = normalize(
+                    raw[index], bundle.node_mean[index],
+                    bundle.node_scale[index]);
+            }
+            nodes.push_back(frontier_dense(row, node_weight, node_bias));
+            frontier_relu(&nodes.back());
+        }
+        std::vector<std::vector<double>> encoded_edges;
+        encoded_edges.reserve(graph.edges.size());
+        for (const auto& raw : graph.edges) {
+            std::vector<double> row(kCounterfactualPortableEdgeFeatureCount);
+            for (std::size_t index = 0; index < row.size(); ++index) {
+                row[index] = normalize(
+                    raw.features[index], bundle.edge_mean[index],
+                    bundle.edge_scale[index]);
+            }
+            encoded_edges.push_back(
+                frontier_dense(row, edge_weight, edge_bias));
+            frontier_relu(&encoded_edges.back());
+        }
+        nodes = frontier_gat_layer(
+            nodes, encoded_edges, graph.edges, model, 0U,
+            bundle.layer_norm_epsilon);
+        nodes = frontier_gat_layer(
+            nodes, encoded_edges, graph.edges, model, 1U,
+            bundle.layer_norm_epsilon);
+
+        std::vector<double> node_mean(kFrontierHiddenSize, 0.0);
+        std::vector<double> node_max(
+            kFrontierHiddenSize,
+            -std::numeric_limits<double>::infinity());
+        std::vector<double> attention_scores;
+        double max_attention = -std::numeric_limits<double>::infinity();
+        for (const auto& node : nodes) {
+            for (std::size_t index = 0; index < kFrontierHiddenSize; ++index) {
+                node_mean[index] +=
+                    node[index] / static_cast<double>(nodes.size());
+                node_max[index] = std::max(node_max[index], node[index]);
+            }
+            const auto score =
+                frontier_dense(node, pool_weight, pool_bias).front();
+            attention_scores.push_back(score);
+            max_attention = std::max(max_attention, score);
+        }
+        double denominator = 0.0;
+        for (auto& score : attention_scores) {
+            score = std::exp(score - max_attention);
+            denominator += score;
+        }
+        if (!(denominator > 0.0)) {
+            throw std::invalid_argument(
+                "counterfactual attention pool invalid");
+        }
+        std::vector<double> attention_pool(kFrontierHiddenSize, 0.0);
+        for (std::size_t index = 0; index < nodes.size(); ++index) {
+            const auto probability = attention_scores[index] / denominator;
+            for (std::size_t hidden = 0; hidden < kFrontierHiddenSize; ++hidden) {
+                attention_pool[hidden] +=
+                    probability * nodes[index][hidden];
+            }
+        }
+        std::vector<double> edge_mean(kFrontierHiddenSize, 0.0);
+        std::vector<double> edge_max(
+            kFrontierHiddenSize,
+            -std::numeric_limits<double>::infinity());
+        for (const auto& edge : encoded_edges) {
+            for (std::size_t hidden = 0; hidden < kFrontierHiddenSize; ++hidden) {
+                edge_mean[hidden] += edge[hidden] /
+                                     static_cast<double>(encoded_edges.size());
+                edge_max[hidden] = std::max(edge_max[hidden], edge[hidden]);
+            }
+        }
+        std::vector<double> raw_context(kFrontierContextFeatureCount);
+        for (std::size_t index = 0; index < raw_context.size(); ++index) {
+            raw_context[index] = normalize(
+                graph.context_features[index], bundle.context_mean[index],
+                bundle.context_scale[index]);
+        }
+        auto context = frontier_dense(
+            raw_context, context_weight, context_bias);
+        frontier_relu(&context);
+        std::vector<double> output;
+        output.reserve(96U);
+        output.insert(output.end(), node_mean.begin(), node_mean.end());
+        output.insert(output.end(), node_max.begin(), node_max.end());
+        output.insert(
+            output.end(), attention_pool.begin(), attention_pool.end());
+        output.insert(output.end(), edge_mean.begin(), edge_mean.end());
+        output.insert(output.end(), edge_max.begin(), edge_max.end());
+        output.insert(output.end(), context.begin(), context.end());
+        return output;
+    };
+
+    const auto base = encode(triplet.base);
+    const auto q0 = encode(triplet.q0);
+    const auto qd1 = encode(triplet.qd1);
+    std::vector<double> combined;
+    combined.reserve(504U);
+    combined.insert(combined.end(), base.begin(), base.end());
+    combined.insert(combined.end(), q0.begin(), q0.end());
+    combined.insert(combined.end(), qd1.begin(), qd1.end());
+    for (std::size_t index = 0; index < q0.size(); ++index) {
+        combined.push_back(qd1[index] - q0[index]);
+    }
+    for (std::size_t index = 0; index < q0.size(); ++index) {
+        combined.push_back(std::abs(qd1[index] - q0[index]));
+    }
+    for (std::size_t index = 0; index < triplet.counter_features.size(); ++index) {
+        combined.push_back(normalize(
+            triplet.counter_features[index], bundle.counter_mean[index],
+            bundle.counter_scale[index]));
+    }
+    const auto& head0_weight = frontier_tensor(
+        model, "head.0.weight", {32U, 504U});
+    const auto& head0_bias = frontier_tensor(
+        model, "head.0.bias", {32U});
+    const auto& head2_weight = frontier_tensor(
+        model, "head.2.weight", {3U, 32U});
+    const auto& head2_bias = frontier_tensor(
+        model, "head.2.bias", {3U});
+    auto hidden = frontier_dense(combined, head0_weight, head0_bias);
+    frontier_relu(&hidden);
+    const auto logits = frontier_dense(hidden, head2_weight, head2_bias);
+    return {
+        frontier_sigmoid(logits[0]),
+        frontier_sigmoid(logits[1]),
+        frontier_sigmoid(logits[2]),
+    };
+}
+
+std::array<double, 3> evaluate_temporal_gat_seed(
+    const FrontierGatSeedModel& model,
+    const TemporalGatBundle& bundle,
+    const FrontierProbeSnapshot& cell_t0,
+    const FrontierProbeSnapshot& cell_tk,
+    const TemporalPortableGraph& graph_t0,
+    const TemporalPortableGraph& graph_tk,
+    const std::array<double, kTemporalGatCounterFeatureCount>& counters,
+    const std::array<double, kFrontierContextFeatureCount>& context,
+    std::size_t scale
+) {
+    if (!temporal_bundle_is_valid(bundle) || bundle.selected_scale != scale) {
+        throw std::invalid_argument("invalid Temporal-GAT v2 bundle");
+    }
+    return temporal_gat_forward(
+        model, bundle, cell_t0, cell_tk, graph_t0, graph_tk,
+        counters, context, scale);
+}
+
+TemporalGatDecision decide_temporal_gat_outputs(
+    const TemporalGatBundle& bundle,
+    const std::vector<std::array<double, 3>>& outputs
+) {
+    if (outputs.empty()) {
+        throw std::invalid_argument("Temporal-GAT ensemble is empty");
+    }
+    double benefit_sum = 0.0;
+    double benefit_min = 1.0;
+    double benefit_max = 0.0;
+    double gain_min = 1.0;
+    double gain_max = 0.0;
+    double adverse_min = 1.0;
+    double adverse_max = 0.0;
+    for (const auto& output : outputs) {
+        if (std::ranges::any_of(output, [](double value) {
+                return !std::isfinite(value) || value < 0.0 || value > 1.0;
+            })) {
+            throw std::invalid_argument("invalid Temporal-GAT output");
+        }
+        benefit_sum += output[0];
+        benefit_min = std::min(benefit_min, output[0]);
+        benefit_max = std::max(benefit_max, output[0]);
+        gain_min = std::min(gain_min, output[1]);
+        gain_max = std::max(gain_max, output[1]);
+        adverse_min = std::min(adverse_min, output[2]);
+        adverse_max = std::max(adverse_max, output[2]);
+    }
+    TemporalGatDecision decision;
+    decision.p_benefit = frontier_calibrated_probability(
+        benefit_sum / static_cast<double>(outputs.size()),
+        bundle.benefit_calibration);
+    decision.positive_gain = std::clamp(
+        gain_min * bundle.gain_scale, 0.0, 1.0);
+    decision.p_adverse = frontier_calibrated_probability(
+        adverse_max, bundle.adverse_calibration);
+    decision.disagreement = std::max({
+        benefit_max - benefit_min,
+        gain_max - gain_min,
+        adverse_max - adverse_min,
+    });
+    decision.expected_gain = decision.p_benefit * decision.positive_gain;
+    decision.risk_score = decision.expected_gain -
+                          bundle.adverse_penalty * decision.p_adverse;
+    decision.continue_qd1 = bundle.controller_kind != "temporal_gat"
+        ? (decision.p_benefit >= 0.5 &&
+           decision.p_adverse <= 0.5 &&
+           decision.positive_gain > 0.0)
+        : (decision.p_benefit >= bundle.minimum_benefit_probability &&
+           decision.p_adverse <= bundle.maximum_adverse_probability &&
+           decision.expected_gain >= bundle.minimum_expected_gain &&
+           decision.risk_score > 0.0 &&
+           decision.disagreement <= bundle.maximum_disagreement);
+    return decision;
+}
+
 SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     if (input_model.tasks.empty() || input_model.tasks.size() > 100) {
         throw std::invalid_argument("native v1 requires 1..100 tasks");
@@ -2026,6 +6041,80 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
             throw std::invalid_argument("native arc guidance priority must be finite");
         }
     }
+    for (const auto coefficient :
+         input_model.guidance_label_state_coefficients) {
+        if (!std::isfinite(coefficient)) {
+            throw std::invalid_argument(
+                "native label-state guidance coefficient must be finite");
+        }
+    }
+    if (
+        input_model.guidance_label_state_enabled &&
+        params.proof_queue_policy !=
+            ProofQueuePolicy::QG2LabelStatePotential &&
+        params.proof_queue_policy !=
+            ProofQueuePolicy::QGR1DepthResidualGAT
+    ) {
+        throw std::invalid_argument(
+            "label-state guidance requires QG2 or QGR1 proof queue policy");
+    }
+    const bool counterfactual_prefix_active =
+        params.counterfactual_prefix.mode !=
+        CounterfactualPrefixMode::Disabled;
+    if (counterfactual_prefix_active) {
+        const auto& prefix = params.counterfactual_prefix;
+        if (!params.exact_proof || params.dssr_enabled ||
+            params.proof_queue_policy != ProofQueuePolicy::Q0PartialCost ||
+            params.frontier_probe.mode != FrontierProbeMode::Disabled ||
+            prefix.processed_label_boundary != 4096U ||
+            prefix.label_sample_cap == 0U ||
+            prefix.label_sample_cap > kCounterfactualLabelSampleCap ||
+            !prefix.telemetry_only || !prefix.public_routes_forbidden ||
+            !prefix.certificate_forbidden ||
+            !std::ranges::is_sorted(prefix.rollout_checkpoints) ||
+            prefix.rollout_checkpoints.front() == 0U ||
+            std::ranges::find(
+                prefix.rollout_checkpoints,
+                prefix.maximum_rollout_budget) ==
+                prefix.rollout_checkpoints.end() ||
+            std::ranges::adjacent_find(prefix.rollout_checkpoints) !=
+                prefix.rollout_checkpoints.end()) {
+            throw std::invalid_argument(
+                "counterfactual prefix contract is invalid");
+        }
+    }
+    if (
+        params.dssr_enabled &&
+        (params.proof_queue_policy ==
+             ProofQueuePolicy::QG2LabelStatePotential ||
+         params.proof_queue_policy ==
+             ProofQueuePolicy::QGR1DepthResidualGAT)
+    ) {
+        throw std::invalid_argument(
+            "label-state guidance is unavailable with DSSR");
+    }
+    if (
+        params.proof_queue_label_trace_enabled &&
+        params.proof_queue_label_trace_max_rows == 0U
+    ) {
+        throw std::invalid_argument(
+            "proof queue label trace requires a positive row limit");
+    }
+    if (
+        params.proof_queue_label_trace_enabled &&
+        params.proof_queue_label_trace_sampling_mode ==
+            LabelTraceSamplingMode::QGR1StratifiedReservoirV1 &&
+        (
+            params.proof_queue_preference_cap_per_family == 0U ||
+            params.proof_queue_surface_reservoir_count == 0U ||
+            params.proof_queue_surface_labels_per_bucket < 2U ||
+            params.proof_queue_witness_route_cap == 0U ||
+            params.proof_queue_witness_ancestor_cap == 0U
+        )
+    ) {
+        throw std::invalid_argument(
+            "QGR1 stratified trace reservoir caps are invalid");
+    }
     if (ng_dssr_active(input_model)) {
         const auto mask_words =
             (input_model.tasks.size() + 63U) / 64U;
@@ -2053,8 +6142,10 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
         }
         if (
             input_model.guidance_task_arc_enabled ||
+            input_model.guidance_label_state_enabled ||
             params.completion_bound_enabled ||
             params.proof_queue_potential_trace_enabled ||
+            params.proof_queue_label_trace_enabled ||
             params.proof_queue_policy !=
                 ProofQueuePolicy::Q0PartialCost
         ) {
@@ -2146,9 +6237,15 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     auto& built = problem->built;
     const auto& model = problem->model;
     model->positive_task_dual_sum = 0.0;
+    model->absolute_dual_sum = std::abs(model->fleet_dual);
     for (const auto& task : model->tasks) {
         model->positive_task_dual_sum += std::max(0.0, task.dual);
+        model->absolute_dual_sum += std::abs(task.dual);
     }
+    for (const auto& cut : model->cuts) {
+        model->absolute_dual_sum += std::abs(cut.dual);
+    }
+    model->absolute_dual_sum = std::max(1.0, model->absolute_dual_sum);
     model->completion_bound_enabled = params.completion_bound_enabled;
     model->completion_bound_threshold = -params.negative_epsilon;
     model->completion_bound_evaluated_labels = 0;
@@ -2222,10 +6319,21 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     base.tolerance = params.dominance_epsilon;
 
     auto proof_queue_potential_trace =
-        params.proof_queue_potential_trace_enabled
+        params.proof_queue_potential_trace_enabled ||
+                params.proof_queue_label_trace_enabled
             ? std::make_shared<ProofQueuePotentialTrace>(
                   model->tasks.size(),
-                  model->arcs.size())
+                  model->arcs.size(),
+                  params.proof_queue_label_trace_enabled,
+                  params.proof_queue_label_trace_max_rows,
+                  params.proof_queue_guidance_bucket_width,
+                  params.proof_queue_label_trace_sampling_mode,
+                  params.proof_queue_label_trace_seed,
+                  params.proof_queue_preference_cap_per_family,
+                  params.proof_queue_surface_reservoir_count,
+                  params.proof_queue_surface_labels_per_bucket,
+                  params.proof_queue_witness_route_cap,
+                  params.proof_queue_witness_ancestor_cap)
             : nullptr;
     auto dssr_pressure =
         is_dssr_v2(params) &&
@@ -2254,9 +6362,14 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
                                         std::move(algorithm_params),
                                         model,
                                         params.proof_queue_policy,
-                                        params.proof_queue_guidance_bucket_width);
+                                        params.proof_queue_guidance_bucket_width,
+                                        params.negative_epsilon,
+                                        proof_queue_potential_trace,
+                                        params.frontier_probe,
+                                        params.counterfactual_prefix);
     const auto started = std::chrono::steady_clock::now();
-    algorithm.begin_best_reduced_cost_trace(started, !params.exact_proof);
+    algorithm.begin_best_reduced_cost_trace(
+        started, !params.exact_proof || counterfactual_prefix_active);
     auto result = built.graph->solve<AuditedBestFirstDominance, rcspp::RealResource>(
         &algorithm, -params.negative_epsilon, false, 0);
     const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - started);
@@ -2321,6 +6434,9 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     output.telemetry.extension_wall_time_seconds = algorithm.extension_wall_time_seconds();
     output.telemetry.dominance_wall_time_seconds = algorithm.dominance_wall_time_seconds();
     output.telemetry.wall_time_seconds = elapsed.count();
+    output.telemetry.frontier_probe = algorithm.frontier_probe_telemetry();
+    output.telemetry.counterfactual_prefix =
+        algorithm.counterfactual_prefix_telemetry();
     if (dssr_pressure != nullptr) {
         output.telemetry.dssr_pressure_triggered =
             dssr_pressure->triggered;
@@ -2339,14 +6455,88 @@ SolveOutput solve_once(const Model& input_model, const SolveParams& params) {
     output.telemetry.proof_queue_potential_trace_enabled =
         params.proof_queue_potential_trace_enabled;
     if (proof_queue_potential_trace != nullptr) {
-        output.telemetry.proof_queue_potential_trace =
-            proof_queue_potential_trace->task_rows;
-        output.telemetry.proof_queue_arc_potential_trace =
-            proof_queue_potential_trace->arc_rows;
+        proof_queue_potential_trace->finalize_label_trace();
+        if (params.proof_queue_potential_trace_enabled) {
+            output.telemetry.proof_queue_potential_trace =
+                proof_queue_potential_trace->task_rows;
+            output.telemetry.proof_queue_arc_potential_trace =
+                proof_queue_potential_trace->arc_rows;
+        }
+        output.telemetry.proof_queue_label_trace_enabled =
+            params.proof_queue_label_trace_enabled;
+        output.telemetry.proof_queue_label_trace_truncated =
+            proof_queue_potential_trace->label_trace_truncated;
+        output.telemetry.proof_queue_label_trace_incomplete =
+            proof_queue_potential_trace->label_trace_incomplete;
+        output.telemetry.proof_queue_label_trace_sampling_mode =
+            params.proof_queue_label_trace_sampling_mode ==
+                    LabelTraceSamplingMode::QGR1StratifiedReservoirV1
+                ? "qgr1_stratified_reservoir_v1"
+                : "prefix_v1";
+        output.telemetry.proof_queue_label_trace_seed =
+            params.proof_queue_label_trace_seed;
+        output.telemetry.proof_queue_existing_preference_seen =
+            proof_queue_potential_trace->existing_preference_seen;
+        output.telemetry.proof_queue_existing_preference_retained =
+            proof_queue_potential_trace->existing_preference_retained;
+        output.telemetry.proof_queue_incoming_preference_seen =
+            proof_queue_potential_trace->incoming_preference_seen;
+        output.telemetry.proof_queue_incoming_preference_retained =
+            proof_queue_potential_trace->incoming_preference_retained;
+        output.telemetry.proof_queue_surface_seen =
+            proof_queue_potential_trace->surface_seen_count;
+        output.telemetry.proof_queue_surface_retained =
+            proof_queue_potential_trace->surface_retained_count;
+        output.telemetry.proof_queue_surface_label_retained =
+            proof_queue_potential_trace->surface_label_retained_count;
+        output.telemetry.proof_queue_witness_seen =
+            proof_queue_potential_trace->witness_seen_count;
+        output.telemetry.proof_queue_witness_retained =
+            proof_queue_potential_trace->witness_retained_count;
+        output.telemetry.proof_queue_witness_ancestor_retained =
+            proof_queue_potential_trace->witness_ancestor_retained_count;
+        output.telemetry.proof_queue_label_trace_final_rows =
+            proof_queue_potential_trace->final_label_row_count;
+        output.telemetry.proof_queue_label_state_trace =
+            std::move(proof_queue_potential_trace->label_rows);
+        output.telemetry.proof_queue_label_preference_trace =
+            std::move(proof_queue_potential_trace->preference_rows);
+        output.telemetry.proof_queue_negative_witness_trace =
+            std::move(proof_queue_potential_trace->witness_rows);
     }
-    output.routes.reserve(result.solutions.size());
-    for (const auto& solution : result.solutions) {
-        output.routes.push_back(reconstruct_route(solution, *model, built.actions_by_arc_id));
+    output.telemetry.proof_queue_label_state_scored_count =
+        algorithm.label_state_scored_count();
+    output.telemetry.proof_queue_guidance_nonzero_score_count =
+        algorithm.guidance_nonzero_score_count();
+    output.telemetry.proof_queue_guidance_ordering_decision_count =
+        algorithm.guidance_ordering_decision_count();
+    output.telemetry.proof_queue_guidance_reordered_label_hash_count =
+        algorithm.guidance_reordered_label_hash_count();
+    output.telemetry.proof_queue_guidance_bucket_hash_count =
+        algorithm.guidance_bucket_hash_count();
+    output.telemetry.proof_queue_label_state_scoring_estimated_wall_seconds =
+        algorithm.label_state_scoring_estimated_wall_seconds();
+    output.telemetry.first_true_negative_wall_time_seconds =
+        algorithm.first_true_negative_wall_time_seconds();
+    output.telemetry.labels_processed_before_first_true_negative =
+        algorithm.labels_processed_before_first_true_negative();
+    if (!counterfactual_prefix_active) {
+        output.routes.reserve(result.solutions.size());
+        for (const auto& solution : result.solutions) {
+            output.routes.push_back(
+                reconstruct_route(solution, *model, built.actions_by_arc_id));
+        }
+    } else {
+        output.routes.clear();
+        output.search_exhaustive = false;
+        output.frontier_empty = false;
+        output.status = output.telemetry.counterfactual_prefix.complete
+                            ? "COUNTERFACTUAL_PREFIX_COMPLETE"
+                            : "COUNTERFACTUAL_PREFIX_INCOMPLETE";
+        output.telemetry.counterfactual_prefix.truncated_diagnostic = true;
+        output.telemetry.counterfactual_prefix.exact = false;
+        output.telemetry.counterfactual_prefix.routes_suppressed = true;
+        output.telemetry.counterfactual_prefix.certificate_suppressed = true;
     }
     algorithm.release_request_memory();
     return output;
@@ -3406,7 +7596,46 @@ std::unordered_map<std::string, std::string> build_info() {
         {"cut_state_max_bits", "48"},
         {"max_active_cuts", "16"},
         {"completion_bound", "positive_cover_dual_threshold_pruning_v1"},
-        {"guidance_ordering", "negative_harvest_task_arc_priority_v1"},
+        {"guidance_ordering", "q0_anchored_rc_bucket_label_state_priority_v2"},
+        {"guidance_label_state_schema", "lunar_spprc.qg2_label_state.v1"},
+        {"guidance_label_state_feature_count", "15"},
+        {"frontier_probe_policy", "native_q0_4096_inplace_qd1_switch_v7"},
+        {
+            "frontier_temporal_observation_policy",
+            "single_request_q0_snapshots_4096_8192_16384_v1"
+        },
+        {"frontier_graph_schema", "lunar_ice_bpc.p0v5_frontier_depth_rc_graph.v1"},
+        {"frontier_feature_schema", "lunar_ice_bpc.p0v5_frontier_probe_features.v1"},
+        {"frontier_gat_bundle_schema", "lunar_ice_bpc.p0v5_frontier_gat_native_bundle.v1"},
+        {"frontier_gat_native_inference", "two_layer_edge_attention_16x2_v1"},
+        {
+            "frontier_temporal_trial_policy",
+            "q0_boundary_qd1_k_then_continue_or_atomic_q0_v1"
+        },
+        {
+            "frontier_temporal_gat_bundle_schema",
+            "lunar_ice_bpc.p0v5_temporal_frontier_gat_bundle.v2"
+        },
+        {
+            "frontier_temporal_gat_native_inference",
+            "shared_cell_label_task_32x4_scale_heads_v2"
+        },
+        {
+            "counterfactual_prefix_policy",
+            "q0_4096_then_selected_q0_or_qd1_rollout_v8r1"
+        },
+        {"counterfactual_prefix_timing", "per_checkpoint_native_wall_v8r1"},
+        {
+            "counterfactual_frontier_graph_schema",
+            "lunar_ice_bpc.p0v5_frontier_label_sample_graph.v1"
+        },
+        {
+            "counterfactual_prefix_probe_schema",
+            "lunar_ice_bpc.p0v5_counterfactual_prefix_probe.v1"
+        },
+        {"counterfactual_label_sample_cap", "256"},
+        {"counterfactual_public_routes", "forbidden"},
+        {"counterfactual_certificate", "forbidden"},
         {"best_reduced_cost_event_trace", "harvest_improvements_v1"},
         {"harvest_work_budget", "deterministic_processed_labels_v1"},
         {

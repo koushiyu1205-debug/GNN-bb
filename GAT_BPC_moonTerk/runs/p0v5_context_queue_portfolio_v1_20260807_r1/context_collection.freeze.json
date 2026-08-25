@@ -1,0 +1,25 @@
+{
+  "arm_outcomes_used": false,
+  "development_e2e_instances_collected": false,
+  "eligible_partitions": [
+    "train",
+    "calibration",
+    "selector_heldout"
+  ],
+  "formal_benchmark_instances_used": false,
+  "instance_split_sha256": "99782ecd1e54ee4cebba061fa6ee4a36ff32446a7363acf5a569c7ae4f663703",
+  "native_binary_sha256": "f361ba88a7eecb54500a75b04f99a7c4041c42377a7fb0eae70fac7c3fa8de17",
+  "root_caps_sec": {
+    "30": 300,
+    "50": 600
+  },
+  "root_collection": "all_fixed_17_instances_per_scale_once",
+  "root_snapshot_cap_per_instance": 3,
+  "schema_version": "lunar_ice_bpc.p0v5_context_queue_portfolio_context_collection_freeze.v1",
+  "selected_exact_config_sha256": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+  "source_freeze_sha256": "f583c58313150d7599fb903120e9497d20c1e8733c1ca5ca044a8e7b6222798f",
+  "split_instance_count": 40,
+  "status": "FROZEN_BEFORE_CURRENT_ENGINE_CONTEXTS",
+  "tree_snapshot_total_cap_per_instance": 6,
+  "tree_supplement_policy": "coverage_deficient_scales_all_fixed_eligible_instances_once"
+}

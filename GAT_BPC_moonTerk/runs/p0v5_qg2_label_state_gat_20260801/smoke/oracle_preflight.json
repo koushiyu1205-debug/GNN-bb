@@ -1,0 +1,26 @@
+{
+  "bounded_context_limit": 300,
+  "bounded_context_limit_per_scale": 150,
+  "coverage": {
+    "30": {
+      "context_count": 1,
+      "instance_count": 1
+    },
+    "50": {
+      "context_count": 0,
+      "instance_count": 0
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "oracle_gate": {
+    "context_count": 1,
+    "passed": false,
+    "reason": "scale30_and_scale50_each_require_20_contexts_from_10_instances"
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_bounded_oracle.v1",
+  "source_state_index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/smoke/fallback_snapshot_index.json",
+  "source_state_index_sha256": "c5490f653a039cfbf12c1d9348abf6fa4807bd95af70e80bfb03a3db91c2e146",
+  "status": "INSUFFICIENT_SNAPSHOT_COVERAGE",
+  "training_permitted": false
+}

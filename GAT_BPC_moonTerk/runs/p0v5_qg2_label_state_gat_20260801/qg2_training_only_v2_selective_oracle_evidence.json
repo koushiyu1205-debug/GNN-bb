@@ -1,0 +1,49 @@
+{
+  "all_exact_safe": true,
+  "authorized_oracle": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_training_only_v2_view.json",
+  "authorized_oracle_role": "exploratory_model_fitting_only",
+  "authorized_oracle_sha256": "5e4fd3a2355d5547db3b3a102bfd524cee148ff6c180403f7cae477f6f47d119",
+  "by_scale": {
+    "30": {
+      "determined_context_count": 47,
+      "determined_instance_count": 43,
+      "gain_5pct_context_count": 29,
+      "harmful_context_count": 6,
+      "harmful_instance_count": 6,
+      "instance_bootstrap_95_upper_report_only": 0.9113778979321988,
+      "nonpositive_context_count": 10,
+      "paired_geomean_ratio_report_only": 0.8667568313601623,
+      "passed": true,
+      "positive_fraction": 0.7872340425531915,
+      "positive_instance_count": 28
+    },
+    "50": {
+      "determined_context_count": 54,
+      "determined_instance_count": 44,
+      "gain_5pct_context_count": 27,
+      "harmful_context_count": 16,
+      "harmful_instance_count": 15,
+      "instance_bootstrap_95_upper_report_only": 1.034842021912077,
+      "nonpositive_context_count": 19,
+      "paired_geomean_ratio_report_only": 0.9113061461392116,
+      "passed": true,
+      "positive_fraction": 0.6481481481481481,
+      "positive_instance_count": 24
+    }
+  },
+  "context_count": 110,
+  "contract_errors": [],
+  "deployment_authorized": false,
+  "instance_bootstrap_is_report_only": true,
+  "maximum_instance_saved_wall_fraction": 0.09146978025460083,
+  "mode": "selective_training_only",
+  "paper_claim_authorized": false,
+  "passed": true,
+  "point_geomean_is_report_only": true,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_runtime_oracle_evidence.v1",
+  "scope": "model_fitting_and_evaluation_only",
+  "source_gate_sha256": "973fd4daea2255fc31ad69b447b691a7e4272dc3dabd0e082be3066a1975944d",
+  "source_oracle_sha256": "2769079be1409e434ed8cdd3a211ae343391a6bb5910d1486a0e29c35ef60948",
+  "source_oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_stage1.json",
+  "source_training_gate": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_training_only_gate_v2.json"
+}

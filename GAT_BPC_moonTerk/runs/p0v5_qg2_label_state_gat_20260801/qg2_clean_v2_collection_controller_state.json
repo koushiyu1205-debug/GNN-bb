@@ -1,0 +1,24 @@
+{
+  "amendment_id": "scale_aware_exact_action_policy_hash_v1",
+  "collection_id": "qg2_clean_v2",
+  "coverage": {
+    "30": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 150,
+      "instance_count": 119,
+      "root_context_count": 150
+    },
+    "50": {
+      "branch_or_cut_context_count": 0,
+      "context_count": 150,
+      "instance_count": 109,
+      "root_context_count": 150
+    }
+  },
+  "preflight_exit_code": 0,
+  "preserved_pre_amendment_data": true,
+  "scale30_recollection_performed": false,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_collection_controller.v2",
+  "snapshot_dir": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_qg2_clean_v2",
+  "status": "ORACLE_PREFLIGHT_READY"
+}

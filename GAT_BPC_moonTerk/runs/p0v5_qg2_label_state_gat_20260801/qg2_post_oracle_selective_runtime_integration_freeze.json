@@ -1,0 +1,32 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_post_oracle_runtime_integration_freeze.v1",
+  "status": "FROZEN_AFTER_BOUNDED_ORACLE_BEFORE_SELECTIVE_RUNTIME_TRAINING_COMPLETES",
+  "development_only": true,
+  "deployable": false,
+  "frozen_at_local": "2026-08-05T19:09:00+08:00",
+  "purpose": "attest the single post-Oracle runtime authority integration without rewriting historical Oracle provenance",
+  "oracle_completed_before_runtime_integration": true,
+  "oracle_replicate_pair_count": 219,
+  "oracle_execution_freeze": "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_oracle_execution_freeze.json",
+  "oracle_execution_freeze_sha256": "bf09c8242d61cc06975a18a13b0637b7802ea56a52ee74eb064cd9e894d3a679",
+  "oracle_summary": "runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_stage1.json",
+  "oracle_summary_sha256": "2769079be1409e434ed8cdd3a211ae343391a6bb5910d1486a0e29c35ef60948",
+  "historical_oracle_runtime_sha256": "8ee8c4f493479035c5af5b20259b22b11bdf384dbaa88208a65f2143f77aa9b1",
+  "current_runtime_implementation_hash": "191462991d80247f3aa05eae21abf92c3b50982d86d8ec17009dd1bbf53a7b7c",
+  "allowed_historical_freeze_drift": [
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py"
+  ],
+  "runtime_authority_scope": "selective_model_fitting_evidence_only_calibration_and_e2e_still_required",
+  "fallback_action": "Q0",
+  "ordering_only": true,
+  "can_filter": false,
+  "can_prune": false,
+  "can_change_bound": false,
+  "can_certify": false,
+  "frozen_file_sha256": {
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py": "2d9a6b7105d2da0310e4765169ae1592d5f51baae3fed8fc84ff3afc6b5c2fa9",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_gat.py": "018d39c8688f7fb0cedff5fdde29f5fe037253a6fe75fbc21f7c93645f7a5db8",
+    "src/lunar_ice_bpc/guidance/qg2_runtime_oracle_authority.py": "4a809434e9f1685e358a14b3079f64fcfb048e4f688dcf3eca6bfa180ab4128c",
+    "src/lunar_ice_bpc/guidance/qg2_oracle_evidence.py": "820ba4bb215eae876d34e28380e81bc7a7b02e66fbaeeef869cd0127dc6b09b0"
+  }
+}

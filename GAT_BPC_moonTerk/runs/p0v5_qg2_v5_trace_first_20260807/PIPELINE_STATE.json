@@ -1,0 +1,23 @@
+{
+  "force_on_screen_ready": false,
+  "label_gat_ready": true,
+  "label_gat_smoke_ready": true,
+  "mlp_or_linear_started": false,
+  "production_switch_performed": false,
+  "returncode": 1,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v5_trace_first_state.v1",
+  "status": "LABEL_GAT_FORCE_ON_SCREEN_FAILED",
+  "trace_corpus_ready": true,
+  "trace_progress": {
+    "completed_by_scale": {
+      "30": 33,
+      "50": 12
+    },
+    "completed_contexts": 45,
+    "last_state_hash": "2f68b00a9282b1638b0b8bebb08074f449ff3e34d571ee050af601bb2a711b9c",
+    "random_or_leaked_qo2_replays": 0,
+    "schema_version": "lunar_ice_bpc.p0v5_qg2_trace_supervision_progress.v1",
+    "selected_contexts": 53
+  },
+  "updated_at": "2026-08-07T11:55:03+08:00"
+}

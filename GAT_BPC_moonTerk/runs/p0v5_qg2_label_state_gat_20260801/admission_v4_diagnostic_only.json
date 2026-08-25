@@ -1,0 +1,14 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_superseded_collection.v1",
+  "status": "INTERRUPTED_AFTER_TEST_COMPLETION",
+  "development_only": true,
+  "deployable": false,
+  "oracle_eligible": false,
+  "interrupted_at_local": "2026-08-01T20:19:48+08:00",
+  "reason": "collection used the earlier gat_p0v2 development corpus while recorder and action-policy binding were still transitioning",
+  "snapshot_dir": "runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshots_admission_v4",
+  "run_dir": "runs/p0v5_qg2_label_state_gat_20260801/snapshot_collection_admission_v4_scale30_batch01",
+  "replacement_freeze": "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v1_collection_freeze.json",
+  "replacement_corpus": "data/p0v5_qg2_oracle_development_v3/manifest.json",
+  "retention": "preserved_for_diagnostics_only_not_deleted"
+}

@@ -1,0 +1,116 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_production_config.v1",
+  "experiment_id": "p0v5_temporal_gat_production_v1_round2_20260819",
+  "run_root": "runs/p0v5_temporal_gat_production_v1_round2_20260819",
+  "corpus_root": "data/p0v5_temporal_gat_production_v1_round2",
+  "selected_exact_config": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "formal_acceptance_contract": "configs/experiments/p0v4_final_acceptance_v1.yaml",
+  "native_build_dir": "build/native-spprc-temporal-frontier-v10",
+  "reference_native_build_dir": "build/native-spprc-counterfactual-prefix-v8r1",
+  "required_native_build_info": {
+    "label_state_bytes": "176",
+    "ng_dssr_v3_compiled": "true",
+    "ng_dssr_v3_policy": "multi_sortie_ng_memory_counterexample_refinement_v3",
+    "bidirectional_feasibility_compiled": "true",
+    "bidirectional_feasibility_policy": "p0v4_frozen_dual_depot_meet_max_plus_v1",
+    "bidirectional_task_meet_policy": "p0v4_frozen_dual_task_meet_max_plus_v1",
+    "bidirectional_journey_probe_policy": "p0v4_frozen_dual_task_meet_journey_label_v1",
+    "bidirectional_midpoint_meet_policy": "p0v4_frozen_dual_depot_midpoint_meet_v1",
+    "bidirectional_feasibility_certificate_authority": "none",
+    "frontier_temporal_gat_bundle_schema": "lunar_ice_bpc.p0v5_temporal_frontier_gat_bundle.v2"
+  },
+  "native_differential_cases": 500,
+  "scales": [30, 50],
+  "instances_per_scale": 80,
+  "seed_base_by_scale": {"30": 9490000, "50": 9690000},
+  "generation_retry": {
+    "maximum_attempts": 16,
+    "seed_stride": 10000000,
+    "retry_only_on_instance_validation_or_protected_hash_rejection": true
+  },
+  "real_map_generation": {
+    "output_cells": 500,
+    "edge_generation_mode": "batched_cost_surface_v1",
+    "checkpointed_per_instance": true
+  },
+  "split_counts_by_scale": {
+    "train": 40,
+    "calibration": 12,
+    "development_e2e": 12,
+    "sealed_final": 16
+  },
+  "boundary_by_scale": {"30": 4096, "50": 16384},
+  "trial_k_candidates": [128, 512, 2048],
+  "maximum_contexts_per_instance": 3,
+  "blocked_fresh_process_repeats": 3,
+  "execution": {
+    "single_host_instance": true,
+    "memavailable_reserve_gb": 2.0,
+    "effective_native_memory_limit_gb": 10.867,
+    "scale30_task_cap_sec": 300,
+    "scale50_task_cap_sec": 600
+  },
+  "k_selection_gates": {
+    "minimum_determined_instances": 32,
+    "oracle_gm_at_most": 0.95,
+    "trial_revert_gm_at_most": 1.02,
+    "trial_revert_worst_at_most": 1.10,
+    "scale30_minimum_continue_instances": 24,
+    "scale30_minimum_revert_or_adverse_instances": 4,
+    "scale50_minimum_continue_instances": 8,
+    "scale50_minimum_revert_instances": 8,
+    "scale50_minimum_strong_benefit_instances": 5,
+    "continue_oracle_ratio_below": 1.0,
+    "adverse_ratio_at_least": 1.05,
+    "strong_benefit_ratio_at_most": 0.95,
+    "correctness_redline_max": 0,
+    "resource_censor_max": 0
+  },
+  "threshold_grid": {
+    "minimum_benefit_probability": [0.5, 0.6, 0.7, 0.8, 0.9],
+    "maximum_adverse_probability": [0.05, 0.1, 0.2],
+    "minimum_expected_gain": [0.0, 0.02, 0.05],
+    "maximum_disagreement": [0.02, 0.05, 0.1]
+  },
+  "model": {
+    "kind": "shared_temporal_multires_gat_scale_specific_heads",
+    "hidden_size": 32,
+    "attention_heads": 4,
+    "layers": 2,
+    "shared_trunk": [128, 64],
+    "dropout": 0.1,
+    "ensemble_seeds": [61635, 91267, 170141],
+    "label_sample_cap": 256,
+    "cell_node_count": 64
+  },
+  "training": {
+    "epochs": 120,
+    "learning_rate": 0.001,
+    "weight_decay": 0.00001,
+    "instance_grouped_folds": 5,
+    "normalization_scope": "fold_train_only"
+  },
+  "ood_policy": {
+    "kind": "per_feature_fold_train_mean_std_envelope_v1",
+    "standard_deviation_radius": 8.0,
+    "zero_variance_epsilon": 1e-12
+  },
+  "representation_gates": {
+    "scale50_gat_must_beat_best_simple_benefit_ba": true,
+    "scale50_gat_must_beat_best_simple_policy_utility": true,
+    "shuffled_topology_ba_degradation_at_least": 0.01
+  },
+  "development_gates": {
+    "per_scale_gm_at_most": 0.95,
+    "harm_ratio": 1.05,
+    "scale30_always_continue_regression_at_most": 1.01,
+    "scale50_best_control_ratio_at_most": 0.98,
+    "peak_rss_ratio_at_most": 1.05,
+    "inference_p99_ms_at_most": 10.0,
+    "probe_overhead_gm_at_most": 1.01,
+    "probe_overhead_worst_at_most": 1.05
+  },
+  "development_only": true,
+  "deployment_authorized": false,
+  "production_switch_authorized": false
+}

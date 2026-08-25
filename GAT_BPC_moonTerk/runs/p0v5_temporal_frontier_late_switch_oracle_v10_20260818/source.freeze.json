@@ -1,0 +1,36 @@
+{
+  "git_commit": "5453fbcdab4cd5febfea745fdb0a23b91af92c61",
+  "reference_native_binary": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8r1/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "reference_native_binary_sha256": "9c480887292fc9bd2cdddf2df89031067a4298860213fc6d0e9fc1c95fa3103f",
+  "reference_native_build": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8r1",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_source_freeze.v1",
+  "selected_exact_config": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "selected_exact_config_sha256": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+  "source_sha256": {
+    "configs/experiments/p0v5_temporal_frontier_late_switch_oracle_v10.json": "4bb7f83a963c9b5458261816bffe80852b3d79479eaad6f5440dd5470bca9d72",
+    "native/lunar_spprc/include/lunar_spprc/native_pricer.hpp": "20816fb495ca63cb2ad8d9b4aa604d5a4ba476e216c6daa5b66786f92099760b",
+    "native/lunar_spprc/src/native_pricer.cpp": "e05f9441f4b68228f687f731eb4a42a504dda1b76aed7fef77d33a403927f0af",
+    "native/lunar_spprc/src/pybind_module.cpp": "199c0394325370fade0b243494cecdbc599fd06dd27e5aa18b880acd28c56e30",
+    "native/lunar_spprc/tests/test_native_pricer.cpp": "4206ecabb730392f15b28d0dff3c1b22e1c583527ec4333c62b4c8ab75d7ab0a",
+    "plan/GAT/P0V5_TEMPORAL_FRONTIER_LATE_SWITCH_V10_20260818_ZH.md": "33b87aecac8660de392105a93763e0f0cb2a4d22bf134679690214cf52273d97",
+    "scripts/audit_p0v5_counterfactual_native_differential_v8.py": "8fd7fc6e363cdd6c420ed8a70cc100423d2b1c2bdda22c4e6cf0ed0142cf9bda",
+    "scripts/audit_p0v5_temporal_frontier_native_differential_v10.py": "0d5a8d970ecb09abe99a5dab622c9fb76f70e5dabd82b01b4203605c511c4acb",
+    "scripts/freeze_p0v5_temporal_frontier_late_switch_pilot_v10.py": "994b66b09d8a4c1e70fedbd4f9645b7d7f05a321abc152edf26e614800ea5208",
+    "scripts/initialize_p0v5_temporal_frontier_late_switch_oracle_v10.py": "1d21f367969b97c6068415c69b3123c6d07a3c62746c98a52592440bd0763843",
+    "scripts/p0v5_temporal_frontier_late_switch_v10_common.py": "bb0d9242e758fb2b420123a87d75c94106f2cf6a481ebab34c247072cf98bf3d",
+    "scripts/replay_p0v5_qg2_label_state_snapshot.py": "2c66df96aa49e4d91d6d25c087949b09c411137a6bdb4887be62b2eea78b21cf",
+    "scripts/run_p0v5_temporal_frontier_late_switch_matrix_v10.py": "a1842812ae6cda849ab32a82460fefcd69fd2646b64c153593c15055f174fd4b",
+    "src/lunar_ice_bpc/exact/bpc/pricing/backends/base.py": "2c60ac3badbbddbfac6dad021d7326bc6e9905d2c6432c34b4a146cf1ec1178f",
+    "src/lunar_ice_bpc/exact/bpc/pricing/backends/native_bidirectional_hybrid.py": "92fa63803d205a60d268bb80290fa29bdf517d0418605ceb8ada0d27dfe944ff",
+    "src/lunar_ice_bpc/exact/bpc/pricing/backends/native_rcspp.py": "8d43ef2c6efdb0c15adb6b3a07bb8d51ad2397ed2739fce16a3f27199e2f84e7",
+    "tests/test_p0v5_temporal_frontier_late_switch_v10.py": "8f92ca1758718771e4a4f8184059f0ca2cdecbb22e3d1d369a4b822ded7b6103"
+  },
+  "temporal_engine_hashes": {
+    "inprocess": "d8c020a26d058836",
+    "root_partial_hybrid": "c26e1d77ba5e116f"
+  },
+  "temporal_native_binary": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-temporal-frontier-v10/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "temporal_native_binary_sha256": "25d91f99f62c91595012476bc5884fd5a4c0dd6f70eaf1182b4fb4ff2829c251",
+  "temporal_native_build": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-temporal-frontier-v10",
+  "worktree_may_be_dirty": true
+}

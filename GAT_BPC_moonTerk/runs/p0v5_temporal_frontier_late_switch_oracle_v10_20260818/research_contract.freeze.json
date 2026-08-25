@@ -1,0 +1,11 @@
+{
+  "candidate_training_forbidden": true,
+  "fresh_authorization_requires_new_instance_pilot_after_this_diagnostic": true,
+  "qb1_forced_veto": true,
+  "qgr1_forced_veto": true,
+  "question": "does a later in-request QD1 switch create scale50 oracle headroom without auxiliary prefix requests",
+  "scale30_strategy": "high-activation QD1 at 4096",
+  "scale50_strategy": "selective boundary from 4096/8192/16384",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_research_contract.v1",
+  "threshold_search_forbidden": true
+}

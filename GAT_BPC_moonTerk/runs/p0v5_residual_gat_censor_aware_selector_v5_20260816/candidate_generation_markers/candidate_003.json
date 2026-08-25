@@ -1,0 +1,9 @@
+{
+  "accepted_instance_index": 3,
+  "arm_model_ranker_calls": 0,
+  "generator_returncode": 0,
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_residual_gat_censor_aware_selector_v5_candidates/lunar_ice_sp50_030/instance_003_logical_graph.json",
+  "instance_sha256": "992dc07cf5721b9aea29fdfe3bd0073fda6691391d327a1100c5f533569d4d8c",
+  "resumed_after_generation": false,
+  "schema_version": "lunar_ice_bpc.p0v5_candidate_generation_marker.v5"
+}

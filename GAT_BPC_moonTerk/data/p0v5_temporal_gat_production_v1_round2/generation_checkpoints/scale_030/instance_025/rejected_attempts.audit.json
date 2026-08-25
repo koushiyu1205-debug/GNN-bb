@@ -1,0 +1,22 @@
+{
+  "accepted_attempt": 1,
+  "accepted_seed": 19490025,
+  "index": 25,
+  "rejected_attempts": [
+    {
+      "attempt": 0,
+      "reasons": [
+        "reference_solution.journeys[3].sorties[4]: exceeds horizon_min"
+      ],
+      "seed": 9490025,
+      "validation_accepted": false
+    }
+  ],
+  "retry_policy": {
+    "maximum_attempts": 16,
+    "retry_only_on_instance_validation_or_protected_hash_rejection": true,
+    "seed_stride": 10000000
+  },
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.temporal_gat_generation_rejections.v1"
+}

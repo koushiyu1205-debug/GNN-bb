@@ -1,0 +1,83 @@
+{
+  "approved_decisions": [
+    "ALLOW_ROUND5_ELIGIBILITY_TO_FINISH_WITHOUT_INTERRUPTION",
+    "HARD_STOP_AFTER_D5_CAPACITY_AND_REUSE_AUDIT",
+    "FREEZE_V2_BEFORE_FIRST_THREE_ARM_OUTCOME",
+    "REUSE_D5_CORPUS_VALID_SNAPSHOTS_AND_ELIGIBILITY",
+    "ALLOW_MULTIPLE_POLICY_ROUNDS_TO_REFERENCE_D5_UNDER_ACCESS_LEDGER"
+  ],
+  "authority": {
+    "deployment_authorized": false,
+    "gat_certificate_authority": false,
+    "production_switch_authorized": false,
+    "production_default": "no_cut"
+  },
+  "data_epoch": {
+    "data_epoch_id": "p0v5_temporal_gat_data_epoch_d5_20260824",
+    "eligibility_final_count_at_protocol_freeze": 31,
+    "eligibility_must_finish_before_d5_finalization": true,
+    "expected_raw_snapshot_count": 274,
+    "legacy_round_id": "p0v5_temporal_gat_production_v1_round5_20260824",
+    "policy_outcome_artifact_count_at_protocol_freeze": 0,
+    "policy_outcomes_forbidden_until_v2_policy_freeze": true,
+    "role": "OUTCOME_BLIND_REUSABLE_DATA_EPOCH"
+  },
+  "effective_at": "2026-08-25T16:01:36+08:00",
+  "failure_recovery": {
+    "default_invalidation_policy": "DEPENDENCY_AND_PARTITION_ACCESS_SCOPED_V2",
+    "full_restart_only_for": [
+      "PLATFORM_CORRECTNESS_REDLINE",
+      "ABI_OR_MIGRATION_MISMATCH_AFFECTING_ALL_BOUND_OUTCOMES",
+      "UNRESOLVED_DEPENDENCY_OR_ACCESS_AMBIGUITY"
+    ],
+    "terminal_closes_policy_hypothesis_not_data_epoch": true,
+    "unopened_partitions_may_be_reused_after_verifier_pass": true
+  },
+  "hard_stop": {
+    "after_stage": "D5_CAPACITY_REUSE_ACCESS_AUDIT",
+    "automatic_three_arm_launch": false,
+    "required_outputs": [
+      "D5_COMPLETION.audit.json",
+      "D5_CONTEXT_CAPACITY.audit.json",
+      "D5_ARTIFACT_REUSE.audit.json",
+      "D5_PARTITION_ACCESS.ledger.json",
+      "D5_ZERO_ARM_OUTCOME.audit.json",
+      "D5_DATA_EPOCH.freeze.json",
+      "NEXT_ACTION.json"
+    ]
+  },
+  "immutable_bindings": {
+    "d5_corpus_manifest": "data/p0v5_temporal_gat_production_v1_round5/corpus.freeze.json",
+    "d5_corpus_manifest_sha256": "24ed33a714c6f459594f8f753a6be7136cfc16c4e120d5d6f65c22a60848b6b1",
+    "protocol_document": "plan/GAT/P0V4_V5_TEMPORAL_GAT_V2_FAILURE_AWARE_REUSE_PROTOCOL_REVISION_20260825_ZH.md",
+    "protocol_document_sha256": "27eff6ba60516d9ade20d7aca87266115fbc435239df8c9fe00b0a47dad77c7a",
+    "round5_config": "configs/experiments/p0v5_temporal_gat_production_v1_round5.json",
+    "round5_config_freeze": "runs/p0v5_temporal_gat_production_v1_round5_20260824/config.freeze.json",
+    "round5_config_freeze_sha256": "2958c4dafe161c77953696509bf749ce97a9de00e6bf89c4496b0457b21fe609",
+    "round5_config_sha256": "7bb5091ded82ddb412a2ecfc186cb2558dfb4bf89e0b8ce48774f85231d1cef5",
+    "round5_research_contract": "runs/p0v5_temporal_gat_production_v1_round5_20260824/research_contract.freeze.json",
+    "round5_research_contract_sha256": "853d6462f75b668ba556e08a5a492833a764748ec8696d58cda3283b1a587e4f",
+    "round5_source_freeze": "runs/p0v5_temporal_gat_production_v1_round5_20260824/source.freeze.json",
+    "round5_source_freeze_sha256": "8ee71258c10a59ae9beebcd28e6069af6a030bf46be093bf1f7c15cec6ea645b"
+  },
+  "layer_model": [
+    "PLATFORM_EPOCH",
+    "DATA_EPOCH",
+    "POLICY_ROUND",
+    "EVALUATION_ATTEMPT"
+  ],
+  "must_not_mutate_while_d5_eligibility_runs": [
+    "ROUND5_CONFIG_FREEZE",
+    "ROUND5_SOURCE_INVENTORY",
+    "ROUND5_NATIVE_BINARY",
+    "ROUND5_CORPUS_MANIFEST",
+    "ROUND5_ELIGIBILITY_EXECUTION_SOURCE"
+  ],
+  "protocol_id": "p0v4_v5_temporal_gat_failure_aware_reuse_v2_20260825",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_protocol_revision.v2",
+  "status": "FROZEN_BEFORE_FIRST_D5_ARM_OUTCOME",
+  "supersedes": {
+    "rule": "ANY_TERMINAL_NEGATIVE_REGENERATES_ALL_PARTITIONS_AND_RESTARTS_ALL_STAGES",
+    "scope": "FAILURE_RECOVERY_ONLY"
+  }
+}

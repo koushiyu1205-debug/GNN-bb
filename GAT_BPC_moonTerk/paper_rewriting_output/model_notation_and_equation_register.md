@@ -523,3 +523,34 @@ and the reporting-only status of EQ-07.
    experiment slot, and claim-register update before it appears in prose.
 4. A new path generator changes the exactness scope and requires new instance
    and proof-boundary language.
+# 2026-08-03 P0V4+V5/QG2 notation extension
+
+| Symbol | Meaning | Typeface rule |
+|---|---|---|
+| \(\mathcal W^{\mathrm{mid}}_n\) | audited negative-column witnesses returned by the bidirectional midpoint prepass at node \(n\) | changing node index italic; fixed label `mid` upright |
+| \(\Delta_g^{\mathrm{RMP}}\) | restricted-master bound change obtained when testing root-cut group \(g\) | group index italic; fixed label `RMP` upright |
+| \(h(\ell)\) | QG2 priority score of label \(\ell\) | variable and label index italic |
+| \(b_\eta(\ell)\) | reduced-cost bucket of label \(\ell\) under frozen width \(\eta>0\) | \(b,\eta,\ell\) italic |
+| \(q(\ell)\) | exact partial reduced cost of label \(\ell\) | italic |
+| \(u(\ell)\) | indicator that label \(\ell\) can terminate as a nonempty depot-return route | italic function; prose defines the indicator |
+| \(\tau(\ell)\) | deterministic creation number | italic |
+
+The manuscript may display the QG2 order as the lexicographic tuple
+
+\[
+K(\ell)=\bigl(-u(\ell),\ b_\eta(\ell),\ -h(\ell),\ q(\ell),\ \tau(\ell)\bigr),
+\]
+
+sorted in ascending order. This expression is an ordering key, not a learned
+reduced cost. The learning term is reached only after terminal class and
+reduced-cost bucket have tied. When QG2 is inactive or rejected, the literal Q0
+queue is used; the paper must not imply that setting \(h=0\) recreates Q0
+through a different container.
+
+For deterministic V5 root-cut screening, a candidate group \(g\) may be
+committed only when the trial restricted master is optimal and either its
+primal solution is integral or
+\(\Delta_g^{\mathrm{RMP}}\ge \varepsilon_{\mathrm{gain}}\). This rule selects
+among already valid SRI-3 rows. It is not itself a validity condition and its
+trial bound is not an official node bound before commitment and exact
+reoptimization.

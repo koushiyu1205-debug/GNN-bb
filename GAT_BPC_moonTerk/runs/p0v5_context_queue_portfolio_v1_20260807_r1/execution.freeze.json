@@ -1,0 +1,68 @@
+{
+  "action_universe": [
+    "Q0",
+    "QGR1",
+    "QD1",
+    "QB1"
+  ],
+  "execution": {
+    "arm_order": "rotate_by_state_hash",
+    "blocked_fresh_process_repeats": 3,
+    "formal_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "q0_repeated_in_every_block": true,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "same_prefrozen_milestone_required": true,
+    "single_native_process": true
+  },
+  "formal_outcomes_may_not_reenter_training": true,
+  "historical_inputs": {
+    "old_single_run_arm_outcomes": "diagnostic_only",
+    "qo2_leaked_outcomes": "diagnostic_only",
+    "tinygat": "diagnostic_only",
+    "v3_synthetic_selector": "diagnostic_only"
+  },
+  "qgr1_bucket_width": 0.0001,
+  "schema_version": "lunar_ice_bpc.p0v5_context_queue_portfolio_execution_freeze.v1",
+  "selector_seeds": [
+    61635,
+    91267,
+    170141
+  ],
+  "selector_tiebreak_order": [
+    "zero_correctness_redline",
+    "zero_calibration_harmful_activation_or_noop",
+    "minimum_worst_scale_gm",
+    "minimum_instance_weighted_combined_gm",
+    "minimum_harmful_wilson95_upper",
+    "minimum_preparation_p99",
+    "minimum_parameter_count"
+  ],
+  "status": "FROZEN_BEFORE_ANY_PORTFOLIO_OUTCOME",
+  "threshold_grid": {
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "risk_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ]
+  }
+}

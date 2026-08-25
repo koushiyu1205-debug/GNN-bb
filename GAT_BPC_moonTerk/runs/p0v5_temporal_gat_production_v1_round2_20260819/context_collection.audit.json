@@ -1,0 +1,42 @@
+{
+  "corpus_sha256": "10011a00b655c4436f06cda7beb7d7d115fb5053bd1d97fd065f9b02e398d4b2",
+  "correctness_redline_count": 0,
+  "engine_hash_counts": {
+    "5d752a393e54ae2d": 183
+  },
+  "errors": [],
+  "expected_train_cal_instances": 104,
+  "heldout_marker_or_snapshot_leakage_count": 0,
+  "instances_with_snapshots": 95,
+  "instances_without_snapshots": [
+    "14af3292730a90c9",
+    "51b72db176fff6c5",
+    "7046e7757db15eab",
+    "afe874a354420c58",
+    "b29ecf70a9aa6125",
+    "bc23126cb0e0f80d",
+    "c2740c158b9057cd",
+    "cb9cba5dd7f2318f",
+    "ce7fffa43d79f96c"
+  ],
+  "marker_count": 104,
+  "marker_manifest_exact_match": true,
+  "marker_returncodes": {
+    "1": 104
+  },
+  "maximum_snapshots_per_instance": 7,
+  "partial_file_count": 0,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_context_collection_audit.v1",
+  "snapshot_count": 183,
+  "snapshot_count_by_scale_partition": {
+    "scale30_calibration": 11,
+    "scale30_train": 33,
+    "scale50_calibration": 32,
+    "scale50_train": 107
+  },
+  "source_freeze_sha256": "8e79971ae042c66b8261d95da24ae38e1b587b34074950495fe963fba997aa9c",
+  "status": "PASS",
+  "unique_context_config_hash_count": 183,
+  "unique_snapshot_sha256_count": 183,
+  "unique_state_hash_count": 183
+}

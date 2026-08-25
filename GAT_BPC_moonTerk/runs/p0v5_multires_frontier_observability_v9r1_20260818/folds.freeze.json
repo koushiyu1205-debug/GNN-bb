@@ -1,0 +1,195 @@
+{
+  "fold_count": 5,
+  "reused_without_change_from": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_base_label_frontier_observability_v9r0_20260818/folds.freeze.json",
+  "rows": [
+    {
+      "context_count": 1,
+      "fold": 1,
+      "instance_hash": "07318c0416425be5",
+      "scale": 30
+    },
+    {
+      "context_count": 2,
+      "fold": 0,
+      "instance_hash": "296a3155f2f99afa",
+      "scale": 30
+    },
+    {
+      "context_count": 2,
+      "fold": 1,
+      "instance_hash": "36658f9c48a480aa",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 1,
+      "instance_hash": "4a75319d174fdd19",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 3,
+      "instance_hash": "4c3e017314d9a3ee",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 4,
+      "instance_hash": "5ac004e434340ddd",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 0,
+      "instance_hash": "6cc232d48d44f2d3",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 3,
+      "instance_hash": "6f17b70d5674dc08",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 2,
+      "instance_hash": "716f194babe1bf7d",
+      "scale": 30
+    },
+    {
+      "context_count": 2,
+      "fold": 3,
+      "instance_hash": "77176536c5b0f521",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 4,
+      "instance_hash": "9e28af267ed553c3",
+      "scale": 30
+    },
+    {
+      "context_count": 2,
+      "fold": 2,
+      "instance_hash": "a7acc5b02e62e549",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 2,
+      "instance_hash": "c3b4e15cc7f5a44f",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 0,
+      "instance_hash": "e5f80e8bd698b75d",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 4,
+      "instance_hash": "fbd070417ed00ce5",
+      "scale": 30
+    },
+    {
+      "context_count": 1,
+      "fold": 2,
+      "instance_hash": "0901f02491d45908",
+      "scale": 50
+    },
+    {
+      "context_count": 2,
+      "fold": 2,
+      "instance_hash": "125aaef31ef11d35",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 4,
+      "instance_hash": "14c6262160809d66",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 1,
+      "instance_hash": "16407bf4d988d595",
+      "scale": 50
+    },
+    {
+      "context_count": 2,
+      "fold": 1,
+      "instance_hash": "22e4e44594b5766b",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 1,
+      "instance_hash": "23cc0c6fee9f1fa0",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 3,
+      "instance_hash": "3f257a94c89bf615",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 2,
+      "instance_hash": "510dcbb1be8deee5",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 4,
+      "instance_hash": "56286c37063f6048",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 3,
+      "instance_hash": "665810f5957bfe6b",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 0,
+      "instance_hash": "79478c234c73e4f2",
+      "scale": 50
+    },
+    {
+      "context_count": 2,
+      "fold": 0,
+      "instance_hash": "7f3230fed387dae8",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 4,
+      "instance_hash": "8e35efca611548b7",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 0,
+      "instance_hash": "9003925e2924006a",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 3,
+      "instance_hash": "a21f4ca58f222d77",
+      "scale": 50
+    },
+    {
+      "context_count": 1,
+      "fold": 3,
+      "instance_hash": "ea7975bf0465b1c7",
+      "scale": 50
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_base_label_frontier_folds.v1",
+  "seed": 2608184096,
+  "source_sha256": "f1a6230ffcb6089a90601ec145d27f10e66721b6249b883b37058742052837c9"
+}

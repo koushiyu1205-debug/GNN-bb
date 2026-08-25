@@ -1,0 +1,12 @@
+{
+  "current_stage": "TERMINAL",
+  "deployment_authorized": false,
+  "development_only": true,
+  "experiment_id": "p0v5_native_frontier_gat_qd1_selector_v7_20260817",
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_native_frontier_gat_state.v7",
+  "status": "FAIL",
+  "terminal": true,
+  "terminal_decision": "terminal_decision.json",
+  "terminal_reason": "NO_FRONTIER_SWITCH_HEADROOM"
+}

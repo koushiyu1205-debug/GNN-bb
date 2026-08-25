@@ -1,0 +1,30 @@
+{
+  "arm_outcomes_read": 0,
+  "candidate_index": 5,
+  "cohort": "pilot",
+  "generation_seed": 148542859,
+  "instance_content_hash": "ccc46882b6ddea07",
+  "instance_id": "lunar_ice_sp50_030_001_seed148842860",
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_native_frontier_gat_qd1_selector_v7_pilot_candidates/scale30/candidate_005/lunar_ice_sp50_030/instance_001_logical_graph.json",
+  "instance_sha256": "82e356c2e5b47a489812ebd4211938e59fc0d713b472b2e72150314a1b7ce36f",
+  "legal_snapshot_count": 1,
+  "reason": null,
+  "root_wall_not_used": true,
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.p0v5_v7_candidate_screen.v1",
+  "screen_status": "ELIGIBLE",
+  "selection_inputs": [
+    "candidate_index",
+    "legal_snapshot_count_ge_1"
+  ],
+  "snapshots": [
+    {
+      "snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_native_frontier_gat_qd1_selector_v7_20260817/census/pilot/scale30/candidate_005/snapshots/scale30/ccc46882b6ddea07/757e876cd797b4ffe7371fe17954fcbea12266bcebf019d4555c3aae4a8584b3.json",
+      "snapshot_sha256": "cc73caafd28d14972c1d4f2f150fc6c784a8b9dc711c1b823bfc51cc6eaeaf24",
+      "source_config_hash": "46d2b4cc245b58b31e207769f3483f4af61501f3fe2c1d8835eb07ecd4e1548c",
+      "source_engine_hash": "743198d7928704a7",
+      "source_exact_action_policy_hash": "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+      "state_hash": "757e876cd797b4ffe7371fe17954fcbea12266bcebf019d4555c3aae4a8584b3"
+    }
+  ]
+}

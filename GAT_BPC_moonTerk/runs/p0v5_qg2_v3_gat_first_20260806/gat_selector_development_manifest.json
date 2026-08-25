@@ -1,0 +1,141 @@
+{
+  "action_universe": [
+    "Q0",
+    "QD1",
+    "QB1"
+  ],
+  "allowed_exact_action_policy_hashes": [
+    "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+    "b2f9eab6bd01d12a0f4319342550733ddb0510e559d5e6a6abc119765d2203e2"
+  ],
+  "allowed_exact_engine_hashes": [
+    "e69335fd88f14a9b"
+  ],
+  "allowed_scales": [
+    30,
+    50
+  ],
+  "backend_id": "native_rcspp_bidirectional_root_partial_hybrid_v3",
+  "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/arm_selector_gat_v1/qg2_v3_gat_arm_selector.pt",
+  "checkpoint_sha256": "1f6b93641f7c6e26d5c8c70a5ffebfea959fbd8930efecec9a5a297001f8ee4a",
+  "deployable": false,
+  "deployment_authorized": false,
+  "development_e2e_authorized": true,
+  "development_only": true,
+  "fallback_action": "Q0",
+  "feature_envelope": {
+    "context_max": [
+      3.9318256327243257,
+      -0.001476,
+      0.182286025,
+      0.11888029173408275,
+      0.055098,
+      0.49992375,
+      9.140990293841389,
+      1.0,
+      9.140990293841389,
+      1.0,
+      1.0,
+      0.275687893081761,
+      4.343805421853684,
+      1.0,
+      6.97203243159093,
+      1.0,
+      16.719730485803673,
+      1.0,
+      2.0305458,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0,
+      0.9019378644977698,
+      1.0,
+      1.0
+    ],
+    "context_min": [
+      3.4339872044851463,
+      -0.93138425,
+      0.0338975583,
+      0.01455918500604285,
+      -0.178741601,
+      0.070711815,
+      7.053585727193677,
+      1.0,
+      7.053585727193677,
+      1.0,
+      1.0,
+      0.16275850943700598,
+      0.6931471805599453,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0,
+      0.208076591020773,
+      1.0,
+      0.0
+    ],
+    "edge_max_abs": 9.873724,
+    "fit_partition": "train_instances_only",
+    "node_max_abs": 4.375421935020634,
+    "relative_margin": 0.05
+  },
+  "feature_envelope_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/feature_envelope.json",
+  "feature_envelope_sha256": "d940bc67ef6530db91aba0c37b0926ce3da2c6abea7d4cbf05c0306cedc0a136",
+  "forced_veto_arms": [
+    "QG2"
+  ],
+  "fresh_heldout_summary": {
+    "overall": {
+      "activated_count": 4,
+      "all_safe": true,
+      "beneficial_count": 4,
+      "context_count": 22,
+      "harmful_count": 0,
+      "net_geomean_ratio": 0.7773690984487495
+    },
+    "scale30": {
+      "activated_count": 2,
+      "all_safe": true,
+      "beneficial_count": 2,
+      "context_count": 10,
+      "harmful_count": 0,
+      "net_geomean_ratio": 0.9777530840142836
+    },
+    "scale50": {
+      "activated_count": 2,
+      "all_safe": true,
+      "beneficial_count": 2,
+      "context_count": 12,
+      "harmful_count": 0,
+      "net_geomean_ratio": 0.6421340083762355
+    }
+  },
+  "fresh_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/arm_selector_fresh_heldout_v1/report.json",
+  "fresh_report_sha256": "6c99a54793b4013ff3668e584d60131be6efcf1030158810716a878488550c70",
+  "model_kind": "gat",
+  "production_switch_authorized": false,
+  "qg2_label_state_arm_status": "hard_vetoed_force_on_4_of_4_adverse",
+  "runtime_implementation_hash": "14cd977c749d45363b22c8d035c46a9109047b525f9668dd857290620d754a7b",
+  "runtime_policy_id": "p0v5_qg2_v3_q0_qd1_qb1_fail_closed.v1",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v3_selector_runtime_manifest.v1",
+  "selector_training_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/arm_selector_gat_v1/training_report.json",
+  "selector_training_report_sha256": "3cdbf26ba4850faa0a931a561b9c4a9949fec3eb8e0e0f545c62e68a778f3fff",
+  "thresholds": {
+    "maximum_adverse_probability": 0.0001694081729510799,
+    "minimum_benefit_probability": 0.5,
+    "minimum_expected_gain": 0.01,
+    "risk_penalty": 0.5
+  },
+  "torch_num_threads": 1,
+  "training_source_exact_engine_hashes_diagnostic_only": [
+    "0389484e5f5623f2"
+  ]
+}

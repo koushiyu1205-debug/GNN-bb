@@ -1,0 +1,119 @@
+{
+  "checks": {
+    "activated_risk_veto": {
+      "evidence": {},
+      "note": "activated-action risk audit missing",
+      "status": "INCOMPLETE"
+    },
+    "context_selector_decision": {
+      "evidence": {},
+      "note": "context selector decision missing",
+      "status": "INCOMPLETE"
+    },
+    "development_scale30_50_e2e": {
+      "evidence": {},
+      "note": "development acceptance missing",
+      "status": "INCOMPLETE"
+    },
+    "formal_scale5_to_50_full20": {
+      "evidence": {},
+      "note": "formal acceptance missing",
+      "status": "INCOMPLETE"
+    },
+    "fresh_process_calibration": {
+      "evidence": {},
+      "note": "fresh-process calibration missing",
+      "status": "INCOMPLETE"
+    },
+    "independent_candidate_freeze": {
+      "evidence": {},
+      "note": "independent candidate freeze missing",
+      "status": "INCOMPLETE"
+    },
+    "linear_mlp_gat_training": {
+      "evidence": {},
+      "note": "Linear/MLP/GAT training report missing",
+      "status": "INCOMPLETE"
+    },
+    "oracle_and_training_authority": {
+      "evidence": {},
+      "note": "Oracle/training authority missing",
+      "status": "INCOMPLETE"
+    },
+    "regression_and_native_tests": {
+      "evidence": {
+        "commands": [
+          {
+            "command": [
+              "/home/kai/miniconda3/bin/python",
+              "-m",
+              "pytest",
+              "-q",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_action_surface_v2_completion_audit.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_action_surface_v2_controllers.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_calibration_risk_v2.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_context_arm_selector.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_formal_ordering_safety.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_label_state_gat.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_live_markdown.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_measured_portfolio_oracle.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_oracle_evidence.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_relaxed_training_controller.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_relaxed_training_gate.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_selective_oracle_evidence_sidecar.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_supplemental_calibration_controller.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_supplemental_calibration_manifest.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_supplemental_calibration_runner.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_supplemental_e2e_controller.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_supplemental_finalizer.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_supplemental_formal_controller.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_training_only_gate_v2.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_training_only_v2_calibration_controller.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_training_only_v2_completion_audit.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_training_only_v2_e2e_controller.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_training_only_v2_finalizer.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_training_only_v2_formal_controller.py",
+              "/home/kai/work/GAT_BPC_moonTerk/tests/test_p0v5_qg2_training_only_v2_formal_ordering_safety.py"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": "........................................................................ [ 40%]\n........................................................................ [ 80%]\n...................................                                      [100%]\n179 passed in 11.26s\n"
+          },
+          {
+            "command": [
+              "ctest",
+              "--test-dir",
+              "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1",
+              "--output-on-failure"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": "Internal ctest changing into directory: /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1\nTest project /home/kai/work/GAT_BPC_moonTerk/build/native-spprc-bidirectional-feasibility-v1\n    Start 1: lunar_spprc_native_tests\n1/2 Test #1: lunar_spprc_native_tests .........   Passed    0.01 sec\n    Start 2: lunar_spprc_patch_queue_check\n2/2 Test #2: lunar_spprc_patch_queue_check ....   Passed    0.02 sec\n\n100% tests passed, 0 tests failed out of 2\n\nTotal Test time (real) =   0.04 sec\n"
+          },
+          {
+            "command": [
+              "git",
+              "diff",
+              "--check"
+            ],
+            "returncode": 0,
+            "stderr_tail": "",
+            "stdout_tail": ""
+          }
+        ]
+      },
+      "note": "QG2 Python, Native CTest, State 176 B, and diff checks",
+      "status": "PASS"
+    }
+  },
+  "complete": false,
+  "completion_rule": "all_required_checks_must_pass",
+  "failed_check_count": 0,
+  "incomplete_check_count": 8,
+  "objective": "P0V5 Proof-Tail GAT V2 Q0-Anchored Label-State Guidance",
+  "passed_check_count": 1,
+  "pre_final_freeze": false,
+  "required_check_count": 9,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_training_only_v2_completion_audit.v1",
+  "track": "training_only_v2_selective_qg2"
+}

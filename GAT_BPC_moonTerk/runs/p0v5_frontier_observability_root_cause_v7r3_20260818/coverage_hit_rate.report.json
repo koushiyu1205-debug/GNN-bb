@@ -1,0 +1,133 @@
+{
+  "binomial_tail_algorithm": "stable_lower_cdf_recurrence_v1",
+  "candidate_outcomes_read": 0,
+  "decision": "PASS",
+  "maximum_repaired_candidate_cap": 600,
+  "primary_cohort": "v7_pilot_scale30",
+  "primary_interpretation": "V7 generator/engine scale30 is the conservative planning cohort; the Wilson-lower cap controls a future census.",
+  "reason": null,
+  "required_cap_for_largest_target": 584,
+  "rows": [
+    {
+      "candidate_caps": {
+        "37": {
+          "mle_probability_cap": 104,
+          "wilson_lower_probability_cap": 168
+        },
+        "8": {
+          "mle_probability_cap": 27,
+          "wilson_lower_probability_cap": 45
+        }
+      },
+      "cohort": "v2_generated_scale30",
+      "eligibility": "at_least_one_natural_root_context",
+      "hit_rate": 0.43333333333333335,
+      "scale": 30,
+      "successes": 13,
+      "trials": 30,
+      "wilson95_lower": 0.2737748557646652,
+      "wilson95_upper": 0.6080269299918639
+    },
+    {
+      "candidate_caps": {
+        "37": {
+          "mle_probability_cap": 37,
+          "wilson_lower_probability_cap": 78
+        },
+        "8": {
+          "mle_probability_cap": 8,
+          "wilson_lower_probability_cap": 20
+        }
+      },
+      "cohort": "v2_generated_scale50",
+      "eligibility": "at_least_one_natural_root_context",
+      "hit_rate": 1.0,
+      "scale": 50,
+      "successes": 5,
+      "trials": 5,
+      "wilson95_lower": 0.5655175352168251,
+      "wilson95_upper": 1.0
+    },
+    {
+      "candidate_caps": {
+        "37": {
+          "mle_probability_cap": 185,
+          "wilson_lower_probability_cap": 1038
+        },
+        "8": {
+          "mle_probability_cap": 50,
+          "wilson_lower_probability_cap": 286
+        }
+      },
+      "cohort": "v4_candidate_scale30",
+      "eligibility": "at_least_one_natural_root_context",
+      "hit_rate": 0.25,
+      "scale": 30,
+      "successes": 1,
+      "trials": 4,
+      "wilson95_lower": 0.04558726080970055,
+      "wilson95_upper": 0.6993581574175981
+    },
+    {
+      "candidate_caps": {
+        "37": {
+          "mle_probability_cap": 37,
+          "wilson_lower_probability_cap": 87
+        },
+        "8": {
+          "mle_probability_cap": 8,
+          "wilson_lower_probability_cap": 23
+        }
+      },
+      "cohort": "v4_candidate_scale50",
+      "eligibility": "at_least_one_natural_root_context",
+      "hit_rate": 1.0,
+      "scale": 50,
+      "successes": 4,
+      "trials": 4,
+      "wilson95_lower": 0.5101091635454027,
+      "wilson95_upper": 1.0
+    },
+    {
+      "candidate_caps": {
+        "37": {
+          "mle_probability_cap": 121,
+          "wilson_lower_probability_cap": 342
+        },
+        "8": {
+          "mle_probability_cap": 32,
+          "wilson_lower_probability_cap": 93
+        }
+      },
+      "cohort": "v5_repair_scale30",
+      "eligibility": "at_least_one_natural_root_context",
+      "hit_rate": 0.375,
+      "scale": 30,
+      "successes": 3,
+      "trials": 8,
+      "wilson95_lower": 0.13684428582359742,
+      "wilson95_upper": 0.6942576053973727
+    },
+    {
+      "candidate_caps": {
+        "37": {
+          "mle_probability_cap": 232,
+          "wilson_lower_probability_cap": 584
+        },
+        "8": {
+          "mle_probability_cap": 63,
+          "wilson_lower_probability_cap": 160
+        }
+      },
+      "cohort": "v7_pilot_scale30",
+      "eligibility": "at_least_one_natural_root_context_under_v7_generator_and_engine",
+      "hit_rate": 0.2,
+      "scale": 30,
+      "successes": 4,
+      "trials": 20,
+      "wilson95_lower": 0.08065766257979806,
+      "wilson95_upper": 0.41601743225189364
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_coverage_audit.v2"
+}

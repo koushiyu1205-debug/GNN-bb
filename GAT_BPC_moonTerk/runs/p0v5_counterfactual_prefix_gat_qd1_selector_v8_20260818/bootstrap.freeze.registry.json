@@ -1,0 +1,14 @@
+{
+  "artifact_sha256": {
+    "config.freeze.json": "a813b674ec4eccf6f52a98b55f15cdb1ec2e2e839387d8015e91e344ed61e347",
+    "interface.freeze.json": "4f6e2e8911a570c79251bc1d45ba16eb4211c53fc2f2e369b6b959f4e88cbbe1",
+    "native_differential.report.json": "547fe692699f2f52a9b8a96193313f3d339b006970b0212494ab0a08892bb4fa",
+    "representation_execution.freeze.json": "144440b9b924e9d98841b74239258cd5ef2dd6fcc186776f79ec85ed168da104",
+    "source.freeze.json": "b20204bc773468bb800eef6e0fa45a4bbd07d255726104a9c8873b9e76060575",
+    "state.initial.json": "6289342488dc5e57e018248385d4b0b56e7c04bcf267f225db3d72dedad344cb",
+    "v7r3_collapsed_labels.freeze.json": "bb1d0e714ebbbb146dbc3446d42998a0ced70c83ddee9bd28b766025995235e0",
+    "v7r3_representation_import.freeze.json": "44051b1e06096f2a278179a228830d8830dbca7eb371d7b743ab9081d1d66519"
+  },
+  "frozen_before_any_v8_prefix_wall": true,
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_bootstrap_freeze.v1"
+}

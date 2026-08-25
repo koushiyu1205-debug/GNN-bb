@@ -1,0 +1,87 @@
+{
+  "activation_authority": false,
+  "context_count": 110,
+  "deployable": false,
+  "development_only": true,
+  "feature_envelope_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/feature_envelope.json",
+  "feature_envelope_sha256": "d940bc67ef6530db91aba0c37b0926ce3da2c6abea7d4cbf05c0306cedc0a136",
+  "instance_count": 94,
+  "loss": "context_normalized_route_balanced_weighted_pairwise_logistic",
+  "model_execution_order": [
+    "gat",
+    "mlp",
+    "linear"
+  ],
+  "models": [
+    {
+      "checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/qg2_v3_gat.pt",
+      "checkpoint_sha256": "a7158d032f43765ba2ac80298ca72de09d286989f36a8c22ba258e38ca316a84",
+      "latest_checkpoint_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/qg2_v3_gat_latest.pt",
+      "model_kind": "gat",
+      "partition_metrics": {
+        "calibration": {
+          "context_count": 22,
+          "instance_count": 19,
+          "mean_context_pair_accuracy": 0.6896689317770694,
+          "per_kind_weighted_pair_accuracy": {
+            "admission_selected_vs_background": 0.9915315978334006,
+            "admission_selected_vs_omitted": 0.5774719119607454,
+            "existing_dominator": 0.9208183893783398,
+            "incoming_dominator": 0.7985219832097704,
+            "proof_terminal_parent_progress": 0.8372998766610598
+          },
+          "weighted_pair_accuracy": 0.6103463851354775
+        },
+        "heldout": {
+          "context_count": 22,
+          "instance_count": 18,
+          "mean_context_pair_accuracy": 0.6278186272557449,
+          "per_kind_weighted_pair_accuracy": {
+            "admission_selected_vs_background": 0.9980156516461041,
+            "admission_selected_vs_omitted": 0.5732017751633817,
+            "existing_dominator": 0.9460985327362437,
+            "incoming_dominator": 0.53493148964101,
+            "proof_terminal_parent_progress": 0.8375231273764253
+          },
+          "weighted_pair_accuracy": 0.610725426071323
+        },
+        "train": {
+          "context_count": 66,
+          "instance_count": 57,
+          "mean_context_pair_accuracy": 0.7698121827319451,
+          "per_kind_weighted_pair_accuracy": {
+            "admission_selected_vs_background": 0.9925359440360395,
+            "admission_selected_vs_omitted": 0.6617848478506179,
+            "existing_dominator": 0.921223180191869,
+            "incoming_dominator": 0.7639861878554678,
+            "proof_terminal_parent_progress": 0.9553898203407252
+          },
+          "weighted_pair_accuracy": 0.6877339797765932
+        }
+      }
+    }
+  ],
+  "next_gate": {
+    "action": "force_on_fresh_process_q0_vs_gat",
+    "requires_actual_gat_outcomes": true,
+    "selector_training_permitted": false
+  },
+  "normalization_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/train_normalization.json",
+  "normalization_sha256": "9706b6371589786670e8ac91a2dd1c6b0072fc433287de6c5f463952f2015c9d",
+  "oracle_summary": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_training_only_v2_view.json",
+  "oracle_summary_sha256": "5e4fd3a2355d5547db3b3a102bfd524cee148ff6c180403f7cae477f6f47d119",
+  "partition_context_counts": {
+    "calibration": 22,
+    "heldout": 22,
+    "train": 66
+  },
+  "ranker_only": true,
+  "ranker_schema_version": "lunar_ice_bpc.p0v5_qg2_admission_ranker.v3",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v3_ranker_training.v1",
+  "split_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/instance_split.json",
+  "split_sha256": "399d888a80e80cbcaf90ea2b7b4571d888e05c70ea3a94b468a610d764c2ba3b",
+  "supervision_schema_version": "lunar_ice_bpc.p0v5_qg2_route_balanced_admission_supervision.v3",
+  "training_curve_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/training_rankers/training_curve.jsonl",
+  "training_curve_sha256": "f87f09fe72c9890cd0ed206b0eef34271651caea9df743a575af9944fdc982ea",
+  "training_data_hash": "f20e209f2c038b5e5ac4260752d411862caca7faff1a3539d268424fbf3af676"
+}

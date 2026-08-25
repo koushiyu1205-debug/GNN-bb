@@ -1,0 +1,38 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_base_label_frontier_observability_config.v1",
+  "experiment_id": "p0v5_base_label_frontier_observability_v9r0_20260818",
+  "run_root": "runs/p0v5_base_label_frontier_observability_v9r0_20260818",
+  "source_v8r1_run_root": "runs/p0v5_counterfactual_prefix_gat_qd1_selector_v8r1_20260818",
+  "source_v7r3_run_root": "runs/p0v5_frontier_observability_root_cause_v7r3_20260818",
+  "diagnostic_only": true,
+  "performance_authority": false,
+  "processed_label_boundary": 4096,
+  "label_sample_cap": 256,
+  "action_universe": ["CONTINUE_Q0", "SWITCH_QD1_AT_4096"],
+  "model": {
+    "candidate": "gat",
+    "controls": ["mlp", "linear", "no_message", "shuffled_topology"],
+    "hidden_dim": 16,
+    "heads": 2,
+    "layers": 2,
+    "dropout": 0.1,
+    "maximum_parameters": 20000,
+    "seeds": [61635, 91267, 170141],
+    "fold_count": 5,
+    "maximum_epochs": 200,
+    "patience": 25,
+    "torch_threads": 1
+  },
+  "gate": {
+    "scale50_minimum_benefit_balanced_accuracy": 0.70,
+    "scale50_minimum_rank_accuracy": 0.65,
+    "maximum_gap_below_best_simple_ba": 0.02,
+    "minimum_topology_rank_drop": 0.02,
+    "maximum_similar_opposite_label_fraction": 0.35,
+    "warm_graph_plus_ensemble_inference_p99_ms": 10.0,
+    "maximum_per_context_fraction_of_qpf0": 0.02
+  },
+  "development_only": true,
+  "deployment_authorized": false,
+  "production_switch_authorized": false
+}

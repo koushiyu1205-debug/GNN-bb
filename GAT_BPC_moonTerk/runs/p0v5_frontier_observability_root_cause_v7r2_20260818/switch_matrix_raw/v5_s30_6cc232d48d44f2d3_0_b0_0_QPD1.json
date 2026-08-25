@@ -1,0 +1,6362 @@
+{
+  "admission_audit_wall_sec": 0.032837437,
+  "admission_batch_last_selected_native_discovery_wall_sec": null,
+  "admission_milestone_wall_sec": null,
+  "admission_selector_wall_sec": 0.000995858,
+  "admission_time_objective": "min_time_to_master_ready_frozen_batch",
+  "admission_unattributed_wall_sec": 0.000139168,
+  "backend_reconstruction_audit_wall_sec": 0.032067394,
+  "backend_solve_wall_sec": 0.37786688,
+  "best_found_rc": null,
+  "can_certify_from_guidance": false,
+  "can_change_reduced_cost": false,
+  "can_filter": false,
+  "can_prune": false,
+  "certificate_blockers": [],
+  "column_count": 0,
+  "deployable": false,
+  "development_only": true,
+  "diagnostic_engine_rebind": false,
+  "diversity_milestone_audit": {
+    "admission_target": 64,
+    "audit_sample_rows": [],
+    "branch_context_audit_pass": true,
+    "branch_invalid_column_count": 0,
+    "candidate_search_best_reduced_cost": null,
+    "candidate_search_dual_matches_true_dual": true,
+    "candidate_search_false_positive_rate": null,
+    "candidate_search_false_positive_rows": [],
+    "candidate_search_negative_column_count": 0,
+    "candidate_search_negative_true_negative_count": 0,
+    "candidate_search_negative_true_nonnegative_count": 0,
+    "candidate_search_rc_recomputed_under_true_dual": true,
+    "cut_aware_signature_branch_context_active": false,
+    "cut_aware_signature_cut_context_active": false,
+    "cut_aware_signature_cut_hash_column_count": 0,
+    "cut_aware_signature_used": true,
+    "diversity_selection_wall_time_sec": 0.000995858,
+    "first_selected_master_ready_native_discovery_wall_sec": null,
+    "harvest_avg_pairwise_jaccard": null,
+    "harvest_best_true_rc": null,
+    "harvest_candidate_negative_count": 0,
+    "harvest_candidate_new_task_set_count": 0,
+    "harvest_candidate_replacement_task_set_count": 0,
+    "harvest_candidate_seed_source_counts": {},
+    "harvest_candidate_strong_replacement_count": 0,
+    "harvest_candidate_support_changing_count": 0,
+    "harvest_candidate_weak_replacement_count": 0,
+    "harvest_existing_master_task_set_count": 2158,
+    "harvest_max_pairwise_containment": 0.0,
+    "harvest_max_pairwise_jaccard": null,
+    "harvest_max_selected_containment": 0.8,
+    "harvest_max_selected_jaccard": 0.5,
+    "harvest_rejected_duplicate_count": 0,
+    "harvest_rejected_same_task_set_count": 0,
+    "harvest_selected_count": 0,
+    "harvest_selected_distinct_task_set_count": 0,
+    "harvest_selected_duplicate_task_set_count": 0,
+    "harvest_selected_new_task_set_count": 0,
+    "harvest_selected_replacement_task_set_count": 0,
+    "harvest_selected_seed_source_counts": {},
+    "harvest_selected_strong_replacement_count": 0,
+    "harvest_selected_support_changing_count": 0,
+    "harvest_selected_true_rc_distribution": {
+      "count": 0,
+      "max": null,
+      "mean": null,
+      "median": null,
+      "min": null
+    },
+    "harvest_selected_weak_replacement_count": 0,
+    "harvest_selection_policy": "support_aware_new_then_support_changing_then_strong_replacement_then_capped_weak_replacement",
+    "harvest_support_aware_enabled": true,
+    "harvest_support_overlap_threshold": 0.6,
+    "harvest_support_task_set_count": 0,
+    "harvest_weak_replacement_cap": 8,
+    "harvest_worst_selected_true_rc": null,
+    "label_supervision_target_scope": "master_admission",
+    "raw_distinct_negative_task_set_count": 0,
+    "selected_admission_witnesses": [],
+    "selected_diverse_negative_count": 0,
+    "selected_master_entry_audit_available": true,
+    "selected_master_entry_audit_wall_time_sec": 2.118e-06,
+    "selected_master_ready_batch_native_discovery_wall_sec": null,
+    "selected_master_ready_native_solution_indices": [],
+    "selected_master_ready_negative_count": 0,
+    "selected_master_rejected_native_solution_indices": [],
+    "selected_native_solution_indices": [],
+    "selected_negative_rows": [],
+    "selected_negative_task_set_count": 0,
+    "selected_route_mapping_complete": true,
+    "selected_witness_mapping_complete": false,
+    "selector_policy_id": "p0v4_diverse_selector_v1",
+    "true_audited_column_count": 0,
+    "true_best_reduced_cost": null,
+    "true_dual_reaudit_pass": true,
+    "true_negative_candidate_search_miss_rate": null,
+    "true_negative_candidate_search_miss_rows": [],
+    "true_negative_candidate_search_nonnegative_count": 0,
+    "true_negative_column_count": 0,
+    "true_rc_audit_wall_time_sec": 0.000767925,
+    "true_selected_negative_count": 0
+  },
+  "diversity_selector_wall_sec": 0.000995858,
+  "engine_status": "COMPLETE",
+  "exact_admission_batch_size": 64,
+  "exact_raw_negative_pool_size": 256,
+  "first_addable_negative_wall_sec": null,
+  "first_audited_negative_wall_sec": null,
+  "first_true_negative_wall_sec": null,
+  "fresh_process_arm": true,
+  "frontier_empty": true,
+  "global_min_rc": null,
+  "global_min_rc_is_exact": false,
+  "guidance_bucket_width": 0.001,
+  "instance_content_hash": "6cc232d48d44f2d3",
+  "instance_id": "lunar_ice_sp50_030_019_seed261106019",
+  "labels_dropped": false,
+  "master_entry_audit_wall_sec": 2.118e-06,
+  "milestone_kind": "EXACT_PROOF_COMPLETION",
+  "milestone_reached": true,
+  "milestone_wall_sec": 0.379772003,
+  "native_build_info": {
+    "best_reduced_cost_event_trace": "harvest_improvements_v1",
+    "bidirectional_feasibility_certificate_authority": "none",
+    "bidirectional_feasibility_compiled": "false",
+    "bidirectional_feasibility_policy": "disabled",
+    "bidirectional_journey_probe_policy": "disabled",
+    "bidirectional_midpoint_meet_policy": "disabled",
+    "bidirectional_task_meet_policy": "disabled",
+    "branch_support": "ryan_foster_same_different_feasibility",
+    "build_type": "Release",
+    "compiler": "13.3.0",
+    "completion_bound": "positive_cover_dual_threshold_pruning_v1",
+    "cut_state_bytes": "8",
+    "cut_state_max_bits": "48",
+    "cut_state_schema": "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+    "cut_support": "sri3_sri5_divisor2_threshold_crossing_v1",
+    "cxx_standard": "23",
+    "dssr_certificate_kind": "DSSR_RELAXATION_LOWER_BOUND",
+    "dssr_v2_policy": "multi_sortie_counterexample_pressure_refinement_v2",
+    "exact_negative_escape_certificate_semantics": "partial_fail_closed_v1",
+    "exact_negative_escape_policy": "diverse_raw_4x_then_p0v4_selector_v1",
+    "frontier_feature_schema": "lunar_ice_bpc.p0v5_frontier_probe_features.v1",
+    "frontier_gat_bundle_schema": "lunar_ice_bpc.p0v5_frontier_gat_native_bundle.v1",
+    "frontier_gat_native_inference": "two_layer_edge_attention_16x2_v1",
+    "frontier_graph_schema": "lunar_ice_bpc.p0v5_frontier_depth_rc_graph.v1",
+    "frontier_probe_policy": "native_q0_4096_inplace_qd1_switch_v7",
+    "guidance_label_state_feature_count": "15",
+    "guidance_label_state_schema": "lunar_spprc.qg2_label_state.v1",
+    "guidance_ordering": "q0_anchored_rc_bucket_label_state_priority_v2",
+    "harvest_work_budget": "deterministic_processed_labels_v1",
+    "journey_resource_bytes": "184",
+    "journey_value_bytes": "184",
+    "label_memory_representation": "u16_counts_single_component_variant_compact_bucket_v2",
+    "label_state_bytes": "176",
+    "large_scale_exact_pricer": "multi_sortie_counterexample_refinement_v1",
+    "max_active_cuts": "16",
+    "memory_pressure_policy": "disabled_for_exact_hard_limit_only",
+    "ng_dssr_v3_compiled": "false",
+    "ng_dssr_v3_policy": "disabled",
+    "rcspp_commit": "2f1d53ba6806844e30ce43ee9c41041a5a1b4e79",
+    "rcspp_journey_component_object_bytes": "240",
+    "rcspp_label_object_bytes": "64",
+    "rcspp_outer_resource_object_bytes": "96",
+    "service_timing_policy_id": "no_task_wait_base_departure_shift_v1"
+  },
+  "native_search_wall_sec": 0.345799486,
+  "negative_escape_triggered": false,
+  "ordering_only": true,
+  "original_snapshot_binding": {
+    "engine_hash": "743198d7928704a7",
+    "state_hash": "d81863efbc49a796d30becd46f2b032aed20fc1ce461ea85310864111891915c"
+  },
+  "policy": "QPD1",
+  "post_native_fixed_pipeline_ratio": null,
+  "post_native_fixed_pipeline_wall_sec": null,
+  "potential_file_sha256": "",
+  "potential_id": null,
+  "proof_completion_wall_sec": 0.345799486,
+  "proof_telemetry": {
+    "active_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "active_cut_count": 0,
+    "best_reduced_cost_event_count": 0,
+    "best_reduced_cost_event_count_total": 0,
+    "best_reduced_cost_event_schema": "lunar_spprc.best_reduced_cost_events.v1",
+    "best_reduced_cost_event_trace_error": "",
+    "best_reduced_cost_event_trace_usable_for_training": false,
+    "best_reduced_cost_event_trace_valid": true,
+    "best_reduced_cost_events": [],
+    "best_reduced_cost_events_audited": [],
+    "best_reduced_cost_events_truncated": false,
+    "completion_bound_effective": false,
+    "completion_bound_enabled": false,
+    "completion_bound_evaluated_labels": 0,
+    "completion_bound_forced_off": false,
+    "completion_bound_forced_off_reason": "",
+    "completion_bound_pruned_labels": 0,
+    "completion_bound_requested": false,
+    "cut_dual_projection_enabled": true,
+    "cut_dual_projection_schema_version": "lunar_ice_bpc.native_pricing_cut_projection.exact_nonzero_dual.v1",
+    "cut_lineage_hash": "d9149b168f5291c65027aaa28e61fdc99becb246c1fec8fd17e98f2bbbd6869b",
+    "cut_state_effective": false,
+    "cut_state_required": false,
+    "cut_state_schema_version": "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2",
+    "dominance_candidate_checks": 10243794,
+    "dominance_wall_time_seconds": 0.128283084,
+    "dominated_labels": 156545,
+    "dssr_dominance_candidate_checks": 0,
+    "dssr_elementary_batch_count": 0,
+    "dssr_elementary_witness_returned": false,
+    "dssr_enabled": false,
+    "dssr_final_critical_task_count": 0,
+    "dssr_initial_critical_task_count": 0,
+    "dssr_iteration_count": 0,
+    "dssr_iteration_trace": [],
+    "dssr_max_bucket_size": 0,
+    "dssr_negative_batch_target": 16,
+    "dssr_policy_version": "",
+    "dssr_pressure_abandoned_iteration_count": 0,
+    "dssr_pressure_max_bucket_size": 8192,
+    "dssr_pressure_max_candidate_checks": 200000000,
+    "dssr_pressure_refinement_count": 0,
+    "dssr_pressure_refinement_enabled": false,
+    "dssr_pressure_split_task_ids": [],
+    "dssr_raw_solution_count": 0,
+    "dssr_refinement_count": 0,
+    "dssr_relaxation_no_negative_certificate": false,
+    "dssr_repeated_witness_count": 0,
+    "exact_admission_batch_size": 64,
+    "exact_raw_negative_pool_size": 256,
+    "extended_labels": 7098166,
+    "extension_wall_time_seconds": 0.332452689,
+    "first_audited_true_negative_wall_time_seconds": null,
+    "first_true_negative_processed_labels": 0,
+    "first_true_negative_wall_time_seconds": null,
+    "full_cut_context_active": false,
+    "graph_cache_build_count": 1,
+    "graph_cache_hit": false,
+    "graph_cache_hit_count": 0,
+    "graph_cache_size": 1,
+    "guidance_arc_drop_count": 0,
+    "guidance_binding_validation_sec": 0.000128588,
+    "guidance_branch_pair_drop_count": 0,
+    "guidance_effective_mode": "off",
+    "guidance_filter_count": 0,
+    "guidance_label_drop_count": 0,
+    "guidance_label_state_enabled": false,
+    "guidance_label_state_schema_version": "",
+    "guidance_mode": "off",
+    "guidance_native_install_sec": 0.0014474238269031048,
+    "guidance_total_wall_ratio": 0.004557589,
+    "guidance_total_wall_sec": 0.001576012,
+    "guidance_validation": {
+      "expected_binding": {
+        "binding_hash": "bc3d39f663852c3b09f6c519b022d97e8d6519ba9382d8ac62bc30eba9538edf",
+        "branch_context_hash": "ea4a363b99a4f0b8f4de960f15f3757c5c1f8456b617b220a7852745fc55c38e",
+        "checkpoint_id": "",
+        "config_hash": "581784dd51075a4960f587f32a2c55e94d042202e4043c83d10a218141db2f3f",
+        "cut_lineage_hash": "d9149b168f5291c65027aaa28e61fdc99becb246c1fec8fd17e98f2bbbd6869b",
+        "cut_state_schema_version": "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2",
+        "engine_hash": "743198d7928704a7",
+        "feature_schema_version": "",
+        "full_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+        "instance_hash": "6cc232d48d44f2d3",
+        "live_cut_policy_hash": "",
+        "mathematical_dual_hash": "d9b5bee438c114354bfd72a06076f5fb3ce3bb0455ae30ca083db842f4b58c86",
+        "normalization_version": "",
+        "objective_mode": "official",
+        "ood_policy_version": "",
+        "phase": "phase_two",
+        "pricing_mode": "exact_proof",
+        "projected_pricing_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+        "raw_ieee_dual_hash": "7064f6d55446d01a635c3b3a0f6da2d09255ff639e8a05e05c869d973a87b58e",
+        "request_dual_hash": "",
+        "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-36",
+        "schema_version": "lunar_ice_bpc.canonical_solve_binding.v2",
+        "separator_policy_version": ""
+      },
+      "guidance_accepted": false,
+      "guidance_binding_validation_sec": 0.000128588,
+      "guidance_can_certify": false,
+      "guidance_can_filter": false,
+      "guidance_fallback_to_p0": true,
+      "guidance_mode": "off",
+      "guidance_present": false,
+      "guidance_validation_issues": [
+        "guidance_mode_off",
+        "guidance_hints_missing"
+      ],
+      "schema_version": "lunar_ice_bpc.guidance_validation.v1"
+    },
+    "harvest_max_processed_labels": 0,
+    "legal_action_universe_hash_before_sort": "c2b8b400eb649e25083a3816de84a23801579c864737a02f0c22cdc9dac0d411",
+    "legal_arc_universe_hash_before_sort": "663a28b6a30a6c0d6995c6b98c2da040a6e1639de6a250a7464783af18d3d648",
+    "max_abs_rc_delta": 0.0,
+    "max_visited_bucket_size": 729,
+    "memory_pressure_triggered": false,
+    "native_build_info": {
+      "best_reduced_cost_event_trace": "harvest_improvements_v1",
+      "bidirectional_feasibility_certificate_authority": "none",
+      "bidirectional_feasibility_compiled": "false",
+      "bidirectional_feasibility_policy": "disabled",
+      "bidirectional_journey_probe_policy": "disabled",
+      "bidirectional_midpoint_meet_policy": "disabled",
+      "bidirectional_task_meet_policy": "disabled",
+      "branch_support": "ryan_foster_same_different_feasibility",
+      "build_type": "Release",
+      "compiler": "13.3.0",
+      "completion_bound": "positive_cover_dual_threshold_pruning_v1",
+      "cut_state_bytes": "8",
+      "cut_state_max_bits": "48",
+      "cut_state_schema": "packed_exact_overlap_u64_sri3_2bit_sri5_3bit_v2",
+      "cut_support": "sri3_sri5_divisor2_threshold_crossing_v1",
+      "cxx_standard": "23",
+      "dssr_certificate_kind": "DSSR_RELAXATION_LOWER_BOUND",
+      "dssr_v2_policy": "multi_sortie_counterexample_pressure_refinement_v2",
+      "exact_negative_escape_certificate_semantics": "partial_fail_closed_v1",
+      "exact_negative_escape_policy": "diverse_raw_4x_then_p0v4_selector_v1",
+      "frontier_feature_schema": "lunar_ice_bpc.p0v5_frontier_probe_features.v1",
+      "frontier_gat_bundle_schema": "lunar_ice_bpc.p0v5_frontier_gat_native_bundle.v1",
+      "frontier_gat_native_inference": "two_layer_edge_attention_16x2_v1",
+      "frontier_graph_schema": "lunar_ice_bpc.p0v5_frontier_depth_rc_graph.v1",
+      "frontier_probe_policy": "native_q0_4096_inplace_qd1_switch_v7",
+      "guidance_label_state_feature_count": "15",
+      "guidance_label_state_schema": "lunar_spprc.qg2_label_state.v1",
+      "guidance_ordering": "q0_anchored_rc_bucket_label_state_priority_v2",
+      "harvest_work_budget": "deterministic_processed_labels_v1",
+      "journey_resource_bytes": "184",
+      "journey_value_bytes": "184",
+      "label_memory_representation": "u16_counts_single_component_variant_compact_bucket_v2",
+      "label_state_bytes": "176",
+      "large_scale_exact_pricer": "multi_sortie_counterexample_refinement_v1",
+      "max_active_cuts": "16",
+      "memory_pressure_policy": "disabled_for_exact_hard_limit_only",
+      "ng_dssr_v3_compiled": "false",
+      "ng_dssr_v3_policy": "disabled",
+      "rcspp_commit": "2f1d53ba6806844e30ce43ee9c41041a5a1b4e79",
+      "rcspp_journey_component_object_bytes": "240",
+      "rcspp_label_object_bytes": "64",
+      "rcspp_outer_resource_object_bytes": "96",
+      "service_timing_policy_id": "no_task_wait_base_departure_shift_v1"
+    },
+    "native_engine_build_hash": "3c4ee8001c7e69b0",
+    "native_raw_best_found_rc": null,
+    "negative_escape_enabled": true,
+    "negative_escape_policy_id": "diverse_raw_4x_then_p0v4_selector_v1",
+    "negative_escape_termination_reason": "EXHAUSTIVE_FRONTIER_COMPLETE",
+    "negative_escape_triggered": false,
+    "ng_dssr_enabled": false,
+    "ng_dssr_final_relation_count": 0,
+    "ng_dssr_forbidden_cycle_count": 0,
+    "ng_dssr_full_elementary_fallback_count": 0,
+    "ng_dssr_initial_neighborhood_size": 10,
+    "ng_dssr_initial_relation_count": 0,
+    "ng_dssr_relation_add_count": 0,
+    "objective_mode": "official",
+    "pricing_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "pricing_cut_count": 0,
+    "pricing_cut_state_required": false,
+    "processed_labels": 80254,
+    "projected_zero_dual_cut_count": 0,
+    "proof_completion_wall_time_seconds": 0.345799486,
+    "proof_queue_arc_potential_trace": [],
+    "proof_queue_existing_preference_retained": 0,
+    "proof_queue_existing_preference_seen": 0,
+    "proof_queue_frontier_probe": {
+      "action": "SWITCH_QD1",
+      "boundary": 4096,
+      "context_features": [
+        3.4339872044851463,
+        8.022896869601457,
+        0.0,
+        0.0009691796882425278,
+        -0.009180449415319383,
+        0.008300947249847934,
+        0.11423417513938987,
+        0.04916864002227038,
+        4.107474136725448,
+        4.469418137567312,
+        1.1476039454333704,
+        4.6913478822291435,
+        0.0354214496556248,
+        15.996337890625,
+        0.07785290212298347,
+        7.677400430514807,
+        1.0,
+        3.6109179126442243,
+        1.0,
+        0.212859,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.997378864201076,
+        -0.0017484874227758033
+      ],
+      "creation_hash_after": 9067615918735317852,
+      "creation_hash_before": 9067615918735317852,
+      "decision_reason": "forced_switch_qd1",
+      "disagreement": 1.0,
+      "drained_count": 3049,
+      "duplicate_count": 0,
+      "edge_count": 288,
+      "edges": [
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 0,
+          "target": 0
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 0,
+          "target": 1
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 0,
+          "target": 8
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 1,
+          "target": 0
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 1,
+          "target": 1
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 1,
+          "target": 2
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 1,
+          "target": 9
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 2,
+          "target": 1
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 2,
+          "target": 2
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 2,
+          "target": 3
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 2,
+          "target": 10
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 3,
+          "target": 2
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 3,
+          "target": 3
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 3,
+          "target": 4
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 3,
+          "target": 11
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 4,
+          "target": 3
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 4,
+          "target": 4
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 4,
+          "target": 5
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 4,
+          "target": 12
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 5,
+          "target": 4
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 5,
+          "target": 5
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 5,
+          "target": 6
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 5,
+          "target": 13
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 6,
+          "target": 5
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 6,
+          "target": 6
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 6,
+          "target": 7
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 6,
+          "target": 14
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 7,
+          "target": 6
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 7,
+          "target": 7
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 7,
+          "target": 15
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 8,
+          "target": 0
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 8,
+          "target": 8
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 8,
+          "target": 9
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 8,
+          "target": 16
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 9,
+          "target": 1
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 9,
+          "target": 8
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 9,
+          "target": 9
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 9,
+          "target": 10
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 9,
+          "target": 17
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 10,
+          "target": 2
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 10,
+          "target": 9
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 10,
+          "target": 10
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 10,
+          "target": 11
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 10,
+          "target": 18
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 11,
+          "target": 3
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 11,
+          "target": 10
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 11,
+          "target": 11
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 11,
+          "target": 12
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 11,
+          "target": 19
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 12,
+          "target": 4
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 12,
+          "target": 11
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 12,
+          "target": 12
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 12,
+          "target": 13
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 12,
+          "target": 20
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 13,
+          "target": 5
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 13,
+          "target": 12
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 13,
+          "target": 13
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 13,
+          "target": 14
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 13,
+          "target": 21
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 14,
+          "target": 6
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 14,
+          "target": 13
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 14,
+          "target": 14
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 14,
+          "target": 15
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 14,
+          "target": 22
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 15,
+          "target": 7
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 15,
+          "target": 14
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 15,
+          "target": 15
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 15,
+          "target": 23
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 16,
+          "target": 8
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 16,
+          "target": 16
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 16,
+          "target": 17
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 16,
+          "target": 24
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 17,
+          "target": 9
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 17,
+          "target": 16
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 17,
+          "target": 17
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 17,
+          "target": 18
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 17,
+          "target": 25
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 18,
+          "target": 10
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 18,
+          "target": 17
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 18,
+          "target": 18
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 18,
+          "target": 19
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 18,
+          "target": 26
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 19,
+          "target": 11
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 19,
+          "target": 18
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 19,
+          "target": 19
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 19,
+          "target": 20
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 19,
+          "target": 27
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 20,
+          "target": 12
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 20,
+          "target": 19
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 20,
+          "target": 20
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 20,
+          "target": 21
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 20,
+          "target": 28
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 21,
+          "target": 13
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 21,
+          "target": 20
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 21,
+          "target": 21
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 21,
+          "target": 22
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 21,
+          "target": 29
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 22,
+          "target": 14
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 22,
+          "target": 21
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 22,
+          "target": 22
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 22,
+          "target": 23
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 22,
+          "target": 30
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 23,
+          "target": 15
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 23,
+          "target": 22
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 23,
+          "target": 23
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 23,
+          "target": 31
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 24,
+          "target": 16
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 24,
+          "target": 24
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 24,
+          "target": 25
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 24,
+          "target": 32
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 25,
+          "target": 17
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 25,
+          "target": 24
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 25,
+          "target": 25
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 25,
+          "target": 26
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 25,
+          "target": 33
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 26,
+          "target": 18
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 26,
+          "target": 25
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 26,
+          "target": 26
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 26,
+          "target": 27
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 26,
+          "target": 34
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 27,
+          "target": 19
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 27,
+          "target": 26
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 27,
+          "target": 27
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 27,
+          "target": 28
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 27,
+          "target": 35
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 28,
+          "target": 20
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 28,
+          "target": 27
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 28,
+          "target": 28
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 28,
+          "target": 29
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 28,
+          "target": 36
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 29,
+          "target": 21
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 29,
+          "target": 28
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 29,
+          "target": 29
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 29,
+          "target": 30
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 29,
+          "target": 37
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 30,
+          "target": 22
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 30,
+          "target": 29
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 30,
+          "target": 30
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 30,
+          "target": 31
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 30,
+          "target": 38
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 31,
+          "target": 23
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 31,
+          "target": 30
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 31,
+          "target": 31
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 31,
+          "target": 39
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 32,
+          "target": 24
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 32,
+          "target": 32
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 32,
+          "target": 33
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 32,
+          "target": 40
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 33,
+          "target": 25
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 33,
+          "target": 32
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 33,
+          "target": 33
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 33,
+          "target": 34
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 33,
+          "target": 41
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 34,
+          "target": 26
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 34,
+          "target": 33
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 34,
+          "target": 34
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 34,
+          "target": 35
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 34,
+          "target": 42
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 35,
+          "target": 27
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 35,
+          "target": 34
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 35,
+          "target": 35
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 35,
+          "target": 36
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 35,
+          "target": 43
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 36,
+          "target": 28
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 36,
+          "target": 35
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 36,
+          "target": 36
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 36,
+          "target": 37
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 36,
+          "target": 44
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 37,
+          "target": 29
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 37,
+          "target": 36
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 37,
+          "target": 37
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 37,
+          "target": 38
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 37,
+          "target": 45
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 38,
+          "target": 30
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 38,
+          "target": 37
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 38,
+          "target": 38
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 38,
+          "target": 39
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 38,
+          "target": 46
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 39,
+          "target": 31
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 39,
+          "target": 38
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 39,
+          "target": 39
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 39,
+          "target": 47
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 40,
+          "target": 32
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 40,
+          "target": 40
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 40,
+          "target": 41
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 40,
+          "target": 48
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 41,
+          "target": 33
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 41,
+          "target": 40
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 41,
+          "target": 41
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 41,
+          "target": 42
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 41,
+          "target": 49
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 42,
+          "target": 34
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 42,
+          "target": 41
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 42,
+          "target": 42
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 42,
+          "target": 43
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 42,
+          "target": 50
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 43,
+          "target": 35
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 43,
+          "target": 42
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 43,
+          "target": 43
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 43,
+          "target": 44
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 43,
+          "target": 51
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 44,
+          "target": 36
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 44,
+          "target": 43
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 44,
+          "target": 44
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 44,
+          "target": 45
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 44,
+          "target": 52
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 45,
+          "target": 37
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 45,
+          "target": 44
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 45,
+          "target": 45
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 45,
+          "target": 46
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 45,
+          "target": 53
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 46,
+          "target": 38
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 46,
+          "target": 45
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 46,
+          "target": 46
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 46,
+          "target": 47
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 46,
+          "target": 54
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 47,
+          "target": 39
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 47,
+          "target": 46
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 47,
+          "target": 47
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 47,
+          "target": 55
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 48,
+          "target": 40
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 48,
+          "target": 48
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 48,
+          "target": 49
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 48,
+          "target": 56
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 49,
+          "target": 41
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 49,
+          "target": 48
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 49,
+          "target": 49
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 49,
+          "target": 50
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 49,
+          "target": 57
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 50,
+          "target": 42
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 50,
+          "target": 49
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 50,
+          "target": 50
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 50,
+          "target": 51
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 50,
+          "target": 58
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 51,
+          "target": 43
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 51,
+          "target": 50
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 51,
+          "target": 51
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 51,
+          "target": 52
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 51,
+          "target": 59
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 52,
+          "target": 44
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 52,
+          "target": 51
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 52,
+          "target": 52
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 52,
+          "target": 53
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 52,
+          "target": 60
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 53,
+          "target": 45
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 53,
+          "target": 52
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 53,
+          "target": 53
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 53,
+          "target": 54
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 53,
+          "target": 61
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 54,
+          "target": 46
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 54,
+          "target": 53
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 54,
+          "target": 54
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 54,
+          "target": 55
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 54,
+          "target": 62
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 55,
+          "target": 47
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 55,
+          "target": 54
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 55,
+          "target": 55
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          "source": 55,
+          "target": 63
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 56,
+          "target": 48
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 56,
+          "target": 56
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 56,
+          "target": 57
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 57,
+          "target": 49
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 57,
+          "target": 56
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 57,
+          "target": 57
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 57,
+          "target": 58
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 58,
+          "target": 50
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 58,
+          "target": 57
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 58,
+          "target": 58
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 58,
+          "target": 59
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 59,
+          "target": 51
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 59,
+          "target": 58
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 59,
+          "target": 59
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 59,
+          "target": 60
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 60,
+          "target": 52
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 60,
+          "target": 59
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 60,
+          "target": 60
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 60,
+          "target": 61
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 61,
+          "target": 53
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 61,
+          "target": 60
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 61,
+          "target": 61
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 61,
+          "target": 62
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 62,
+          "target": 54
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 62,
+          "target": 61
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 62,
+          "target": 62
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "source": 62,
+          "target": 63
+        },
+        {
+          "features": [
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          "source": 63,
+          "target": 55
+        },
+        {
+          "features": [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          "source": 63,
+          "target": 62
+        },
+        {
+          "features": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "source": 63,
+          "target": 63
+        }
+      ],
+      "enabled": true,
+      "expected_gain": 0.0,
+      "fail_closed": false,
+      "frontier_before_migration": 3049,
+      "frontier_size": 3049,
+      "graph_build_wall_seconds": 0.000807735,
+      "graph_built": true,
+      "graph_hash": "33e78d26c84ab70c29bafa1dce06e0dddd4fbc1804a07c45078dd885a9bfe47c",
+      "inference_wall_seconds": 0.0,
+      "migrated_count": 3049,
+      "migration_wall_seconds": 0.00075862,
+      "mode": "force_qd1",
+      "model_called": false,
+      "node_features": [
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.1875
+        ],
+        [
+          1.0,
+          1.791759469228055,
+          0.0016398819285011479,
+          0.0,
+          -0.004048869069011106,
+          -0.005379491801372463,
+          -0.0028420936389177225,
+          0.0010519176656308565,
+          0.03333333333333333,
+          0.0,
+          0.9951574527641707,
+          0.004903406550411183,
+          0.06666666666666667,
+          0.19598549060702175,
+          0.0,
+          0.3125
+        ],
+        [
+          1.0,
+          1.6094379124341003,
+          0.0013119055428009183,
+          0.0,
+          -0.0021132007421625983,
+          -0.002584864938702736,
+          -0.0017792327374060817,
+          0.0002952481700299075,
+          0.03333333333333333,
+          0.0,
+          0.9909377186843946,
+          0.0011557134055222807,
+          0.06666666666666667,
+          0.16375574838611506,
+          0.0,
+          0.4375
+        ],
+        [
+          1.0,
+          2.5649493574615367,
+          0.003935716628402755,
+          0.0,
+          0.0004494737638197394,
+          -0.0003180194438293327,
+          0.0008778904848006218,
+          0.00039886062342981874,
+          0.03333333333333333,
+          0.0,
+          0.9923372988103568,
+          0.004398900968117004,
+          0.13333333333333333,
+          0.4036981731641997,
+          0.0,
+          0.5625
+        ],
+        [
+          1.0,
+          1.9459101490553132,
+          0.0019678583142013774,
+          0.0,
+          0.00245219935608581,
+          0.0013719333306700698,
+          0.0034383439166266747,
+          0.0008413312045585843,
+          0.03333333333333333,
+          0.0,
+          0.989293212036389,
+          0.0006400943659441132,
+          0.06666666666666667,
+          0.20184908658209985,
+          0.0,
+          0.6875
+        ],
+        [
+          1.0,
+          1.9459101490553132,
+          0.0019678583142013774,
+          0.0,
+          0.010116988356841912,
+          0.0066589882719272995,
+          0.013691521323767282,
+          0.0032862894213326515,
+          0.03333333333333333,
+          0.0,
+          0.9937018894331701,
+          0.002941338981319922,
+          0.06666666666666667,
+          0.20184908658209985,
+          0.0,
+          0.8125
+        ],
+        [
+          1.0,
+          2.302585092994046,
+          0.0029517874713020664,
+          0.0,
+          0.017901966315509173,
+          0.014566392143799444,
+          0.022266656233406977,
+          0.0027577107146664367,
+          0.03333333333333333,
+          0.0,
+          0.9914625612316306,
+          0.002665333679885359,
+          0.1,
+          0.31992323303744613,
+          0.0,
+          0.9375
+        ],
+        [
+          1.0,
+          5.602118820879701,
+          0.08855362413906198,
+          0.0,
+          -0.00762485471244116,
+          -0.008290636748054683,
+          -0.006943177904865416,
+          0.00039650256334390616,
+          0.09469135802469159,
+          0.012197255957315951,
+          0.7088536402042346,
+          0.13557906297565106,
+          0.2,
+          0.4586935003969614,
+          0.05,
+          0.0625
+        ],
+        [
+          1.0,
+          5.123963979403259,
+          0.05477205641193834,
+          0.0,
+          -0.006470722076025832,
+          -0.006939044750041292,
+          -0.005909883619837618,
+          0.00028508135129597914,
+          0.0960079840319359,
+          0.010822707953473823,
+          0.6895798326370344,
+          0.1497521384808622,
+          0.23333333333333334,
+          0.49802634164140486,
+          0.05,
+          0.1875
+        ],
+        [
+          1.0,
+          5.662960480135946,
+          0.0941292226959659,
+          0.0,
+          -0.004349031084293572,
+          -0.005902215961985139,
+          -0.002735284331300349,
+          0.0010149204692649133,
+          0.08803716608594672,
+          0.015989113021466224,
+          0.6920138592568567,
+          0.16246767060089623,
+          0.36666666666666664,
+          0.5809253680834973,
+          0.05,
+          0.3125
+        ],
+        [
+          1.0,
+          5.442417710521793,
+          0.07543456871105281,
+          0.0,
+          -0.0017973036651710364,
+          -0.0027351017808247813,
+          -0.0010215607541463247,
+          0.000544698947727754,
+          0.09217391304347838,
+          0.014128762442845137,
+          0.6629074755834118,
+          0.1735782328400497,
+          0.26666666666666666,
+          0.5014140694926847,
+          0.05,
+          0.4375
+        ],
+        [
+          1.0,
+          5.6240175061873385,
+          0.09052148245326337,
+          0.0,
+          -0.00015299662777247484,
+          -0.0010053110128571462,
+          0.0010922464087141455,
+          0.0005632890097247135,
+          0.0800724637681159,
+          0.016344555896579672,
+          0.5807182482936275,
+          0.29404173281589496,
+          0.26666666666666666,
+          0.4475418870968259,
+          0.05,
+          0.5625
+        ],
+        [
+          1.0,
+          5.666426688112432,
+          0.09445719908166612,
+          0.0,
+          0.002443840631723305,
+          0.0011039915595726295,
+          0.003969897479640295,
+          0.0007557828814577475,
+          0.08726851851851875,
+          0.016195434397881292,
+          0.712729861597075,
+          0.15145520993933567,
+          0.26666666666666666,
+          0.45184319045485477,
+          0.05,
+          0.6875
+        ],
+        [
+          1.0,
+          5.726847747587197,
+          0.10036077402427025,
+          0.0,
+          0.006993168505661061,
+          0.003971823649117846,
+          0.013853882335815393,
+          0.002837413492992335,
+          0.08322440087145967,
+          0.01666631067442723,
+          0.6969771813553963,
+          0.15746017985158645,
+          0.36666666666666664,
+          0.5083222538015866,
+          0.05,
+          0.8125
+        ],
+        [
+          1.0,
+          5.5093883366279774,
+          0.08068219088225648,
+          0.0,
+          0.01889344439893523,
+          0.013888382722419853,
+          0.038519916596456025,
+          0.004614156094923404,
+          0.0742547425474253,
+          0.013977015672875513,
+          0.7819266415197385,
+          0.16486129907804792,
+          0.26666666666666666,
+          0.3483164959694401,
+          0.05,
+          0.9375
+        ],
+        [
+          1.0,
+          4.394449154672439,
+          0.026238110856018366,
+          0.0,
+          -0.0076213027615791434,
+          -0.009180449415319383,
+          -0.006976066895000688,
+          0.0004737143229906876,
+          0.16999999999999985,
+          0.02614064523559688,
+          0.299277466759972,
+          0.18172535535087458,
+          0.13333333333333333,
+          0.2719378010507453,
+          0.1,
+          0.0625
+        ],
+        [
+          1.0,
+          5.0238805208462765,
+          0.04952443424073467,
+          0.0,
+          -0.006425086885403917,
+          -0.006941566508396273,
+          -0.005916949761505952,
+          0.00032104421352502404,
+          0.1602649006622515,
+          0.02593795500339887,
+          0.1959977569643015,
+          0.1796582309639962,
+          0.03333333333333333,
+          0.0,
+          0.1,
+          0.1875
+        ],
+        [
+          1.0,
+          4.382026634673881,
+          0.025910134470318136,
+          0.0,
+          -0.005373127629393301,
+          -0.005909176951615892,
+          -0.0027351576633108795,
+          0.0008200804649789272,
+          0.15780590717299567,
+          0.025824715186665577,
+          0.20614220797052024,
+          0.2406370874731622,
+          0.06666666666666667,
+          0.10327402298501548,
+          0.1,
+          0.3125
+        ],
+        [
+          1.0,
+          4.836281906951478,
+          0.0409970482125287,
+          0.0,
+          -0.0015066642321336595,
+          -0.0027349879351860743,
+          -0.00101436331907676,
+          0.0003182822067225393,
+          0.17813333333333328,
+          0.024981415314411465,
+          0.3321528341497551,
+          0.15597873386380612,
+          0.06666666666666667,
+          0.0329711486888267,
+          0.1,
+          0.4375
+        ],
+        [
+          1.0,
+          4.48863636973214,
+          0.028861921941620204,
+          0.0,
+          -0.0004622756076785317,
+          -0.0009758272239635713,
+          0.001002682256453651,
+          0.00038700721785333105,
+          0.17045454545454522,
+          0.024838782289022737,
+          0.34744099497423486,
+          0.18154456147110903,
+          0.13333333333333333,
+          0.2962536970281508,
+          0.1,
+          0.5625
+        ],
+        [
+          1.0,
+          4.477336814478207,
+          0.028533945555919975,
+          0.0,
+          0.001846131780858383,
+          0.001141682681150651,
+          0.002563144614044232,
+          0.00035411872010138537,
+          0.18084291187739437,
+          0.026081796820103465,
+          0.3752547798878726,
+          0.16638069452361873,
+          0.03333333333333333,
+          0.0,
+          0.1,
+          0.6875
+        ],
+        [
+          1.0,
+          4.248495242049359,
+          0.022630370613315843,
+          0.0,
+          0.009067694632142265,
+          0.005302289261406871,
+          0.013882883858292266,
+          0.003785280859922917,
+          0.17294685990338154,
+          0.02218017446038455,
+          0.3478098599405685,
+          0.18593428770787,
+          0.06666666666666667,
+          0.19936483074460043,
+          0.1,
+          0.8125
+        ],
+        [
+          1.0,
+          4.844187086458591,
+          0.04132502459822893,
+          0.0,
+          0.018058481430888614,
+          0.01388896097690168,
+          0.021525010825352037,
+          0.0029553008581006423,
+          0.17354497354497345,
+          0.02312356971789647,
+          0.3695346951470114,
+          0.18414311172261114,
+          0.06666666666666667,
+          0.19351511787433903,
+          0.1,
+          0.9375
+        ],
+        [
+          1.0,
+          3.4965075614664802,
+          0.010495244342407346,
+          0.0,
+          -0.007336188166831439,
+          -0.008067602014456,
+          -0.0069602312846232224,
+          0.0003018571871327706,
+          0.23333333333333336,
+          2.7755575615628914e-17,
+          0.14736266620014,
+          0.05708252314244781,
+          0.03333333333333333,
+          0.0,
+          0.2,
+          0.0625
+        ],
+        [
+          1.0,
+          4.1588830833596715,
+          0.020662512299114463,
+          0.0,
+          -0.006386333546207314,
+          -0.006941666725492635,
+          -0.005917302260104046,
+          0.0002949847953417436,
+          0.23333333333333298,
+          3.608224830031759e-16,
+          0.11936196918702169,
+          0.06770154384265667,
+          0.03333333333333333,
+          0.0,
+          0.2,
+          0.1875
+        ],
+        [
+          1.0,
+          2.3978952727983707,
+          0.0032797638570022957,
+          0.0,
+          -0.0058167505291384205,
+          -0.005901269570294346,
+          -0.005760859973056144,
+          4.3105828465359007e-05,
+          0.23333333333333334,
+          0.0,
+          0.015507347795661302,
+          0.011790546776655232,
+          0.03333333333333333,
+          0.0,
+          0.2,
+          0.3125
+        ],
+        [
+          1.0,
+          3.1354942159291497,
+          0.007215480485405051,
+          0.0,
+          -0.0016233760948853803,
+          -0.002066359386478524,
+          -0.0010617651252613255,
+          0.00031220571389522275,
+          0.23333333333333336,
+          2.7755575615628914e-17,
+          0.11180736688084485,
+          0.04554119427424284,
+          0.03333333333333333,
+          0.0,
+          0.2,
+          0.4375
+        ],
+        [
+          1.0,
+          1.791759469228055,
+          0.0016398819285011479,
+          0.0,
+          -0.0007829639402723947,
+          -0.0009309172650120438,
+          -0.0005618111052816358,
+          0.00014213019061569242,
+          0.23333333333333334,
+          0.0,
+          0.07697690692792163,
+          0.047664447293633415,
+          0.03333333333333333,
+          0.0,
+          0.2,
+          0.5625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.2,
+          0.6875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.2,
+          0.8125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.2,
+          0.9375
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3,
+          0.0625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3,
+          0.1875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3,
+          0.3125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3,
+          0.4375
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3,
+          0.5625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3,
+          0.6875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3,
+          0.8125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.3,
+          0.9375
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4,
+          0.0625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4,
+          0.1875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4,
+          0.3125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4,
+          0.4375
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4,
+          0.5625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4,
+          0.6875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4,
+          0.8125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.4,
+          0.9375
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.55,
+          0.0625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.55,
+          0.1875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.55,
+          0.3125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.55,
+          0.4375
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.55,
+          0.5625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.55,
+          0.6875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.55,
+          0.8125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.55,
+          0.9375
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.75,
+          0.0625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.75,
+          0.1875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.75,
+          0.3125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.75,
+          0.4375
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.75,
+          0.5625
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.75,
+          0.6875
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.75,
+          0.8125
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.75,
+          0.9375
+        ]
+      ],
+      "nonempty_node_count": 27,
+      "p_adverse": 1.0,
+      "p_benefit": 0.0,
+      "positive_gain": 0.0,
+      "q0_post_probe_pops": 0,
+      "qd1_post_probe_pops": 76158,
+      "reached": true,
+      "risk_score": -1.0,
+      "schema_version": "lunar_spprc.frontier_probe_telemetry.v1",
+      "seed_outputs": [],
+      "switched_to_qd1": true
+    },
+    "proof_queue_guidance_covered_bucket_count": 0,
+    "proof_queue_guidance_nonzero_labels": 0,
+    "proof_queue_guidance_order_decisions": 0,
+    "proof_queue_guidance_reordered_label_hash_count": 0,
+    "proof_queue_guidance_scored_labels": 0,
+    "proof_queue_incoming_preference_retained": 0,
+    "proof_queue_incoming_preference_seen": 0,
+    "proof_queue_label_preference_trace": [],
+    "proof_queue_label_state_schema": "lunar_spprc.qg2_label_state.v1",
+    "proof_queue_label_state_trace": [],
+    "proof_queue_label_trace_enabled": false,
+    "proof_queue_label_trace_final_rows": 0,
+    "proof_queue_label_trace_incomplete": false,
+    "proof_queue_label_trace_sampling_mode": "",
+    "proof_queue_label_trace_seed": 0,
+    "proof_queue_label_trace_truncated": false,
+    "proof_queue_native_scoring_wall_time_seconds": 0.0,
+    "proof_queue_negative_witness_trace": [],
+    "proof_queue_policy_id": "Q0",
+    "proof_queue_potential_trace": [],
+    "proof_queue_potential_trace_enabled": false,
+    "proof_queue_surface_label_retained": 0,
+    "proof_queue_surface_retained": 0,
+    "proof_queue_surface_seen": 0,
+    "proof_queue_witness_ancestor_retained": 0,
+    "proof_queue_witness_retained": 0,
+    "proof_queue_witness_seen": 0,
+    "raw_unique_negative_count": 0,
+    "rc_mismatch_count": 0,
+    "reconstruction_audit": [],
+    "request_binding_mismatches": [],
+    "request_bindings": {
+      "active_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+      "active_cut_count": 0,
+      "branch_context_hash": "",
+      "canonical_solve_binding_v2": {
+        "binding_hash": "bc3d39f663852c3b09f6c519b022d97e8d6519ba9382d8ac62bc30eba9538edf",
+        "branch_context_hash": "ea4a363b99a4f0b8f4de960f15f3757c5c1f8456b617b220a7852745fc55c38e",
+        "checkpoint_id": "",
+        "config_hash": "581784dd51075a4960f587f32a2c55e94d042202e4043c83d10a218141db2f3f",
+        "cut_lineage_hash": "d9149b168f5291c65027aaa28e61fdc99becb246c1fec8fd17e98f2bbbd6869b",
+        "cut_state_schema_version": "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2",
+        "engine_hash": "743198d7928704a7",
+        "feature_schema_version": "",
+        "full_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+        "instance_hash": "6cc232d48d44f2d3",
+        "live_cut_policy_hash": "",
+        "mathematical_dual_hash": "d9b5bee438c114354bfd72a06076f5fb3ce3bb0455ae30ca083db842f4b58c86",
+        "normalization_version": "",
+        "objective_mode": "official",
+        "ood_policy_version": "",
+        "phase": "phase_two",
+        "pricing_mode": "exact_proof",
+        "projected_pricing_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+        "raw_ieee_dual_hash": "7064f6d55446d01a635c3b3a0f6da2d09255ff639e8a05e05c869d973a87b58e",
+        "request_dual_hash": "",
+        "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-36",
+        "schema_version": "lunar_ice_bpc.canonical_solve_binding.v2",
+        "separator_policy_version": ""
+      },
+      "canonical_solve_binding_v2_hash": "bc3d39f663852c3b09f6c519b022d97e8d6519ba9382d8ac62bc30eba9538edf",
+      "canonical_solve_binding_v2_schema": "lunar_ice_bpc.canonical_solve_binding.v2",
+      "config_hash": "581784dd51075a4960f587f32a2c55e94d042202e4043c83d10a218141db2f3f",
+      "cut_dual_projection_enabled": true,
+      "cut_dual_projection_schema_version": "lunar_ice_bpc.native_pricing_cut_projection.exact_nonzero_dual.v1",
+      "cut_lineage_hash": "d9149b168f5291c65027aaa28e61fdc99becb246c1fec8fd17e98f2bbbd6869b",
+      "cut_state_schema_version": "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2",
+      "dssr_enabled": false,
+      "dssr_negative_batch_target": 16,
+      "dssr_policy_version": "",
+      "dssr_pressure_max_bucket_size": 8192,
+      "dssr_pressure_max_candidate_checks": 200000000,
+      "dssr_pressure_refinement_enabled": false,
+      "dual_binding_hash": "",
+      "engine_hash": "743198d7928704a7",
+      "exact_admission_batch_size": 64,
+      "exact_negative_escape_enabled": true,
+      "exact_negative_escape_policy_id": "diverse_raw_4x_then_p0v4_selector_v1",
+      "exact_raw_negative_pool_size": 256,
+      "guidance_binding_hash": "",
+      "guidance_effective_mode": "off",
+      "guidance_label_state_enabled": false,
+      "guidance_label_state_schema_version": "",
+      "guidance_mode": "off",
+      "guidance_native_install_sec": 0.0014474238269031048,
+      "guidance_task_arc_enabled": false,
+      "instance_hash": "6cc232d48d44f2d3",
+      "legal_arc_universe_hash_before_sort": "663a28b6a30a6c0d6995c6b98c2da040a6e1639de6a250a7464783af18d3d648",
+      "legal_task_universe_hash_before_sort": "c2b8b400eb649e25083a3816de84a23801579c864737a02f0c22cdc9dac0d411",
+      "live_cut_policy_hash": "",
+      "negative_eps": 1e-06,
+      "ng_dssr_initial_neighborhood_size": 10,
+      "objective_mode": "official",
+      "pricing_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+      "pricing_cut_count": 0,
+      "proof_queue_frontier_bundle_sha256": "",
+      "proof_queue_frontier_manifest_sha256": "",
+      "proof_queue_frontier_probe_boundary": 4096,
+      "proof_queue_frontier_probe_mode": "force_qd1",
+      "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-36",
+      "separator_policy_version": "",
+      "service_timing_policy_id": "no_task_wait_base_departure_shift_v1"
+    },
+    "request_bindings_match": true,
+    "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-36",
+    "solution_count": 0,
+    "subset_dominance_candidate_checks": 4353031,
+    "subset_dominance_key_lookups": 7381595,
+    "subset_dominance_nonempty_buckets": 792426,
+    "subset_dominance_rejected_labels": 111247,
+    "subset_dominance_summary_skipped_buckets": 451835,
+    "true_dual_binding_hash": "",
+    "wall_time_seconds": 0.345799486
+  },
+  "proved_no_rc_below": -1e-06,
+  "random_seed": null,
+  "raw_negative_milestone_wall_sec": null,
+  "raw_to_native_harvest_ratio": null,
+  "raw_to_native_harvest_wall_sec": null,
+  "raw_unique_negative_count": 0,
+  "repeat_index": 1,
+  "replay_backend_id": "native_rcspp_inprocess",
+  "replay_binding": {
+    "binding_hash": "bc3d39f663852c3b09f6c519b022d97e8d6519ba9382d8ac62bc30eba9538edf",
+    "branch_context_hash": "ea4a363b99a4f0b8f4de960f15f3757c5c1f8456b617b220a7852745fc55c38e",
+    "checkpoint_id": "",
+    "config_hash": "581784dd51075a4960f587f32a2c55e94d042202e4043c83d10a218141db2f3f",
+    "cut_lineage_hash": "d9149b168f5291c65027aaa28e61fdc99becb246c1fec8fd17e98f2bbbd6869b",
+    "cut_state_schema_version": "lunar_ice_bpc.native_cut_state.packed_exact_sri3_2bit_sri5_3bit_u64.v2",
+    "engine_hash": "743198d7928704a7",
+    "feature_schema_version": "",
+    "full_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "instance_hash": "6cc232d48d44f2d3",
+    "live_cut_policy_hash": "",
+    "mathematical_dual_hash": "d9b5bee438c114354bfd72a06076f5fb3ce3bb0455ae30ca083db842f4b58c86",
+    "normalization_version": "",
+    "objective_mode": "official",
+    "ood_policy_version": "",
+    "phase": "phase_two",
+    "pricing_mode": "exact_proof",
+    "projected_pricing_cut_context_hash": "473eff1162b32e31fa070dda5e5d2a3359bfb4b6567653350d23a369e034a1fe",
+    "raw_ieee_dual_hash": "7064f6d55446d01a635c3b3a0f6da2d09255ff639e8a05e05c869d973a87b58e",
+    "request_dual_hash": "",
+    "rmp_iteration_id": "B2B_R3_true_dual_negative_search_worker-root-36",
+    "schema_version": "lunar_ice_bpc.canonical_solve_binding.v2",
+    "separator_policy_version": ""
+  },
+  "replay_engine_hash": "ac2b3ab1bc7ded43",
+  "requested_label_trace": false,
+  "requested_label_trace_max_rows": 50000,
+  "requested_memory_limit_gb": 10.867,
+  "requested_wall_time_limit_sec": 300.0,
+  "route_audit": [],
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_snapshot_replay.v3",
+  "search_exhaustive": true,
+  "selected_diverse_negative_count": 0,
+  "selected_master_ready_negative_count": 0,
+  "source_backend_id": "native_rcspp_bidirectional_root_partial_hybrid_v3",
+  "source_config_hash": "09c86363bc28a9846c2c0bbf32007546132dc2863e4cb75fb92a50d30ebef2a8",
+  "source_engine_hash": "743198d7928704a7",
+  "source_exact_action_policy_hash": "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+  "source_round": 36,
+  "source_snapshot_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_frontier_observability_root_cause_v7r2_20260818/rebound_preaction_snapshots/scale30/6cc232d48d44f2d3/d81863efbc49a796d30becd46f2b032aed20fc1ce461ea85310864111891915c.json",
+  "source_state_hash": "d81863efbc49a796d30becd46f2b032aed20fc1ce461ea85310864111891915c",
+  "total_fresh_process_wall_sec": 0.379772003,
+  "true_rc_reaudit_wall_sec": 0.000767925
+}

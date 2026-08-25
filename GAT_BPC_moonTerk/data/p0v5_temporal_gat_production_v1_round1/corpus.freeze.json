@@ -1,0 +1,1632 @@
+{
+  "driver_source_sha256": "a0748f56334c7a23fb155ba63f2d573a921814a385edd45725ec183e86f8a7c9",
+  "experiment_id": "p0v5_temporal_gat_production_v1_round1_20260819",
+  "generator": "lunar_ice_bpc.domain.real_instance.generate_real_map_instance",
+  "generator_source_sha256": "7cb7441cbbe2c14db9ba8b812c276696ac6f2cf97b6192b1a59c507aacc23efa",
+  "official_or_historical_overlap_count": 0,
+  "protected_history_audit": {
+    "cache_path": "data/p0v5_temporal_gat_production_v1_round1/protected_history_hashes.cache.json",
+    "cache_sha256": "9d66922276842717158d412007dba1bde27be17be4eead3d7c46863072f5ec97",
+    "file_count": 1605,
+    "inventory_roots": [
+      "data",
+      "runs"
+    ],
+    "inventory_sha256": "6a4d0ccc8f5dd18a8baae3d75946203d5801056adc7b34b4751694b229de8fe4",
+    "unique_content_hash_count": 1224
+  },
+  "real_map_generation": {
+    "checkpointed_per_instance": true,
+    "edge_generation_mode": "batched_cost_surface_v1",
+    "output_cells": 500
+  },
+  "real_map_source_sha256": "db005c7ed8ca470cb8163571b2b3521863e46653e49e9f6b7a4afcd5e5f98723",
+  "row_count": 160,
+  "rows": [
+    {
+      "file_sha256": "db547e21797fc8b427a0eaeb7c665815f66dac6292a34c33d94141ad548c6803",
+      "index": 1,
+      "instance_content_hash": "74382d3ac2c67d08",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_001_logical_graph.json",
+      "scale": 30,
+      "seed": 8490001,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "04e5bcc55f4eba46a14c845c6d54ff865b59bc74a597f9c5373b894828fc39d7",
+      "index": 2,
+      "instance_content_hash": "b3d3515087bca2ca",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_002_logical_graph.json",
+      "scale": 30,
+      "seed": 8490002,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "56c5944475451738a687d59ec1ebda7a9932a967ac7ff3fcfe1f6bd2fdc7a5cd",
+      "index": 3,
+      "instance_content_hash": "e718dac35ab4265d",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_003_logical_graph.json",
+      "scale": 30,
+      "seed": 8490003,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "92968283e4f5a2b4dd9a84e35a6d09f8b65242e6c1ea766d48ac0d91db624e59",
+      "index": 4,
+      "instance_content_hash": "6f36d652e2115957",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_004_logical_graph.json",
+      "scale": 30,
+      "seed": 8490004,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "8f8a6289ed89857812fc6f99997ed194a8c3a13dbf7c06f931f596fa1db6a2d1",
+      "index": 5,
+      "instance_content_hash": "d61c5b42b5915819",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_005_logical_graph.json",
+      "scale": 30,
+      "seed": 8490005,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "d16422b618899ec736ea8e47bce0360d720da1d1e6bc15887324e04c6c3a9b73",
+      "index": 6,
+      "instance_content_hash": "5b7afbbf5b2fd9cc",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_006_logical_graph.json",
+      "scale": 30,
+      "seed": 8490006,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "a871cf04ed42829296961e447afba04819d06f383ded189e095fa2987d17c32b",
+      "index": 7,
+      "instance_content_hash": "be0fa64ce415e425",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_007_logical_graph.json",
+      "scale": 30,
+      "seed": 8490007,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "668b9d4044e797680e25609269e4a2a2905dc59b360a283c6d79d6b6eb1c5cde",
+      "index": 8,
+      "instance_content_hash": "82d6b33a8e471186",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_008_logical_graph.json",
+      "scale": 30,
+      "seed": 8490008,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "312a7f4389337b9398fcbebc848c7816dad1eadba665a94c37d19cca9fa68961",
+      "index": 9,
+      "instance_content_hash": "a0880a97edf73e99",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_009_logical_graph.json",
+      "scale": 30,
+      "seed": 8490009,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "027879c43b4ca7661838e40fa0e6f2120638213bdba79e1ab1d30be823057822",
+      "index": 10,
+      "instance_content_hash": "0513775eda79ac3f",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_010_logical_graph.json",
+      "scale": 30,
+      "seed": 8490010,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "4150aea3bb62b50d3ca6309e4ea19b0b7b9241fb304de7364c1739e532124269",
+      "index": 11,
+      "instance_content_hash": "84d4c450711beed5",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_011_logical_graph.json",
+      "scale": 30,
+      "seed": 8490011,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "ca1e152196dabc3294b773b60255463d164be2a7cb4356ef34c91855811f5f26",
+      "index": 12,
+      "instance_content_hash": "28dce553df27dd43",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_012_logical_graph.json",
+      "scale": 30,
+      "seed": 8490012,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "dcb5c7aa4d0e65baf4cf33b9e9c33627078248590baff1eb20376a0009001703",
+      "index": 13,
+      "instance_content_hash": "2bb3277516e815cd",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_013_logical_graph.json",
+      "scale": 30,
+      "seed": 8490013,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "8f90fb47cd3ff0e4c93909c1a40d8d5b017cff195d4258d6f9b4c5da4ae62eb3",
+      "index": 14,
+      "instance_content_hash": "14194816626a0c86",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_014_logical_graph.json",
+      "scale": 30,
+      "seed": 8490014,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "f4cb2fb1c64f11e20dc0684c2a1e01bb765f42c38f440116d11b0176b4683cf2",
+      "index": 15,
+      "instance_content_hash": "470a3dbdfc76d462",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_015_logical_graph.json",
+      "scale": 30,
+      "seed": 8490015,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "9c3580a035433e02a3cf3078e86f4af8dafa8d71bf36ecec5f5d60a3382dba41",
+      "index": 16,
+      "instance_content_hash": "dd1bb7c18a9ebbf3",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_016_logical_graph.json",
+      "scale": 30,
+      "seed": 8490016,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "3782e1adbaf4bbdf48cf256722c0c9706de3b2c84aafa8c93ce4a43529074cc0",
+      "index": 17,
+      "instance_content_hash": "dcd8649271011c72",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_017_logical_graph.json",
+      "scale": 30,
+      "seed": 8490017,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "09159d2419bb7fc48af9a4f83038108bd10728c0f703e448df6f7499c36a598a",
+      "index": 18,
+      "instance_content_hash": "4b6d53214c832491",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_018_logical_graph.json",
+      "scale": 30,
+      "seed": 8490018,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "93be84b52e3d505207c88abd5f79b61849a160fb2978c1e1cdcb80c660d7c287",
+      "index": 19,
+      "instance_content_hash": "3591214b8f94a0f4",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_019_logical_graph.json",
+      "scale": 30,
+      "seed": 8490019,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "0ee66f9b8124edbf898f5049e22b64907358d70dc52a1739537d2e516f99bab8",
+      "index": 20,
+      "instance_content_hash": "3a96f61e3a48bc22",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_020_logical_graph.json",
+      "scale": 30,
+      "seed": 8490020,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "51bfc6ecc3e3a51e9add09315e8efe73825a30cd1d2b6bf6af8f568f069ea215",
+      "index": 21,
+      "instance_content_hash": "badba37f1b3cb76e",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_021_logical_graph.json",
+      "scale": 30,
+      "seed": 8490021,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "97efef9a8168630b6daad2cad3d4f7233bb27449e8129ddd7a20010c73558187",
+      "index": 22,
+      "instance_content_hash": "26b046d18372b5d8",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_022_logical_graph.json",
+      "scale": 30,
+      "seed": 8490022,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "bba290c17a01852125ce8020e6021ea0a316b60cb76588ac5d24bb4a7a47ba82",
+      "index": 23,
+      "instance_content_hash": "b19d73959eb9f9ac",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_023_logical_graph.json",
+      "scale": 30,
+      "seed": 8490023,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "188700020127df2de2dda2ea82c19fc7cc3008ad02e6877ef9cfe462b80070fa",
+      "index": 24,
+      "instance_content_hash": "ba97feec7c1d4e3c",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_024_logical_graph.json",
+      "scale": 30,
+      "seed": 8490024,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "7581a190bcb3945e185c8f932be4933cc507a51019d1fddb9045e1ceb41bc949",
+      "index": 25,
+      "instance_content_hash": "9d5cb3e3eeb948f9",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_025_logical_graph.json",
+      "scale": 30,
+      "seed": 8490025,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "34038584a41a28158e56d2963079d49124b2522018442e7db8fd493852827783",
+      "index": 26,
+      "instance_content_hash": "23746042503b2987",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_026_logical_graph.json",
+      "scale": 30,
+      "seed": 8490026,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "9ed01330fb9ddfab2a6d383ed5f40dd0fdec931e96d38684d73b068fca441772",
+      "index": 27,
+      "instance_content_hash": "d9dc7396870f6e6e",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_027_logical_graph.json",
+      "scale": 30,
+      "seed": 8490027,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "6fe7aa7294ffd7f5f84816487064e5eeae70b775cfe7a4be916397f9a74b4a2d",
+      "index": 28,
+      "instance_content_hash": "cc236a1594f667ed",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_028_logical_graph.json",
+      "scale": 30,
+      "seed": 8490028,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "f3fc8d9891302ae637df1d818c2b94b8e8445985c99004f4a6e223bf5f3ca352",
+      "index": 29,
+      "instance_content_hash": "61cc0b902bfc8be2",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_029_logical_graph.json",
+      "scale": 30,
+      "seed": 8490029,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "2723edf480eefd1a45d22f0a7f7d2ac8f56745e6177bc8af2a76756de6dc5223",
+      "index": 30,
+      "instance_content_hash": "aeed5c68075f5507",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_030_logical_graph.json",
+      "scale": 30,
+      "seed": 8490030,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "ca748b209e39918e2fd2b727ebdab0cc51bdddab686b10a4e0d1f0ead3c940c2",
+      "index": 31,
+      "instance_content_hash": "623017bf22dc9465",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_031_logical_graph.json",
+      "scale": 30,
+      "seed": 8490031,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "380c79f38a54b89bf9d20edd07c7f3947c7593476ab7c14b0602c72389beca28",
+      "index": 32,
+      "instance_content_hash": "5778c91f81c66143",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_032_logical_graph.json",
+      "scale": 30,
+      "seed": 8490032,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "597bd2764b409efe1fbc0cdec36eb98d29f17ec2757247bdd8e84148f5fe5bd8",
+      "index": 33,
+      "instance_content_hash": "4980a6356af744d5",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_033_logical_graph.json",
+      "scale": 30,
+      "seed": 8490033,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "209f0c9b02190f8ed3fafd5cd1059e79d173780b1b0ff7956a28647f50f954d8",
+      "index": 34,
+      "instance_content_hash": "0136160e6dcfcb77",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_034_logical_graph.json",
+      "scale": 30,
+      "seed": 8490034,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "e00b0c181e0d77344072ebe7c26db37f7ff4e05e608909b5e6d07e2cd411be18",
+      "index": 35,
+      "instance_content_hash": "ce87f1db7b6eceb0",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_035_logical_graph.json",
+      "scale": 30,
+      "seed": 8490035,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "141222215520b6ed079a062162ab374ea932b18c2e0ce4a9e841445829dedf1a",
+      "index": 36,
+      "instance_content_hash": "d70aaa874bf5ce05",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_036_logical_graph.json",
+      "scale": 30,
+      "seed": 8490036,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "d922f2345cb6d3d804b34f9de440d4e042aa2cce02b579cf8b13c42e8ceb4fd3",
+      "index": 37,
+      "instance_content_hash": "bc370c97fe3f318b",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_037_logical_graph.json",
+      "scale": 30,
+      "seed": 8490037,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "968dca1d57cd8150aac7e2a8dbeaa1c4511cacb2557686113e51156ec4d8372a",
+      "index": 38,
+      "instance_content_hash": "3ed9e6fe876fe60f",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_038_logical_graph.json",
+      "scale": 30,
+      "seed": 8490038,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "be762d41b784b29eaaa72102a35ab179fb87bc44263b983af79b397955b483f7",
+      "index": 39,
+      "instance_content_hash": "1676278273d78079",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_039_logical_graph.json",
+      "scale": 30,
+      "seed": 8490039,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "9a78f04afa79b21dbcb81bf2cc1df8eb2977e5407fc9c1421739a09a3ab47d69",
+      "index": 40,
+      "instance_content_hash": "e509d3a00534f2b9",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_040_logical_graph.json",
+      "scale": 30,
+      "seed": 8490040,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "1d2b9efb3f5ccbbad501e7a0ba6c07538f13fc27a7159f8e8e35eb438bcf85dd",
+      "index": 41,
+      "instance_content_hash": "35f76a20bed2d852",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_041_logical_graph.json",
+      "scale": 30,
+      "seed": 8490041,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "dd5aece8735a6ef910d5cc0fead05f47f298f53a2316dbbc91629afad95e9532",
+      "index": 42,
+      "instance_content_hash": "ab82e20b108748b3",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_042_logical_graph.json",
+      "scale": 30,
+      "seed": 8490042,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "fe31fd917a7485c5e34dd25b9b7015053f3055e87d24c17e18be52c45f0feab5",
+      "index": 43,
+      "instance_content_hash": "2d25300d8065e006",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_043_logical_graph.json",
+      "scale": 30,
+      "seed": 8490043,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "1aa7c03a7e6a0ec1e8699029894af30b55b7b58f0a5f2ed5a5d3fa897772a710",
+      "index": 44,
+      "instance_content_hash": "b69d6f8737f73028",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_044_logical_graph.json",
+      "scale": 30,
+      "seed": 8490044,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "3c0a99db8f214a5ad0add4f8af1b3aa192902ad31ef9344185999be27103360b",
+      "index": 45,
+      "instance_content_hash": "3a4ad9592657b6a1",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_045_logical_graph.json",
+      "scale": 30,
+      "seed": 8490045,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "b944e676640ed4623ac52979021466a4036dbf539d2fa1264dfbe3dd645ad7eb",
+      "index": 46,
+      "instance_content_hash": "f9f39cc5f5bbae5c",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_046_logical_graph.json",
+      "scale": 30,
+      "seed": 8490046,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "b93516e8a5a9a22d01151908621b8864e7506ace3d3862504af6d7a2e5f6def7",
+      "index": 47,
+      "instance_content_hash": "6b942852598033d0",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_047_logical_graph.json",
+      "scale": 30,
+      "seed": 8490047,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "03f8a762f989976ead54c8cb41a9da5df1a33472975c8b4f4f9bfc357f5de171",
+      "index": 48,
+      "instance_content_hash": "578b0b2dd827c590",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_048_logical_graph.json",
+      "scale": 30,
+      "seed": 8490048,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "e9703be0eb27060650c405140c759abfa632ccf3e4d9fabd97ff173db8814891",
+      "index": 49,
+      "instance_content_hash": "6ff7df970f9d1a0e",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_049_logical_graph.json",
+      "scale": 30,
+      "seed": 8490049,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "6a58fd3b03e8f73fafa06a4ec0d6ab542eb7a70db6070adf3fb50d58ef150592",
+      "index": 50,
+      "instance_content_hash": "fc22996cf199d54d",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_050_logical_graph.json",
+      "scale": 30,
+      "seed": 8490050,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "7a2ad1f16a68be9ad58ba097a49415e9bf10f3d5574f3c1edaaa99e4b2889505",
+      "index": 51,
+      "instance_content_hash": "0e99a58fd8b1f5c6",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_051_logical_graph.json",
+      "scale": 30,
+      "seed": 8490051,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "fff9a8c9da1e770c7aa9dc2815391d8311b2597b57e9afa5d7b2aa61c09193c6",
+      "index": 52,
+      "instance_content_hash": "bb3fa2ed38d44420",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_052_logical_graph.json",
+      "scale": 30,
+      "seed": 8490052,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "e60fa7f5cc9dcc5032613363a347ac5ce64919af4d2171170ea8e759bdb43675",
+      "index": 53,
+      "instance_content_hash": "2324f6da1fe04409",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_053_logical_graph.json",
+      "scale": 30,
+      "seed": 8490053,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "7ba869a36f679dfde12323caf9c3e9696a9cd7fcc5796713b286b8cca10db39e",
+      "index": 54,
+      "instance_content_hash": "f3467d4741e33800",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_054_logical_graph.json",
+      "scale": 30,
+      "seed": 8490054,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "6aa088303536a8cc281212c7daf48ba7b4e0944defd84776df9a628923866c2b",
+      "index": 55,
+      "instance_content_hash": "af2f7df1eb3bf75c",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_055_logical_graph.json",
+      "scale": 30,
+      "seed": 8490055,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "2430ed5c49736b4d78e2eb7237364a20241ec4a93ad7a3b5ce57260b58cf356e",
+      "index": 56,
+      "instance_content_hash": "0111cee5c42bade7",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_056_logical_graph.json",
+      "scale": 30,
+      "seed": 8490056,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "01d5bb685ba8aa02f42910557db8d66fd3112815a2a78cebc500da4db999c022",
+      "index": 57,
+      "instance_content_hash": "aa9bc97a90a6bb68",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_057_logical_graph.json",
+      "scale": 30,
+      "seed": 8490057,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "a59575833e83c0627c49d501e91cc22bc7d1b2b62f613193a9a5afa805038875",
+      "index": 58,
+      "instance_content_hash": "31e01d75e3e53658",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_058_logical_graph.json",
+      "scale": 30,
+      "seed": 8490058,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "16408ac8c33a0591c1e31e0649792454a90bdc038d2f13780bcacc2698efab42",
+      "index": 59,
+      "instance_content_hash": "8c643667b5468001",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_059_logical_graph.json",
+      "scale": 30,
+      "seed": 8490059,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "d85366d143abeeb71b6f36457b5c13624ab8ae48e98851000d7354b653a0c10d",
+      "index": 60,
+      "instance_content_hash": "13a0be72dbf6cb16",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_060_logical_graph.json",
+      "scale": 30,
+      "seed": 8490060,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "0bb5ebb75654ae0a446581a2f232e4b94f0ca6b608a96138cf865171a1d8e282",
+      "index": 61,
+      "instance_content_hash": "be163c764551a091",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_061_logical_graph.json",
+      "scale": 30,
+      "seed": 8490061,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "d0a9da27a52bb0411a923b8f2e7ac6a35caa55ad94b97cd72c11731f3a4a436a",
+      "index": 62,
+      "instance_content_hash": "0a6ae0be558e1c8c",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_062_logical_graph.json",
+      "scale": 30,
+      "seed": 8490062,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "0c323ce89fadbc9efaec340652ab3a4a6372d65c9e530905d3fb8273e5278af9",
+      "index": 63,
+      "instance_content_hash": "ebcd1cd0ad12d023",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_063_logical_graph.json",
+      "scale": 30,
+      "seed": 8490063,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "765eef9a9c272c22fd2577dfb3fddcaae27d0d85579b1547e79b5d01006681ba",
+      "index": 64,
+      "instance_content_hash": "fd864dd2b795a2e8",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_064_logical_graph.json",
+      "scale": 30,
+      "seed": 8490064,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "69c705dd04abd0e9307d88c46080e05746b52cc20d4de636acfd682f80775f3b",
+      "index": 65,
+      "instance_content_hash": "66ce37beef936bd9",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_065_logical_graph.json",
+      "scale": 30,
+      "seed": 8490065,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "6b836b61c8282ec3027440e6ee24a41f0a530b777545640627aa525a497a710d",
+      "index": 66,
+      "instance_content_hash": "f6984942e5da95c9",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_066_logical_graph.json",
+      "scale": 30,
+      "seed": 8490066,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "8a133628ddcae69e043ed384d8b50f53e0a0c0f856b2c829bc96371187e9e700",
+      "index": 67,
+      "instance_content_hash": "5a3f008b88a16fda",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_067_logical_graph.json",
+      "scale": 30,
+      "seed": 8490067,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "572ee407d01c3d47094fa0fe9e6212c0c648b799d724fbb7b50f34ac893e9767",
+      "index": 68,
+      "instance_content_hash": "261f384be2ddc2d7",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_068_logical_graph.json",
+      "scale": 30,
+      "seed": 8490068,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "2c520086dd2d985333ab2701897929e63d1157cd86eae2ce1c1fe006015499df",
+      "index": 69,
+      "instance_content_hash": "d98eaa3c36ba51eb",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_069_logical_graph.json",
+      "scale": 30,
+      "seed": 8490069,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "0650068c6a46dace5b1206748c621a3baf9ad86dca888f147f34c5565de2eaa4",
+      "index": 70,
+      "instance_content_hash": "b993493f3974e2a0",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_070_logical_graph.json",
+      "scale": 30,
+      "seed": 8490070,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "f5f475d56eac0833e9cde85a7975e1b1a411ff2224a5f059d85b43bba3b608d7",
+      "index": 71,
+      "instance_content_hash": "daa5c1af560a8e4f",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_071_logical_graph.json",
+      "scale": 30,
+      "seed": 8490071,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "eb69666318cc9e88860d5f2e2691d31721c8932518e782d1c0077af5b1e13db2",
+      "index": 72,
+      "instance_content_hash": "e1b77e82c15be02f",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_072_logical_graph.json",
+      "scale": 30,
+      "seed": 8490072,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "aafa24400189edd41085cea67cc89fe852fbda4c38197b21ab6224b2bfff05b5",
+      "index": 73,
+      "instance_content_hash": "0d7072dda0d21837",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_073_logical_graph.json",
+      "scale": 30,
+      "seed": 8490073,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "c5e1b974d896daf7aed367c6ca5a5e61d28f7dee970c2c607506791c20dafd72",
+      "index": 74,
+      "instance_content_hash": "dce106714dd09db2",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_074_logical_graph.json",
+      "scale": 30,
+      "seed": 8490074,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "64b876840f4df5af5ef46a2ad8fde3abed76b273c2e60255185a58a531524375",
+      "index": 75,
+      "instance_content_hash": "451291a0094401e6",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_075_logical_graph.json",
+      "scale": 30,
+      "seed": 8490075,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "249c593535c4dd88fedd63910cd888fd8062481307b19b1e7456ef3e67e631c8",
+      "index": 76,
+      "instance_content_hash": "de66e2df6c950ccb",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_076_logical_graph.json",
+      "scale": 30,
+      "seed": 8490076,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "ed7aee90e3fd087b69d1f57bc958bfd61fdc2dc80327a02012270914c91056b5",
+      "index": 77,
+      "instance_content_hash": "8ab0b6ed2d598845",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_077_logical_graph.json",
+      "scale": 30,
+      "seed": 8490077,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "a30c9992275f751f8b7a695adf669cdb44e23e0f27b1f53a9b32b0f0255a41d5",
+      "index": 78,
+      "instance_content_hash": "830d6fe485e27b7e",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_078_logical_graph.json",
+      "scale": 30,
+      "seed": 8490078,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "577f12c5cb8024be25e4a4bbb3837fd25daf9e4dd5147a499e4c8f51aed7a03a",
+      "index": 79,
+      "instance_content_hash": "331789806bc27f4d",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_079_logical_graph.json",
+      "scale": 30,
+      "seed": 8490079,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "a725cfdc89ef52367111bc10c7af06ffc50754634236a92acab8a6a66c93f007",
+      "index": 80,
+      "instance_content_hash": "0ef652a76ac4eb36",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_030/instance_080_logical_graph.json",
+      "scale": 30,
+      "seed": 8490080,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "4fda1475717424f6a9460eb1f14d5ea4e822f023ec9d7cab4fcdf31d7089052e",
+      "index": 1,
+      "instance_content_hash": "cd0a35e1ddabdd8b",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_001_logical_graph.json",
+      "scale": 50,
+      "seed": 8690001,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "f6958fb053c8d275dba736d1719c281f63d9eee4f6e88906c808ffda47265d45",
+      "index": 2,
+      "instance_content_hash": "01539e0ecbb537d2",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_002_logical_graph.json",
+      "scale": 50,
+      "seed": 8690002,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "a008881346e8917aa6e881de2df7d369653b1c62d8ecd43b380ced0493ba832e",
+      "index": 3,
+      "instance_content_hash": "a78780c4173e6499",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_003_logical_graph.json",
+      "scale": 50,
+      "seed": 8690003,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "5608ec816d2c8c6c9c42b4bfa811ab4593246b62e0f3918c2b5a4096519c89e2",
+      "index": 4,
+      "instance_content_hash": "8ad8ab8a8057a486",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_004_logical_graph.json",
+      "scale": 50,
+      "seed": 8690004,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "bbcc6ed33d672bff063f93fb90ea0d2efae392c5e26fad5f31cdb6a076df4585",
+      "index": 5,
+      "instance_content_hash": "c778f20a7d25aad3",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_005_logical_graph.json",
+      "scale": 50,
+      "seed": 8690005,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "e7841670dd6b084094279b25ea8a1ba862f07d2543d62043ad9e4c9e4edcb2c5",
+      "index": 6,
+      "instance_content_hash": "5a806eeb21c946a6",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_006_logical_graph.json",
+      "scale": 50,
+      "seed": 8690006,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "cd7500d797eb85272569f7052a7a12542960b04a9f07480471793a8476825066",
+      "index": 7,
+      "instance_content_hash": "c295f60c4c21bd3d",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_007_logical_graph.json",
+      "scale": 50,
+      "seed": 8690007,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "de2e03276c840334b52ac664d56638529c319c5144de63e96198c29058f31ab7",
+      "index": 8,
+      "instance_content_hash": "bcf7a48c0547e5fd",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_008_logical_graph.json",
+      "scale": 50,
+      "seed": 8690008,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "85189f292fe888902965d8feb4868b32d6b852dc17d2a767bbbaae54c64daf30",
+      "index": 9,
+      "instance_content_hash": "97e111536a1a80c7",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_009_logical_graph.json",
+      "scale": 50,
+      "seed": 8690009,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "ffc0b5f3ff987cc0e59386e7bed891d563478f02f088e8a7b6290825f66f25b4",
+      "index": 10,
+      "instance_content_hash": "c87a524beaad31a8",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_010_logical_graph.json",
+      "scale": 50,
+      "seed": 8690010,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "0daea04974d349a9b78673124890f75d7c7907bafd827ced3765fb5430c5ad49",
+      "index": 11,
+      "instance_content_hash": "019ac42bd1e408c0",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_011_logical_graph.json",
+      "scale": 50,
+      "seed": 8690011,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "8ca8dee850f62341f0b9c764f83d71cfee4014ad7f18f9db5ffcf66949414f51",
+      "index": 12,
+      "instance_content_hash": "a368136e95e8413f",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_012_logical_graph.json",
+      "scale": 50,
+      "seed": 8690012,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "cfa254685e4f071ad807106c6f460bbe5a6059b7a4ee72898b428723fdccc014",
+      "index": 13,
+      "instance_content_hash": "34575da941b5df24",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_013_logical_graph.json",
+      "scale": 50,
+      "seed": 8690013,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "b4635edad5a376ad6c0bc0f2066b4506752e3b81a24a4c5376f0f3c617bdd4ed",
+      "index": 14,
+      "instance_content_hash": "5bccad1a63238d6a",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_014_logical_graph.json",
+      "scale": 50,
+      "seed": 8690014,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "6ec2d140cba1b48b6578dda4e3dacabe843ba1f084f9b3c973c3f375736ba1c4",
+      "index": 15,
+      "instance_content_hash": "ef6aef865ce9d115",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_015_logical_graph.json",
+      "scale": 50,
+      "seed": 8690015,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "acdfdebb64e14b9a46739bfdc7b25a22849cbce11aba33f4b53772bd5e710ff6",
+      "index": 16,
+      "instance_content_hash": "3157bb902630b010",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_016_logical_graph.json",
+      "scale": 50,
+      "seed": 8690016,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "a70a76578912d678c6c94ab9d310089b596021bde48dbbf23cdde0884975a94e",
+      "index": 17,
+      "instance_content_hash": "a1521458f357d16b",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_017_logical_graph.json",
+      "scale": 50,
+      "seed": 8690017,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "96015b60c2168a851a9182cac4995fd14a71e32ca9be3112f06696cbaeb7105e",
+      "index": 18,
+      "instance_content_hash": "a88267ffd310d985",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_018_logical_graph.json",
+      "scale": 50,
+      "seed": 8690018,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "c2d3494c9875029e2401bfd6ec468e8cb2a86134e6929fdcaea50445d73043e4",
+      "index": 19,
+      "instance_content_hash": "2db2d91228dfc723",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_019_logical_graph.json",
+      "scale": 50,
+      "seed": 8690019,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "3354b64fbb2a29e58d9c89b3087e0dd3f8e5711d6020c4ebb5d5d8ab57ac36da",
+      "index": 20,
+      "instance_content_hash": "b27397c24565c981",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_020_logical_graph.json",
+      "scale": 50,
+      "seed": 8690020,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "73c92bab6a0287905706319edb59eccaebb939a45663602a2147e99500b4e3d9",
+      "index": 21,
+      "instance_content_hash": "4947e2fdbca240ab",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_021_logical_graph.json",
+      "scale": 50,
+      "seed": 8690021,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "d00730d9d22479ce464f40430e0c6a5b88b204cf14644d9a4c9eaf0870ee2672",
+      "index": 22,
+      "instance_content_hash": "dfff0cd0f2f654ff",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_022_logical_graph.json",
+      "scale": 50,
+      "seed": 8690022,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "de71f97dec53d9e77a300929912c8ca47e1583c8aa0ebf2ab11f88ed7a065c6a",
+      "index": 23,
+      "instance_content_hash": "8faea31c62f53aaf",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_023_logical_graph.json",
+      "scale": 50,
+      "seed": 8690023,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "8aa9177cc4caf0abcf5d40a066f7724bde0bf8384db0dcde304e1bc98c4e3c8f",
+      "index": 24,
+      "instance_content_hash": "6ef3076843a001f3",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_024_logical_graph.json",
+      "scale": 50,
+      "seed": 8690024,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "26cdd348e8c0da1b7656a89fa43169fbdf7026f3909ad0f4129dee3a4eb3a279",
+      "index": 25,
+      "instance_content_hash": "55896324f03e9c59",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_025_logical_graph.json",
+      "scale": 50,
+      "seed": 8690025,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "03f703b239a6f3d3c6120707ae92d9c5e97ec41ae1e8663d6aac0cfac205ba0b",
+      "index": 26,
+      "instance_content_hash": "4e9777d75f31ea43",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_026_logical_graph.json",
+      "scale": 50,
+      "seed": 8690026,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "221250623718bb20decab6f841576b3abd6932af30cd7b168b9de033974ea1ac",
+      "index": 27,
+      "instance_content_hash": "3d500afda497978b",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_027_logical_graph.json",
+      "scale": 50,
+      "seed": 8690027,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "05691b6580c360ed0b354ac832a0083286fdd36c517f2fcd27cdc3a17a23e838",
+      "index": 28,
+      "instance_content_hash": "ed8df996d081d7e5",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_028_logical_graph.json",
+      "scale": 50,
+      "seed": 8690028,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "97e4f63db14e0e875ddec6f17d351919f56cc8e71121b9ee266358138b902e11",
+      "index": 29,
+      "instance_content_hash": "d86cbd2b302c47ed",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_029_logical_graph.json",
+      "scale": 50,
+      "seed": 8690029,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "fbda5e37e053b02221e7214e4ae684b4939fca3cbce22304102d752ad4cb3f03",
+      "index": 30,
+      "instance_content_hash": "ab30f6d8b9a94035",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_030_logical_graph.json",
+      "scale": 50,
+      "seed": 8690030,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "67909f23b89c9ac4166875b2c066271c1cb3d9d35e8421741c9b62c2b46cccce",
+      "index": 31,
+      "instance_content_hash": "1aa6115e797e913f",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_031_logical_graph.json",
+      "scale": 50,
+      "seed": 8690031,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "81bb00753ae22812a63ab3058a7682cb4ed918fccfd5c0ec5221665cb472b989",
+      "index": 32,
+      "instance_content_hash": "02d26a68548203fe",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_032_logical_graph.json",
+      "scale": 50,
+      "seed": 8690032,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "2262a67787d1b2069252b6f8e86edc75dc3b5ce84cb1a76b12dcde0db4933c12",
+      "index": 33,
+      "instance_content_hash": "026eb1e2ca09d7ca",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_033_logical_graph.json",
+      "scale": 50,
+      "seed": 8690033,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "b8b824ea21e8f60ff6b0e51a0b2fadc2718aacf3ebc17d175e6abdeef1355e03",
+      "index": 34,
+      "instance_content_hash": "286453ec2c64cd65",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_034_logical_graph.json",
+      "scale": 50,
+      "seed": 8690034,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "a7b25ce431d5a2c4b2d5f27d7a618851a7364a750bb5ecd96fe572f9e289bfba",
+      "index": 35,
+      "instance_content_hash": "bfa7cf594087bdf2",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_035_logical_graph.json",
+      "scale": 50,
+      "seed": 8690035,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "4a1e39f2eea9a5cc2a359b2d4b81aa1488276a261eeca77b697c1345b7125fe1",
+      "index": 36,
+      "instance_content_hash": "889337c61840ad97",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_036_logical_graph.json",
+      "scale": 50,
+      "seed": 8690036,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "d0d6ea305d7fcf5f6fb7909a2b6f0c1223e051718fdc4c8570b9224666fce83e",
+      "index": 37,
+      "instance_content_hash": "15ff3c2cb534b9af",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_037_logical_graph.json",
+      "scale": 50,
+      "seed": 8690037,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "ef1ec363dbba2e4f51c1994ca6ce7f8b3517578ee7ecb6e04bee967ccd25e43c",
+      "index": 38,
+      "instance_content_hash": "a413c0b8e4c3271f",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_038_logical_graph.json",
+      "scale": 50,
+      "seed": 8690038,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "eeeb574b801a49fcefc9957f59c9b3905200e2188cf9c9de4992ba1adf923b44",
+      "index": 39,
+      "instance_content_hash": "c77a535d050ac126",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_039_logical_graph.json",
+      "scale": 50,
+      "seed": 8690039,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "67a50c7f77bd61b32a7580d52e8756e7db250414bf4f87e1094ad1070b7e0036",
+      "index": 40,
+      "instance_content_hash": "ad9378db62f5e7fe",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_040_logical_graph.json",
+      "scale": 50,
+      "seed": 8690040,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "5ade1ca96af6a8860a38b2c1f8f3e9fecb84d4ae1d63efd8a73b95b470541903",
+      "index": 41,
+      "instance_content_hash": "124c5a72ba2288af",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_041_logical_graph.json",
+      "scale": 50,
+      "seed": 8690041,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "3a469ee7ac5c1ab12da1d719020df461bec9f2e783ebce9d9df6daa90ef0511e",
+      "index": 42,
+      "instance_content_hash": "bca894d2b844f581",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_042_logical_graph.json",
+      "scale": 50,
+      "seed": 8690042,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "90cc71c40745d36af29b8e7b3e2bca88fede38301415ce620b9e55af9c660688",
+      "index": 43,
+      "instance_content_hash": "8ffe86e5a06c2993",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_043_logical_graph.json",
+      "scale": 50,
+      "seed": 8690043,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "d33d5b17e90dff96f009954d78e7276c697c919ec3b1309bac08d945ff3ca5d6",
+      "index": 44,
+      "instance_content_hash": "af2be14adb61db3e",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_044_logical_graph.json",
+      "scale": 50,
+      "seed": 8690044,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "e764ee41336333a28ff62c89cca2ff590add294f059e7421d05ebb88d2b22581",
+      "index": 45,
+      "instance_content_hash": "1fea354a2de615d9",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_045_logical_graph.json",
+      "scale": 50,
+      "seed": 8690045,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "39e3cda375111f5c337929c6941f1b4e83425f7bbd2cdcc3cee4fd69c1fb0d05",
+      "index": 46,
+      "instance_content_hash": "2954d1c2909273f0",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_046_logical_graph.json",
+      "scale": 50,
+      "seed": 8690046,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "bfda356b1d3a5320aa0ff05f9668d4319dd43a44bd93cdac72f6d44ee3324bcc",
+      "index": 47,
+      "instance_content_hash": "138ad5b3cbc6c100",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_047_logical_graph.json",
+      "scale": 50,
+      "seed": 8690047,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "599d287f16f9e8684c1ac860e2812dd1e9b170a49a092b8b4fdf0434d9c7973c",
+      "index": 48,
+      "instance_content_hash": "7d13caf97e28302e",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_048_logical_graph.json",
+      "scale": 50,
+      "seed": 8690048,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "3494aef9db8a58dde875120e31141ee603f36456aac9e9830e7c63ff0bd9895c",
+      "index": 49,
+      "instance_content_hash": "67e9d143ba44d606",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_049_logical_graph.json",
+      "scale": 50,
+      "seed": 8690049,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "78141a61f34c772637a86dc985c1adad4e21183fd2cb117cbb88ca21ea9281d4",
+      "index": 50,
+      "instance_content_hash": "dacc187bcbdd6de4",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_050_logical_graph.json",
+      "scale": 50,
+      "seed": 8690050,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "7f92283fc10f2c7186de5fa105216a94e3019792a9b1b77c84798999cfc2d671",
+      "index": 51,
+      "instance_content_hash": "bd561b7060c4014a",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_051_logical_graph.json",
+      "scale": 50,
+      "seed": 8690051,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "29de3e213768569e7557a38d709b635419d1e6db04c71254ffc4662dcb533d0a",
+      "index": 52,
+      "instance_content_hash": "76aae39be986879a",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_052_logical_graph.json",
+      "scale": 50,
+      "seed": 8690052,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "056ed3a0c7c55f750f0a44035ca9159b2eab5d4a18258f02af24d39429ab113e",
+      "index": 53,
+      "instance_content_hash": "90e760995c684b2e",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_053_logical_graph.json",
+      "scale": 50,
+      "seed": 8690053,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "67aa51ab18c2664034db2d6db9553f8bd75d4b104e25aced446af55aebc0bd53",
+      "index": 54,
+      "instance_content_hash": "77aee7d1ff567664",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_054_logical_graph.json",
+      "scale": 50,
+      "seed": 8690054,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "299c96c224967f27b439abaae4530ccd1dbcdf3d47e2147ee561c98f32da26dc",
+      "index": 55,
+      "instance_content_hash": "dc7b1a5314db584f",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_055_logical_graph.json",
+      "scale": 50,
+      "seed": 8690055,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "a7be7953f8ff424af78b9e673bca48e4fd3fb3e889072c87ebab7c5cf21d64bc",
+      "index": 56,
+      "instance_content_hash": "7274a9c6f972d201",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_056_logical_graph.json",
+      "scale": 50,
+      "seed": 8690056,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "f2370233dc541a1f3806b15209407e912268fcdcfccd5a4f01fd96924db102b3",
+      "index": 57,
+      "instance_content_hash": "3d35a3221895b5bf",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_057_logical_graph.json",
+      "scale": 50,
+      "seed": 8690057,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "91aa88d8df693357a45d969d247b19320fe6a24aee4b958a02383a0981b599c0",
+      "index": 58,
+      "instance_content_hash": "2cbe9fb3970a95d2",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_058_logical_graph.json",
+      "scale": 50,
+      "seed": 8690058,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "cc6d2d6f322408865754ac45f4670754cc3bb05f93e6ed139585759130bab727",
+      "index": 59,
+      "instance_content_hash": "51f9696db6ed6e03",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_059_logical_graph.json",
+      "scale": 50,
+      "seed": 8690059,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "8707dd37468fbbece255945681291a730f36bf641893ad2064270e09b84b2331",
+      "index": 60,
+      "instance_content_hash": "34f551eae9a3c4ec",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_060_logical_graph.json",
+      "scale": 50,
+      "seed": 8690060,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "284c250329debd012bd164a3e6cc86b42d8064533cf299eab2eff579c81b06a4",
+      "index": 61,
+      "instance_content_hash": "fc693572c732d26d",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_061_logical_graph.json",
+      "scale": 50,
+      "seed": 8690061,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "885278f83d372bdf4d02c220aebd89499f965528bf5b1c1d255139390b5872cf",
+      "index": 62,
+      "instance_content_hash": "019eea47fbc1c325",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_062_logical_graph.json",
+      "scale": 50,
+      "seed": 8690062,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "47ab1852f8c120cb7831914b31744805d56ed1cbd3fc753ef47b74a902485b08",
+      "index": 63,
+      "instance_content_hash": "b5f97c63e1fa4052",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_063_logical_graph.json",
+      "scale": 50,
+      "seed": 8690063,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "7f5dd913ee3574d56f5c505c496e6a54fb12736f49a5124ddd1ba644737148b9",
+      "index": 64,
+      "instance_content_hash": "79569f398cf2d1a8",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_064_logical_graph.json",
+      "scale": 50,
+      "seed": 8690064,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "227b9ccf414d1379f2415a12995e5b978ade3b8dbe895c1874549697e1b77d7d",
+      "index": 65,
+      "instance_content_hash": "a0fd836c2a9c34ba",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_065_logical_graph.json",
+      "scale": 50,
+      "seed": 8690065,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "9a3172ff8a9f327c9e6edc3ccc91acf7a3c293e39151f4b1b56781ee0f9f5491",
+      "index": 66,
+      "instance_content_hash": "2b1a71f58f1db1e1",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_066_logical_graph.json",
+      "scale": 50,
+      "seed": 8690066,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "3ac04e8f5f341bf4af6e0b18b52a06370011f52464915a2e8d5a724e87b393eb",
+      "index": 67,
+      "instance_content_hash": "3557d99b48923d63",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_067_logical_graph.json",
+      "scale": 50,
+      "seed": 8690067,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "fa9f5b581da3c5d57e227d8d1f4b8ceba8b45028edb9f686c20af560649526c6",
+      "index": 68,
+      "instance_content_hash": "11b1e72707bed2dc",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_068_logical_graph.json",
+      "scale": 50,
+      "seed": 8690068,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "5ceb894ac29ff93879f38248a8dc77f66514ae5d0f12504fae2744bf472836a3",
+      "index": 69,
+      "instance_content_hash": "d033bcb284f14c14",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_069_logical_graph.json",
+      "scale": 50,
+      "seed": 8690069,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "7168d008bcc220ea23d078fb8ad70e4b95c448d3c3fb683c5d5d0f458fc7dde2",
+      "index": 70,
+      "instance_content_hash": "5c4f642baa062511",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_070_logical_graph.json",
+      "scale": 50,
+      "seed": 8690070,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "7b96b88a9755893ed6193c3e9286bb05bd2d684b520d4caabdeb2d47c61fbcf7",
+      "index": 71,
+      "instance_content_hash": "4a0aa88502715c70",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_071_logical_graph.json",
+      "scale": 50,
+      "seed": 8690071,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "9689c3e3ff0ed39d425aabfb2973eae0c578df3cf004ed55d7501a3310dd8844",
+      "index": 72,
+      "instance_content_hash": "2a870ff1614b4d68",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_072_logical_graph.json",
+      "scale": 50,
+      "seed": 8690072,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "09697df5086f69caa821c03bb8e79a44bf6c71c75bfdcf046f2aef5cfb7cab0a",
+      "index": 73,
+      "instance_content_hash": "bfe42dc5e4319fbd",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_073_logical_graph.json",
+      "scale": 50,
+      "seed": 8690073,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "bb7f515944e69b7f55daf98538a28bfc0d2514dd0a7df1e7d6d8e2f6784f8862",
+      "index": 74,
+      "instance_content_hash": "4044aed72aa6e87d",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_074_logical_graph.json",
+      "scale": 50,
+      "seed": 8690074,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "f09d6848813fe3e74a1782a806125ca47b792f02c82d58fa92ac3c5c004eb6bf",
+      "index": 75,
+      "instance_content_hash": "81b0b4df54e7f4a4",
+      "partition": "calibration",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_075_logical_graph.json",
+      "scale": 50,
+      "seed": 8690075,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "75da035c2f6f7e03b29ea42e6599d9bfa819baa4fd7bb77e18fd250dc340bbe4",
+      "index": 76,
+      "instance_content_hash": "5bddcd257024bcbd",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_076_logical_graph.json",
+      "scale": 50,
+      "seed": 8690076,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "f0a8cb29e4c793dc19061eaa8b2199a80fde6208096759dc3b1e0cb225f3b919",
+      "index": 77,
+      "instance_content_hash": "1f5ebacf5baca7e6",
+      "partition": "development_e2e",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_077_logical_graph.json",
+      "scale": 50,
+      "seed": 8690077,
+      "time_window_mode": "inner_to_outer"
+    },
+    {
+      "file_sha256": "2067fc85a9c2e5586d67d509862c0b6f6b1c33d7684ae52b76ad295d447093f6",
+      "index": 78,
+      "instance_content_hash": "273f5e5298730de8",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_078_logical_graph.json",
+      "scale": 50,
+      "seed": 8690078,
+      "time_window_mode": "easy_to_hard"
+    },
+    {
+      "file_sha256": "721befbcbdf230e4001008c1db2d48237191374d0aa20e07bd321a181fd48c0a",
+      "index": 79,
+      "instance_content_hash": "6fdd84088f5c25c7",
+      "partition": "train",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_079_logical_graph.json",
+      "scale": 50,
+      "seed": 8690079,
+      "time_window_mode": "outer_to_inner"
+    },
+    {
+      "file_sha256": "199430b34da6a18c85df97a6a9a3f5d4525af2354e89cc835a698dedc26b5a07",
+      "index": 80,
+      "instance_content_hash": "0824dddeacc1d38d",
+      "partition": "sealed_final",
+      "path": "data/p0v5_temporal_gat_production_v1_round1/scale_050/instance_080_logical_graph.json",
+      "scale": 50,
+      "seed": 8690080,
+      "time_window_mode": "inner_to_outer"
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_corpus.v1",
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v5_temporal_gat_production_v1.json",
+  "source_config_sha256": "ad5033b98c83bc39758b06e593f4bda48c9e73950290de4795f5453d15cf9a3c",
+  "split_assignment": "scale_then_sha256_content_hash_v1",
+  "status": "FROZEN_BEFORE_QUEUE_OUTCOMES"
+}

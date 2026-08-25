@@ -1,0 +1,24 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_calibration_risk_v2_freeze.v1",
+  "development_only": true,
+  "deployable": false,
+  "activation_order": "after_fresh_process_calibration_before_e2e",
+  "authority": "deployment_veto_only",
+  "does_not_modify_frozen_oracle": true,
+  "does_not_modify_frozen_trainer": true,
+  "does_not_modify_frozen_calibrator": true,
+  "base_calibrator_sha256": "633a0d8d62119ffd35456a6349f853823f029b36250837ebf13edc70fed0abb7",
+  "oracle_execution_freeze_sha256": "bf09c8242d61cc06975a18a13b0637b7802ea56a52ee74eb064cd9e894d3a679",
+  "risk_contract": {
+    "activated_right_censored_is_deployment_veto": true,
+    "activated_memory_adverse_is_deployment_veto": true,
+    "activated_exact_unsafe_is_deployment_veto": true,
+    "unselected_context_uses_literal_q0": true,
+    "cannot_relabel_censored_training_outcome": true,
+    "cannot_authorize_deployment_without_base_calibration": true
+  },
+  "frozen_file_sha256": {
+    "scripts/audit_p0v5_qg2_calibration_risk_v2.py": "598b984c690efff504985760dbf0e9ec84e60ab80f08aa7e16446c38ea4a709b",
+    "tests/test_p0v5_qg2_calibration_risk_v2.py": "532963c6f017f14dbc7e62dcfc162fc70a379115578809849271352221232240"
+  }
+}

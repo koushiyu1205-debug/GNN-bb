@@ -1,0 +1,72 @@
+{
+  "authority": "plan/GAT/P0V4_V5_Temporal_GAT_Additional_5_Questions_Formal_Response_20260825.md",
+  "bootstrap": {
+    "cluster_unit": "INDEPENDENT_INSTANCE",
+    "confidence": 0.95,
+    "replicates": 10000,
+    "seed": 2026082501,
+    "statistic": "PAIRED_INSTANCE_LOG_WALL_RATIO"
+  },
+  "controls": [
+    "LINEAR",
+    "COUNTERS_ONLY_MLP",
+    "NO_MESSAGE_GAT",
+    "SHUFFLED_TOPOLOGY_GAT",
+    "ALWAYS_CONTINUE",
+    "ALWAYS_REVERT",
+    "LITERAL_Q0",
+    "TAXED_ORACLE_NONDEPLOYABLE_UPPER_BOUND"
+  ],
+  "hard_gates": {
+    "additional_action_induced_resource_censor_max": 0,
+    "additional_harmful_instances_max": 0,
+    "correctness_redline_max": 0,
+    "coverage_noninferiority_floor": "PENDING_PREOUTCOME_CAPACITY_AUDIT",
+    "paired_policy_ratio_point_estimate_at_most": 0.98,
+    "paired_policy_ratio_upper_95_ci_below": 1.0
+  },
+  "insufficient_complete_pairs_status": "INSUFFICIENT_POWER",
+  "model_ensemble_seeds": [
+    61635,
+    91267,
+    170141
+  ],
+  "multiplicity": {
+    "alpha": 0.05,
+    "method": "HOLM_BONFERRONI_FAMILYWISE",
+    "primary_hypotheses": [
+      "GAT_VS_PRESELECTED_BEST_LINEAR_OR_MLP",
+      "GAT_VS_NO_MESSAGE_GAT",
+      "GAT_VS_FROZEN_SHUFFLED_TOPOLOGY_DISTRIBUTION"
+    ]
+  },
+  "primary_metric": "INSTANCE_LEVEL_PAIRED_POLICY_UTILITY",
+  "schema_version": "lunar_ice_bpc.temporal_gat_topology_gate_contract.proposal.v1",
+  "secondary_representation_effect": {
+    "benefit_ba_delta_lower_95_ci_above": 0.0,
+    "benefit_ba_delta_point_estimate_at_least": 0.03,
+    "cluster_unit": "INDEPENDENT_INSTANCE",
+    "cannot_override_primary_failure": true
+  },
+  "shuffle": {
+    "aggregate_for_primary_comparison": "PER_INSTANCE_FROZEN_SEED_AGGREGATE_PENDING_FINAL_CONFIRMATION",
+    "minimum_seeds_not_better_than_unshuffled_gat": 8,
+    "seed_count": 10,
+    "seed_derivation": "UINT31_SHA256_PREFIX_TEMPORAL_GAT_TOPOLOGY_SHUFFLE_SEED_V1_INDEX",
+    "seeds": [
+      1061978086,
+      377584259,
+      1283788950,
+      1482650917,
+      817197819,
+      611389827,
+      1698615962,
+      1067716362,
+      1055590016,
+      833730237
+    ]
+  },
+  "status": "PROPOSAL_REQUIRES_USER_CONFIRMATION",
+  "topology_gate_pass_requires_all_primary_hypotheses": true,
+  "training_or_promotion_authorized": false
+}

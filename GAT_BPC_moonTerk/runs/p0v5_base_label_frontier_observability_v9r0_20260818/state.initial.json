@@ -1,0 +1,9 @@
+{
+  "current_stage": "OOF_DIAGNOSTIC",
+  "diagnostic_only": true,
+  "experiment_id": "p0v5_base_label_frontier_observability_v9r0_20260818",
+  "performance_authority": false,
+  "schema_version": "lunar_ice_bpc.p0v5_base_label_frontier_state.v1",
+  "status": "READY",
+  "terminal": false
+}

@@ -1,0 +1,54 @@
+{
+  "outcome_blind": true,
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_root_screen_execution.v2",
+  "single_native_process": true,
+  "source_cohort": "generated_v2_candidate",
+  "tasks": [
+    {
+      "cap_sec": 300,
+      "instance_content_hash": "3765a48129d5991c",
+      "instance_id": "lunar_ice_sp50_030_026_seed261107026",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_026_logical_graph.json",
+      "scale": 30,
+      "snapshot_cap": 3,
+      "source_cohort": "generated_v2_candidate"
+    },
+    {
+      "cap_sec": 300,
+      "instance_content_hash": "9c714f23319a38ba",
+      "instance_id": "lunar_ice_sp50_030_027_seed261107027",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_027_logical_graph.json",
+      "scale": 30,
+      "snapshot_cap": 3,
+      "source_cohort": "generated_v2_candidate"
+    },
+    {
+      "cap_sec": 300,
+      "instance_content_hash": "77176536c5b0f521",
+      "instance_id": "lunar_ice_sp50_030_028_seed261107028",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_028_logical_graph.json",
+      "scale": 30,
+      "snapshot_cap": 3,
+      "source_cohort": "generated_v2_candidate"
+    },
+    {
+      "cap_sec": 300,
+      "instance_content_hash": "fbd070417ed00ce5",
+      "instance_id": "lunar_ice_sp50_030_029_seed261107029",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_029_logical_graph.json",
+      "scale": 30,
+      "snapshot_cap": 3,
+      "source_cohort": "generated_v2_candidate"
+    },
+    {
+      "cap_sec": 300,
+      "instance_content_hash": "2bbb50cae32ddac2",
+      "instance_id": "lunar_ice_sp50_030_030_seed261107030",
+      "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_interaction_gat_queue_selector_v2_candidates/lunar_ice_sp50_030/instance_030_logical_graph.json",
+      "scale": 30,
+      "snapshot_cap": 3,
+      "source_cohort": "generated_v2_candidate"
+    }
+  ],
+  "tree_supplement": false
+}

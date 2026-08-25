@@ -1,0 +1,11 @@
+{
+  "current_stage": "TERMINAL",
+  "diagnostic_only": true,
+  "experiment_id": "p0v5_base_label_frontier_observability_v9r0_20260818",
+  "performance_authority": false,
+  "schema_version": "lunar_ice_bpc.p0v5_base_label_frontier_state.v1",
+  "status": "FAIL",
+  "terminal": true,
+  "terminal_decision": "terminal_decision.json",
+  "terminal_reason": "BASE_LABEL_FRONTIER_NOT_IDENTIFIABLE"
+}

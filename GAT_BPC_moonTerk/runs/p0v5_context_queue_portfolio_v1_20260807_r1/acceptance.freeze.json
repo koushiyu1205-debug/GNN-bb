@@ -1,0 +1,109 @@
+{
+  "arm_admission": {
+    "correctness_redline_limit": 0,
+    "minimum_determined_train_contexts": 12,
+    "minimum_neutral_or_harm_contexts": 2,
+    "minimum_ratio_le_0_95_contexts": 2,
+    "minimum_ratio_le_0_95_instances": 2,
+    "minimum_train_instances": 6
+  },
+  "context_coverage": {
+    "calibration": {
+      "minimum_contexts": 8,
+      "minimum_instances": 4,
+      "target_contexts": 12
+    },
+    "maximum_per_instance": 3,
+    "selector_heldout": {
+      "minimum_contexts": 6,
+      "minimum_instances": 3,
+      "target_contexts": 9
+    },
+    "train": {
+      "minimum_contexts": 20,
+      "minimum_instances": 8,
+      "target_contexts": 30
+    }
+  },
+  "development_e2e_gate": {
+    "correctness_redline_limit": 0,
+    "exact_count_may_not_decrease": true,
+    "net_gm_strictly_below": 1.0,
+    "worst_context_median_ratio_at_most": 1.1
+  },
+  "formal_gate": {
+    "instances_per_scale": 20,
+    "large_scale_tail": {
+      "p90_ratio_at_most": 1.05,
+      "worst_ratio_at_most": 1.2
+    },
+    "promotion_requires_bootstrap95_upper_strictly_below": 1.0,
+    "scale30": {
+      "common_exact_gm_strictly_below": 1.0,
+      "exact_required": 20,
+      "par2_may_not_increase": true
+    },
+    "scale50": {
+      "common_exact_gm_strictly_below": 1.0,
+      "exact_count_may_not_decrease": true,
+      "minimum_exact": 15,
+      "par2_may_not_increase": true
+    },
+    "small_scales": {
+      "exact_required": 20,
+      "gm_at_most": 1.01,
+      "model_calls_required": 0,
+      "scales": [
+        5,
+        10,
+        20
+      ]
+    },
+    "strong_speedup_gm_at_most": 0.95
+  },
+  "heldout_gate": {
+    "adverse_activation_limit": 0,
+    "correctness_redline_limit": 0,
+    "harmful_activation_limit": 0,
+    "minimum_activation_instances_per_scale": 2,
+    "net_gm_strictly_below": 1.0,
+    "one_shot_no_reselection": true,
+    "warm_tensorization_inference_p99_ms_at_most": 10.0
+  },
+  "portfolio_headroom_gate": {
+    "correctness_redline_limit": 0,
+    "minimum_non_q0_winner_instances_per_scale": 3,
+    "oracle_gm_at_most_per_scale": 0.95
+  },
+  "qgr1_smoke_gate": {
+    "force_on_context_count": 8,
+    "force_on_instances": 8,
+    "maximum_epochs": 40,
+    "maximum_ratio_ge_1_05_contexts": 1,
+    "minimum_beneficial_instances_per_scale": 1,
+    "overall_actionable_pair_accuracy_min": 0.7,
+    "overall_gm_strictly_below": 0.98,
+    "patience": 8,
+    "per_family_accuracy_strictly_above": 0.55,
+    "per_scale_gm_at_most": 1.02,
+    "q0_complete_qgr1_censor_limit": 0,
+    "train_validation_instances": [
+      8,
+      2
+    ]
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_context_queue_portfolio_acceptance_freeze.v1",
+  "status": "FROZEN_BEFORE_ANY_PORTFOLIO_OUTCOME",
+  "stop_reasons": [
+    "CORRECTNESS_REDLINE",
+    "INSTANCE_OR_FEATURE_LEAKAGE",
+    "INSUFFICIENT_CONTEXT_COVERAGE",
+    "NO_SCALE30_PORTFOLIO_HEADROOM",
+    "NO_SCALE50_PORTFOLIO_HEADROOM",
+    "HELDOUT_FRESH_FAILED",
+    "DEVELOPMENT_E2E_EXACT_COUNT_DECREASED",
+    "FORMAL_SMALL_SCALE_MODEL_CALL",
+    "FREEZE_HASH_DRIFT",
+    "UNDETERMINED_BY_CONTINUOUS_RESOURCE_CENSOR"
+  ]
+}

@@ -1,0 +1,2 @@
+[33m[2026-08-02 21:16:02.610][WARN ] Memory limit (11127 MB) exceeded (current: 11128 MB). Stopping early.
+[0mB4.1 report written to /home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/snapshot_collection_qg2_clean_v2_tree_storage_cap_v2_scale30/scale_030/proofs/scale_030/instance_003/b4_1_report_zh.md

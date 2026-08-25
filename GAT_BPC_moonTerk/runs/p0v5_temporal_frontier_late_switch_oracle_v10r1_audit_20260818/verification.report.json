@@ -1,0 +1,26 @@
+{
+  "audit_artifact_sha256": {
+    "corrected_collapsed.json": "1ce91eead01c0e85827a6278cfc926465ede0e21c64d85f8295f196da1a187f9",
+    "corrected_oracle.decision.json": "196d1d14bebf8037c3ed76769bd972eaa9265cfa0677474b93f194715bc0359c",
+    "state.json": "a55da56bfc49d24de5afd88d0fecd46e3a90505e67524191e7b3751c055c4b20",
+    "terminal_decision.json": "5ba9b2b79dbf9b8112e9a6c3d86d2e940ae421e0a7d73d41cd67fcb78a654c84",
+    "v10_source_import.freeze.json": "09d5025e86abf6182a7b124084965bc5143d3c5b8638733d937e0418e709fd04"
+  },
+  "audit_implementation_sha256": {
+    "plan/GAT/P0V5_TEMPORAL_FRONTIER_LATE_SWITCH_V10R1_AUDIT_20260818_ZH.md": "776a55530e6967ad11ab21d6e9b628bbd363637afabcce8cb363fcccf12cda20",
+    "plan/GAT/P0V5_TEMPORAL_FRONTIER_LATE_SWITCH_V10R1_CLOSEOUT_20260818_ZH.md": "e98284142a33397936c3824ff33052d3df8f7a5724f47774c0b0763b54c34670",
+    "scripts/audit_p0v5_temporal_frontier_late_switch_v10r1.py": "4dc4380ed512e67a2ead9139cc4e9122bb252a881e70da40505017f10c1b289c",
+    "scripts/verify_p0v5_temporal_frontier_late_switch_v10r1_audit.py": "5cc1b5313ca6d1038bdaaebf0d73c382bf328d68199e857f66d4d5f109f27569",
+    "tests/test_p0v5_temporal_frontier_late_switch_v10r1_audit.py": "df301f7e4af4b48e51b0bea601b085d2c130369b6ecb315e961f6297a5f935d5"
+  },
+  "corrected_decision": "FAIL",
+  "corrected_reason": "SCALE50_LATE_SWITCH_SUPPORT_GATE_FAILED",
+  "corrected_row_count": 32,
+  "scale30_instances": 8,
+  "scale50_instances": 8,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_audit_verification.v10r1",
+  "status": "PASS",
+  "temporal_gat_training_authorized": false,
+  "v10_source_hashes_verified": 14,
+  "v10_source_terminal_rewritten": false
+}

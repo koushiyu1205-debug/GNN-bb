@@ -1,0 +1,101 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_control_freeze.v1",
+  "date": "2026-08-01",
+  "candidate_id": "P0V5_QG2_LABEL_STATE_GAT",
+  "status": "IMPLEMENTED_ORACLE_BLOCKED",
+  "production_default_changed": false,
+  "deployable": false,
+  "performance_claim_authorized": false,
+  "exact_control": {
+    "freeze_id": "P0V4_V5_BIDIRECTIONAL_EXACT_FINAL_CANDIDATE",
+    "config": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+    "config_sha256": "5affec020cc63d86aad42c10d4de73e22cc2da0a3379a7410d3b6f35d1ba3e42",
+    "prior_gat_closeout": "runs/p0v5_gat_closeout_20260801/closeout.json",
+    "prior_gat_closeout_sha256": "3c405079bb36cab27a531bb92fe60941dfd5368348dadf421374e79e4d70997d",
+    "p0v4_overwritten": false,
+    "p0v5_exact_control_overwritten": false
+  },
+  "qg2_config": {
+    "path": "configs/experiments/p0v5_qg2_label_state_gat_v1.yaml",
+    "sha256": "8a4a2d50f8079b3a6aeadec2fc1c445a0e7593dbdc7f466e8ee1df05a6c25820",
+    "runtime_policy_id": "p0v5_q0_anchored_qg2_label_state_v1",
+    "runtime_implementation_hash": "c39f9279429e6059a42d6da9658678b4df19050f10522aeba399a50439ac357f",
+    "allowed_scales": [30, 50],
+    "bypass_scales": [5, 10, 20],
+    "frozen_bucket": null,
+    "checkpoint": null,
+    "manifest": null
+  },
+  "native_binding": {
+    "build_info_hash": "0c1a76c58bded1d98ce6fc98c9cbd57923aeefc85f27b50318c104e4c25c8594",
+    "label_state_bytes": 176,
+    "label_state_feature_count": 15,
+    "label_state_schema": "lunar_spprc.qg2_label_state.v1",
+    "guidance_ordering": "q0_anchored_rc_bucket_label_state_priority_v2",
+    "bidirectional_feasibility_compiled": true,
+    "header_sha256": "616350c58e6fa8541b37af29f1530a62e81540927e8a70771d9581e494857668",
+    "implementation_sha256": "f793274a67970a9aba4ed4d0f9ce3a1c0a38c9d27ef84d6d595d173e80522e11",
+    "pybind_sha256": "7022d20ee17d46e6c22ac90f26444efdf0305e3a924dcffe9b47cfe866255e67"
+  },
+  "model_binding": {
+    "model_source_sha256": "256e2d85ffe5f56abfca552662252cf1522a7061cc08dfab3046cc046fe2dd94",
+    "runtime_source_sha256": "706028fe82a57f2638d6144e500390822b6b4dcd49632b151acfac43c447f0ed",
+    "backend_contract_sha256": "3ae275fcf297b4ed6594906fd96559af10a0fea32f3b85d08b3a703aa821a80a",
+    "hybrid_hook_sha256": "77025a9f1dd3299ccafc34757fad9d3f755c1790ab03a8f0a81577c5fe348f80"
+  },
+  "oracle": {
+    "runner_sha256": "a4624f6ae2f8024a42ec0b6ece51e33145619c803b4fc59b3d800f611e1ab860",
+    "training_script_sha256": "30effa36a017407780aaa59beb2c5d8ca57d817075f8f5792b1db7f466cdff28",
+    "calibration_script_sha256": "61ecb2cae8f1774d6794153639db28e006d8d5240e4b6803da7a710f21168d5b",
+    "snapshot_index": "runs/p0v5_qg2_label_state_gat_20260801/fallback_snapshot_index.json",
+    "snapshot_index_sha256": "25436d93a68ac5f822b988e03ecf86a137ffc7ca40e33d75b36090da1cf5ccaf",
+    "preflight": "runs/p0v5_qg2_label_state_gat_20260801/oracle_preflight.json",
+    "preflight_sha256": "6856f51f131e63b3bfc7a2e922e86f9e5b43b538bd364de0f83399458eecf5d5",
+    "valid_scale30_contexts": 1,
+    "valid_scale50_contexts": 2,
+    "training_permitted": false,
+    "blocker": "bounded coverage is below 20 contexts from 10 instances for each of scale30 and scale50"
+  },
+  "smoke_evidence": {
+    "q0": "runs/p0v5_qg2_label_state_gat_20260801/smoke/q0_trace_scale30_001_round21.json",
+    "qo2_leaked_qg2": "runs/p0v5_qg2_label_state_gat_20260801/smoke/qg2_qo2_scale30_001_round21_v2.json",
+    "scope": "development_smoke_only",
+    "formal_oracle_evidence": false,
+    "performance_claim_authorized": false
+  },
+  "test_evidence": {
+    "native_ctest": "2/2 passed including 500 randomized exact differentials",
+    "qg2_and_related_regressions": "227 passed and 28 subtests passed",
+    "labeling_and_qg2_regressions": "124 passed and 5 subtests passed",
+    "seeded_root_branch_integration_smoke": "5/5 passed",
+    "large_smoke_initial": "349 passed and 19 failed from one pre-tree NameError",
+    "large_smoke_failed_set_after_fix": "19/19 passed",
+    "certificate_redlines_observed": 0
+  },
+  "snapshot_collection_pilot": [
+    {
+      "scale": 30,
+      "instance": "lunar_ice_030_001_seed120730001",
+      "natural_root_pool_wall_time_sec": 95.170733,
+      "valid_fallback_snapshots": 1,
+      "redlines_zero": true,
+      "scope": "development_collection_only_not_exact_acceptance"
+    },
+    {
+      "scale": 50,
+      "instance": "lunar_ice_050_001_seed140730001",
+      "natural_root_pool_wall_time_sec": 293.718529,
+      "valid_fallback_snapshots": 2,
+      "redlines_zero": true,
+      "scope": "development_collection_only_not_exact_acceptance"
+    }
+  ],
+  "next_authorized_action": "collect bounded scale30 and scale50 P0V5 fallback snapshots from at least 10 development instances per scale, then rerun oracle preflight",
+  "forbidden_until_oracle_pass": [
+    "train Linear MLP or TinyGAT",
+    "freeze bucket width",
+    "create deployment manifest",
+    "run GAT end-to-end acceptance",
+    "claim five percent speedup"
+  ]
+}

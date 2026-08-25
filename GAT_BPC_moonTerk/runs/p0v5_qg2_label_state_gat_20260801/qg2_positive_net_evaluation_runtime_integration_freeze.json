@@ -1,0 +1,39 @@
+{
+  "allowed_prior_runtime_freeze_drift": [
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py"
+  ],
+  "all_arms_rejected_action": "Q0",
+  "can_certify": false,
+  "can_change_bound": false,
+  "can_filter": false,
+  "can_prune": false,
+  "current_runtime_implementation_hash": "ccd4d2403a6357ac1e64ddd1a7f5d16169240eb50f45ebfca4385498c3e197df",
+  "deployable": false,
+  "deployment_authorized": false,
+  "development_e2e_only": true,
+  "development_only": true,
+  "evaluation_gate_policy": "positive_net_exact_safe.v1",
+  "fallback_action": "Q0",
+  "frozen_at_local": "2026-08-05T21:43:13+08:00",
+  "frozen_file_sha256": {
+    "scripts/evaluate_p0v5_qg2_combined_fresh_process.py": "a490e7c42a4d562198cda6bbcdc83e535c41239f2425eaaed2b76a6a9abe50da",
+    "scripts/evaluate_p0v5_qg2_positive_net_calibration.py": "3b5cc9b1167a9818f63d9774260dafefad09612c2554313f437ffd7d93e7d3df",
+    "scripts/predict_p0v5_qg2_context_arm.py": "4417d834069d692e7c18536f67cffc999f4e6b1967d97f76f9ad5e1f05682ccc",
+    "src/lunar_ice_bpc/guidance/proof_queue_label_state_runtime.py": "7b526e1e382175b96e0faaf4b5b9d3d4eeba87f8fb0083d0f31155b338d4a205",
+    "src/lunar_ice_bpc/guidance/qg2_combined_policy.py": "04610a98334840825df6e52eeaee22ab251a375393142f175d3feaa2e620d645",
+    "src/lunar_ice_bpc/guidance/qg2_context_arm_selector.py": "8d229e33ee1eee1a0402867bff5aa118734227b05f39894aedcc7bf6a0fb1141"
+  },
+  "harmful_rate_confidence_gate_blocks_e2e": false,
+  "minimum_speedup_gate_enabled": false,
+  "ordering_only": true,
+  "positive_net_required_on_calibration_and_heldout": true,
+  "prior_post_oracle_runtime_freeze": "runs/p0v5_qg2_label_state_gat_20260801/qg2_post_oracle_selective_runtime_integration_freeze.json",
+  "prior_post_oracle_runtime_freeze_sha256": "9f96d3b1d8752e4a5c15f13f7df76b3ebdb35ee35b75774bd15cc75b4b31dd67",
+  "production_switch_authorized": false,
+  "purpose": "attest the user-authorized positive-net development-E2E gate without rewriting either historical Oracle or selective-runtime provenance",
+  "right_censored_selected_action_is_veto": true,
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_positive_net_evaluation_runtime_freeze.v1",
+  "selected_unsafe_action_is_veto": true,
+  "status": "FROZEN_FOR_POSITIVE_NET_DEVELOPMENT_E2E_ONLY",
+  "strict_effect_size_and_confidence_metrics_role": "report_only"
+}

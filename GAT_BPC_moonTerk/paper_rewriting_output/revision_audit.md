@@ -46,3 +46,11 @@ or completed learning/seasonal result appears in the Introduction.
 **PASS — substantive revision, not append-only or shallow.** The six-paragraph
 funnel is a genuine restructuring, while the model, objective, exactness, and
 evidence boundaries remain traceable to the active project materials.
+
+## 2026-08-03 Chinese narrative rewrite
+
+The author-facing source `manuscript_zh_trc.md` was revised across the whole manuscript rather than through an appended explanation. The visible argument now follows: lunar in-situ evidence need → multi-path and multi-trip routing structure → route-column model → exact-pricing burden → deterministic accelerators → local GAT ordering → whole-algorithm exactness → paired evaluation.
+
+The revision removed internal algorithm version names, development failures, qualification/checkpoint language and visible author task blocks from the paper argument. It retained all classical topology, timing and resource constraints, the normalized objective, the exact-result table and the fail-closed interpretation of incomplete pricing. An independent methods review also triggered a substantive mathematical addition: Equation (15c) now closes the pricing recursion to Equation (13), and Equations (26)–(27) no longer reuse the load symbol for reduced cost.
+
+**Verdict: PASS for the requested narrative rewrite.** The manuscript remains a working paper rather than a submission-ready final because deterministic ablations, learning results, mission-epoch results, figures and final references are still missing.

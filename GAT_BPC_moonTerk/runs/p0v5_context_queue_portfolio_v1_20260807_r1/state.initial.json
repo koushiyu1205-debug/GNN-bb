@@ -1,0 +1,11 @@
+{
+  "current_stage": "CONTEXT_COLLECTION",
+  "deployment_authorized": false,
+  "development_only": true,
+  "experiment_id": "p0v5_context_queue_portfolio_v1_20260807_r1",
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_context_queue_portfolio_state.v1",
+  "status": "READY",
+  "terminal": false,
+  "terminal_decision": null
+}

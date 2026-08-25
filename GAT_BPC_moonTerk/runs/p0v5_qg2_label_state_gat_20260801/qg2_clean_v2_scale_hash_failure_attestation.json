@@ -1,0 +1,44 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_scale_hash_failure.v1",
+  "collection_id": "qg2_clean_v2",
+  "detected_at_local": "2026-08-02T00:12:58+08:00",
+  "status": "FAIL_CLOSED_FOR_SCALE_AWARE_CONTRACT_AMENDMENT",
+  "development_only": true,
+  "production_default": false,
+  "failure_class": "frozen_hash_contract_error",
+  "failure_reason": "the scalar required_exact_action_policy_hash represented scale30 K64/Q256 and rejected the valid scale50 K128/Q512 action contract",
+  "scale30_exact_action_policy_hash": "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+  "scale50_exact_action_policy_hash": "b2f9eab6bd01d12a0f4319342550733ddb0510e559d5e6a6abc119765d2203e2",
+  "original_collection_freeze": "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_collection_freeze.json",
+  "original_collection_freeze_sha256": "0a45986c582eecb58079e4d0c7d3e621d7afa5dd1e2e7d740fa7ffc5a090415c",
+  "strict_index_exclusion_reason": "exact_action_policy_hash_not_frozen_value",
+  "preserved_formal_prefix": {
+    "scale30_completed_rows": 30,
+    "scale30_contexts": 34,
+    "scale30_context_instances": 28,
+    "scale50_completed_rows": 1,
+    "scale50_contexts_after_scale_aware_validation": 1,
+    "scale50_context_instances_after_scale_aware_validation": 1
+  },
+  "interrupted_context_archive": {
+    "instance_id": "lunar_ice_050_002_seed631500002",
+    "reason": "snapshot_was_atomic_but_the_parent_collection_row_did_not_complete_before_fail_closed_stop",
+    "source_state_hash": "1319331ff48dbb5f0d51ced73b2908a68e04a43d52a1ccddb59461ccd2ccc5e6",
+    "snapshot_sha256": "0b46ee74b289c8a9330a48ffdbfc326e1516329390c48b71a35f55190e324e19",
+    "archive_path": "runs/p0v5_qg2_label_state_gat_20260801/diagnostic_interrupted_scale50_instance002_hash_failure_20260802T001258/fallback_snapshot/scale50/210ab83721ed71cd/1319331ff48dbb5f0d51ced73b2908a68e04a43d52a1ccddb59461ccd2ccc5e6.json",
+    "recoverable": true,
+    "oracle_eligible": false
+  },
+  "terminated_process_groups": [
+    3787562,
+    3787723,
+    3787834,
+    3787946,
+    3788057,
+    3788180,
+    3825133
+  ],
+  "data_deletion_performed": false,
+  "scale30_recollection_permitted": false,
+  "required_remediation": "freeze both scale-specific action-policy hashes, validate all downstream allowlists, and resume from scale50 instance002 without rebuilding scale30"
+}

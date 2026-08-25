@@ -115,3 +115,17 @@
 | `data/raw_maps/*.tif` and derived raster tiles | Large binary payloads | `lunar_real_map_source_catalog.json` and figure derivatives |
 | Per-slot stdout/stderr and duplicate row artifacts under completed runs | Excessively granular and partly redundant | Frozen summary, row table, manifest and hash chain |
 | Temporary progress files from completed runs | Monitoring state, not final evidence | Final summary and decision/boundary fields |
+# 2026-08-03 current-algorithm material update
+
+| Material ID | Path | Role | Current status | Manuscript use |
+|---|---|---|---|---|
+| M007 | `runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml` | Exact P0V4+V5 configuration binding | Available and inspected | Current algorithm definition |
+| M008 | `runs/p0v4_final_acceptance_v2_20260801/official/Exact/` | Fresh-process exact acceptance ledgers | Available for scales 5–50; scale-100 stage absent | Exact baseline results and scalability boundary |
+| M009 | `src/lunar_ice_bpc/exact/bpc/pricing/backends/native_bidirectional_hybrid.py` and root SRI modules | Current exact implementation | Available and inspected | Midpoint prepass, fallback and valid-cut screen |
+| M010 | `configs/experiments/p0v5_qg2_label_state_gat_v1.yaml`; QG2 modules and contract audit | Current GAT candidate contract | Implemented scaffold; not deployable | Section 4.6 design and safety boundary |
+| M011 | `runs/p0v5_qg2_label_state_gat_20260801/p0v5_qg2_action_surface_v2_completion_audit.json` | QG2 outcome gate | Incomplete; Oracle active on 2026-08-03 | Section 6.4 status and TBD ledger |
+
+M001–M005 remain missing as final learning-result artifacts. M010 does not close
+that evidence debt: implementation tests and a frozen action surface do not
+substitute for completed Oracle, model selection, calibration, held-out replay,
+end-to-end paired evaluation, or formal acceptance.

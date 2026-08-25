@@ -1,0 +1,10 @@
+{
+  "calibration_started": false,
+  "deployment_authorized": false,
+  "fallback_action": "Q0",
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_training_only_v2_calibration_controller_state.v1",
+  "selector_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/context_arm_selector_feasibility_v1/selector_report.json",
+  "selector_report_sha256": "cd714f5384346475c5a7f35b111118a45a3df79899dc992cd835488a0d068e56",
+  "status": "PENDING_COMBINED_QG2_CONTEXT_SELECTOR_IMPLEMENTATION",
+  "updated_at": "2026-08-05T21:12:01+08:00"
+}

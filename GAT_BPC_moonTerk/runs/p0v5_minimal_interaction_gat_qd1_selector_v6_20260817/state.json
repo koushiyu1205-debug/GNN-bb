@@ -1,0 +1,11 @@
+{
+  "current_stage": "TERMINAL",
+  "deployment_authorized": false,
+  "development_only": true,
+  "experiment_id": "p0v5_minimal_interaction_gat_qd1_selector_v6_20260817",
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_minimal_interaction_gat_state.v6",
+  "status": "FAIL",
+  "terminal": true,
+  "terminal_decision": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_minimal_interaction_gat_qd1_selector_v6_20260817/terminal_decision.json"
+}

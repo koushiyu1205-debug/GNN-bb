@@ -1,0 +1,25 @@
+{
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "detail": {
+    "all_failed_rows_claimed_complete": true,
+    "audit_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_residual_gat_censor_aware_selector_v5_20260816/qgr1_trace_mandatory_witness_audit.json",
+    "audit_sha256": "8eda70900a46b727cae529c750593c59a171b0de164144eef19af7c043753fc3",
+    "checkpoint_written": false,
+    "failed_context_count": 40,
+    "failed_contexts_by_scale": {
+      "30": 7,
+      "50": 33
+    },
+    "failed_instances_by_scale": {
+      "30": 5,
+      "50": 14
+    },
+    "optimizer_started": false,
+    "trace_context_count": 56
+  },
+  "development_only": true,
+  "production_switch_authorized": false,
+  "reason": "QGR1_TRACE_MANDATORY_WITNESS_INCOMPLETE",
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_terminal.v5"
+}

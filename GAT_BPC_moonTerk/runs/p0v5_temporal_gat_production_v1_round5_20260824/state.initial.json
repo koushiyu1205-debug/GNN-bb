@@ -1,0 +1,10 @@
+{
+  "candidate_trained": false,
+  "current_stage": "CONTEXT_COLLECTION",
+  "deployment_authorized": false,
+  "experiment_id": "p0v5_temporal_gat_production_v1_round5_20260824",
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_state.v1",
+  "status": "READY",
+  "terminal": false
+}

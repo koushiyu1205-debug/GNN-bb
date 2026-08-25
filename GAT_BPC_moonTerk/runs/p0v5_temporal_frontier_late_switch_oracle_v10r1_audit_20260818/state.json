@@ -1,0 +1,10 @@
+{
+  "candidate_trained": false,
+  "current_stage": "TERMINAL",
+  "deployment_authorized": false,
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_audit_state.v10r1",
+  "status": "FAIL",
+  "terminal": true,
+  "terminal_reason": "SCALE50_LATE_SWITCH_SUPPORT_GATE_FAILED"
+}

@@ -1,0 +1,365 @@
+{
+  "baseline": {
+    "actions": [
+      "QD1",
+      "Q0",
+      "QD1",
+      "Q0",
+      "Q0",
+      "Q0",
+      "Q0",
+      "Q0",
+      "QD1",
+      "QD1",
+      "QD1",
+      "QD1",
+      "Q0",
+      "Q0",
+      "Q0",
+      "QD1",
+      "Q0",
+      "Q0",
+      "Q0",
+      "Q0",
+      "Q0",
+      "Q0",
+      "Q0",
+      "QB1",
+      "Q0",
+      "Q0",
+      "Q0",
+      "QB1",
+      "Q0",
+      "Q0",
+      "Q0",
+      "Q0",
+      "QB1",
+      "Q0",
+      "QB1",
+      "Q0",
+      "QB1",
+      "Q0",
+      "Q0",
+      "Q0",
+      "QB1",
+      "Q0",
+      "Q0",
+      "Q0"
+    ],
+    "activated_count": 13,
+    "harmful_count": 1,
+    "mean_classification_accuracy": 0.7443181818181819,
+    "net_geomean_ratio": 0.6326872966224444
+  },
+  "context_count": 44,
+  "context_feature_ablations": [
+    {
+      "ablation": "log1p_v5_midpoint_wall",
+      "activated_count": 11,
+      "classification_accuracy_drop": 0.02840909090909105,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7159090909090908,
+      "net_geomean_ratio": 0.5638039180157473,
+      "selected_action_disagreement_rate": 0.2727272727272727
+    },
+    {
+      "ablation": "active_task_set_mean_cardinality_fraction",
+      "activated_count": 4,
+      "classification_accuracy_drop": 0.017045454545454586,
+      "harmful_count": 0,
+      "mean_classification_accuracy": 0.7272727272727273,
+      "net_geomean_ratio": 0.8757001410623392,
+      "selected_action_disagreement_rate": 0.20454545454545456
+    },
+    {
+      "ablation": "dual_l1_delta_present",
+      "activated_count": 11,
+      "classification_accuracy_drop": 0.005681818181818232,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7386363636363636,
+      "net_geomean_ratio": 0.6981765955797931,
+      "selected_action_disagreement_rate": 0.045454545454545456
+    },
+    {
+      "ablation": "round_present",
+      "activated_count": 11,
+      "classification_accuracy_drop": 0.005681818181818232,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7386363636363636,
+      "net_geomean_ratio": 0.6981765955797931,
+      "selected_action_disagreement_rate": 0.045454545454545456
+    },
+    {
+      "ablation": "log1p_previous_processed_labels",
+      "activated_count": 12,
+      "classification_accuracy_drop": 0.005681818181818232,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7386363636363636,
+      "net_geomean_ratio": 0.6605550756567811,
+      "selected_action_disagreement_rate": 0.022727272727272728
+    },
+    {
+      "ablation": "previous_processed_labels_present",
+      "activated_count": 13,
+      "classification_accuracy_drop": 0.005681818181818232,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7386363636363636,
+      "net_geomean_ratio": 0.6326872966224444,
+      "selected_action_disagreement_rate": 0.0
+    },
+    {
+      "ablation": "cover_dual_min",
+      "activated_count": 15,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6142354205741174,
+      "selected_action_disagreement_rate": 0.09090909090909091
+    },
+    {
+      "ablation": "log1p_previous_proof_wall",
+      "activated_count": 12,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6451307293542156,
+      "selected_action_disagreement_rate": 0.06818181818181818
+    },
+    {
+      "ablation": "active_task_sets_present",
+      "activated_count": 11,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6981765955797931,
+      "selected_action_disagreement_rate": 0.045454545454545456
+    },
+    {
+      "ablation": "v5_midpoint_wall_present",
+      "activated_count": 11,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6981765955797931,
+      "selected_action_disagreement_rate": 0.045454545454545456
+    },
+    {
+      "ablation": "active_cut_count",
+      "activated_count": 13,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6326872966224444,
+      "selected_action_disagreement_rate": 0.0
+    },
+    {
+      "ablation": "active_cut_dual_abs_sum",
+      "activated_count": 13,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6326872966224444,
+      "selected_action_disagreement_rate": 0.0
+    },
+    {
+      "ablation": "active_task_coverage_fraction",
+      "activated_count": 13,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6326872966224444,
+      "selected_action_disagreement_rate": 0.0
+    },
+    {
+      "ablation": "branch_decision_count",
+      "activated_count": 13,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6326872966224444,
+      "selected_action_disagreement_rate": 0.0
+    },
+    {
+      "ablation": "previous_proof_wall_present",
+      "activated_count": 13,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6326872966224444,
+      "selected_action_disagreement_rate": 0.0
+    },
+    {
+      "ablation": "same_journey_branch_fraction",
+      "activated_count": 13,
+      "classification_accuracy_drop": 0.0,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7443181818181819,
+      "net_geomean_ratio": 0.6326872966224444,
+      "selected_action_disagreement_rate": 0.0
+    },
+    {
+      "ablation": "dual_l1_delta_from_previous",
+      "activated_count": 9,
+      "classification_accuracy_drop": -0.005681818181818121,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.75,
+      "net_geomean_ratio": 0.8013450328805892,
+      "selected_action_disagreement_rate": 0.13636363636363635
+    },
+    {
+      "ablation": "active_column_count_present",
+      "activated_count": 9,
+      "classification_accuracy_drop": -0.005681818181818121,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.75,
+      "net_geomean_ratio": 0.773520296911433,
+      "selected_action_disagreement_rate": 0.09090909090909091
+    },
+    {
+      "ablation": "root_lifecycle_scope",
+      "activated_count": 9,
+      "classification_accuracy_drop": -0.005681818181818121,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.75,
+      "net_geomean_ratio": 0.773520296911433,
+      "selected_action_disagreement_rate": 0.09090909090909091
+    },
+    {
+      "ablation": "log1p_active_column_count",
+      "activated_count": 16,
+      "classification_accuracy_drop": -0.005681818181818121,
+      "harmful_count": 3,
+      "mean_classification_accuracy": 0.75,
+      "net_geomean_ratio": 0.6436357118087639,
+      "selected_action_disagreement_rate": 0.06818181818181818
+    },
+    {
+      "ablation": "log1p_active_task_set_count",
+      "activated_count": 16,
+      "classification_accuracy_drop": -0.005681818181818121,
+      "harmful_count": 2,
+      "mean_classification_accuracy": 0.75,
+      "net_geomean_ratio": 0.6018116975565412,
+      "selected_action_disagreement_rate": 0.06818181818181818
+    },
+    {
+      "ablation": "log1p_scale",
+      "activated_count": 10,
+      "classification_accuracy_drop": -0.005681818181818121,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.75,
+      "net_geomean_ratio": 0.7048651095591192,
+      "selected_action_disagreement_rate": 0.06818181818181818
+    },
+    {
+      "ablation": "cover_dual_max",
+      "activated_count": 14,
+      "classification_accuracy_drop": -0.011363636363636243,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7556818181818181,
+      "net_geomean_ratio": 0.5852926345126204,
+      "selected_action_disagreement_rate": 0.06818181818181818
+    },
+    {
+      "ablation": "log1p_round",
+      "activated_count": 16,
+      "classification_accuracy_drop": -0.017045454545454475,
+      "harmful_count": 2,
+      "mean_classification_accuracy": 0.7613636363636364,
+      "net_geomean_ratio": 0.6058134784450938,
+      "selected_action_disagreement_rate": 0.06818181818181818
+    },
+    {
+      "ablation": "cover_dual_mean",
+      "activated_count": 14,
+      "classification_accuracy_drop": -0.017045454545454475,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7613636363636364,
+      "net_geomean_ratio": 0.5846171580475674,
+      "selected_action_disagreement_rate": 0.022727272727272728
+    },
+    {
+      "ablation": "cover_dual_std",
+      "activated_count": 13,
+      "classification_accuracy_drop": -0.022727272727272707,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7670454545454546,
+      "net_geomean_ratio": 0.5902177755115601,
+      "selected_action_disagreement_rate": 0.045454545454545456
+    },
+    {
+      "ablation": "fleet_dual",
+      "activated_count": 14,
+      "classification_accuracy_drop": -0.02840909090909083,
+      "harmful_count": 2,
+      "mean_classification_accuracy": 0.7727272727272727,
+      "net_geomean_ratio": 0.5906796135108023,
+      "selected_action_disagreement_rate": 0.06818181818181818
+    }
+  ],
+  "deployable": false,
+  "development_only": true,
+  "group_ablations": [
+    {
+      "ablation": "node_to_train_mean",
+      "activated_count": 6,
+      "classification_accuracy_drop": 0.045454545454545525,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.6988636363636364,
+      "net_geomean_ratio": 0.9440337550256996,
+      "selected_action_disagreement_rate": 0.1590909090909091
+    },
+    {
+      "ablation": "edge_to_train_mean",
+      "activated_count": 13,
+      "classification_accuracy_drop": -0.09659090909090906,
+      "harmful_count": 0,
+      "mean_classification_accuracy": 0.8409090909090909,
+      "net_geomean_ratio": 0.5416964652470949,
+      "selected_action_disagreement_rate": 0.13636363636363635
+    },
+    {
+      "ablation": "context_to_train_mean",
+      "activated_count": 5,
+      "classification_accuracy_drop": 0.09090909090909094,
+      "harmful_count": 0,
+      "mean_classification_accuracy": 0.6534090909090909,
+      "net_geomean_ratio": 0.7642055334047984,
+      "selected_action_disagreement_rate": 0.2727272727272727
+    },
+    {
+      "ablation": "shuffled_message_topology",
+      "activated_count": 12,
+      "classification_accuracy_drop": -0.02840909090909083,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.7727272727272727,
+      "net_geomean_ratio": 0.6611254158978477,
+      "selected_action_disagreement_rate": 0.06818181818181818
+    },
+    {
+      "ablation": "no_message_passing",
+      "activated_count": 4,
+      "classification_accuracy_drop": 0.13068181818181823,
+      "harmful_count": 1,
+      "mean_classification_accuracy": 0.6136363636363636,
+      "net_geomean_ratio": 0.9794096375104454,
+      "selected_action_disagreement_rate": 0.20454545454545456
+    }
+  ],
+  "interpretation_boundary": "offline attribution only; fresh-process matched wall is the performance authority",
+  "partitions": [
+    "calibration",
+    "heldout"
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v3_selector_attribution.v1",
+  "selector_training_report": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_v3_gat_first_20260806/arm_selector_gat_v1/training_report.json",
+  "thresholds": {
+    "forced_veto_arms": [
+      "QG2"
+    ],
+    "maximum_adverse_probability": 0.0001694081729510799,
+    "minimum_benefit_probability": 0.5,
+    "minimum_expected_gain": 0.01,
+    "risk_penalty": 0.5
+  }
+}

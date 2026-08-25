@@ -1,0 +1,5 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_candidate_finalizer_state.v1",
+  "status": "WAITING_FOR_FORMAL_FULL20_GATE",
+  "wait_for_pid": 3776534
+}

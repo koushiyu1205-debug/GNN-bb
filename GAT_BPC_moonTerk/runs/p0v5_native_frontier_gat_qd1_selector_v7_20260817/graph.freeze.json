@@ -1,0 +1,28 @@
+{
+  "depth_bins": [
+    0.0,
+    0.05,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.55,
+    0.75
+  ],
+  "deterministic_sort": [
+    "source",
+    "target",
+    "type"
+  ],
+  "edge_types": [
+    "self_loop",
+    "depth_neighbor",
+    "rc_neighbor",
+    "parent_forward",
+    "parent_reverse"
+  ],
+  "node_count": 64,
+  "post_action_features_forbidden": true,
+  "rc_bins": 8,
+  "schema_version": "lunar_ice_bpc.p0v5_frontier_depth_rc_graph.v1"
+}

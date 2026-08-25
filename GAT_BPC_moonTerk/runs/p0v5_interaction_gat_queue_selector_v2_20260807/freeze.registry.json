@@ -1,0 +1,17 @@
+{
+  "artifact_sha256": {
+    "acceptance.freeze.json": "cb70bb03566ea04ec9a6d5bf8c3c0813054551c4e8b73c219abb73d1030548fc",
+    "candidate_census.initial.freeze.json": "e52a00e17c1901b04d402b4ef42a6bdc72f318b9777a6dc6198d7c73422456c2",
+    "candidate_protected_blacklist.freeze.json": "7e106a46340134bb4ff2663659967561dba557e6ac4bd418b4da1fc1faa13673",
+    "config.freeze.json": "7adef017fd984129254d32b1099f30dfbc371bfbbe7466582c46ac84578babd1",
+    "execution.freeze.json": "c038998a3280ebc80516b35b11ee4ddf893114ccd5dc12b10d61dd20aa611ff0",
+    "formal_blacklist.freeze.json": "a0af654e7eb4dcabad3f54740f47a281e01b6b50f9ae7a610530e4012e2139c0",
+    "graph.freeze.json": "df90ba02017fe8e263ac25f815e8a9a03a65f16b16f90303157fe5aaae637024",
+    "r1_preaction_import.freeze.json": "a738c62942994d1e10025ad3e390dd46e24bb3e985b4288d6b7d93e6a2b54aad",
+    "source.freeze.json": "f07e265a6c9f0b02565ad7faf661a8042db54a786b16f91f4d23173219ebb0f8"
+  },
+  "historical_registry_modified": false,
+  "immutable": true,
+  "r1_modified": false,
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_freeze_registry.v2"
+}

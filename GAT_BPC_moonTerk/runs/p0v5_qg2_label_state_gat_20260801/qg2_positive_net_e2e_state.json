@@ -1,0 +1,6 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_positive_net_e2e_state.v1",
+  "status": "WAITING_FOR_COMBINED_FRESH_CALIBRATION",
+  "updated_at": "2026-08-05T22:03:38+08:00",
+  "wait_for_pid": 1552464
+}

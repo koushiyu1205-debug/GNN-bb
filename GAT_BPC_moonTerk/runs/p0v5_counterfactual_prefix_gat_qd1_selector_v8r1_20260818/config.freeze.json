@@ -1,0 +1,152 @@
+{
+  "action_universe": [
+    "CONTINUE_Q0",
+    "SWITCH_QD1_AT_4096"
+  ],
+  "allowed_scales": [
+    30,
+    50
+  ],
+  "baseline_native_build_dir": "build/native-spprc-frontier-gat-v7",
+  "candidate_generation": {
+    "calibration_instances_per_scale": 6,
+    "development_e2e_instances_per_scale": 3,
+    "heldout_instances_per_scale": 6,
+    "outcome_blind_selection": true,
+    "pilot_candidate_caps": {
+      "30": 160,
+      "50": 23
+    },
+    "pilot_instances_per_scale": 8,
+    "total_candidate_caps": {
+      "30": 385,
+      "50": 57
+    },
+    "total_eligible_instances_per_scale": 23,
+    "tree_supplement_forbidden": true
+  },
+  "deployment_authorized": false,
+  "development_only": true,
+  "evidence_repair_of": "runs/p0v5_counterfactual_prefix_gat_qd1_selector_v8_20260818",
+  "execution": {
+    "blocked_fresh_process_repeats": 3,
+    "full_bpc_cap_sec": 3600,
+    "memory_limit_gb": 10.867,
+    "replay_caps_sec": {
+      "30": 300,
+      "50": 600
+    },
+    "single_native_process": true
+  },
+  "experiment_id": "p0v5_counterfactual_prefix_gat_qd1_selector_v8r1_20260818",
+  "frozen_before_v8_prefix_outcomes": true,
+  "invalidated_measurement_claims": [
+    "fresh_process_wall_was_reported_as_warm_prefix_wall",
+    "all_three_budgets_used_the_same_2048_pop_request_wall",
+    "native_endpoint_elapsed_wall_was_not_recorded",
+    "static_preaction_context_features_were_not_bound_into_native_graphs"
+  ],
+  "label_sample_cap": 256,
+  "lifecycle_authority": [
+    "root_cg"
+  ],
+  "literal_bypass_scales": [
+    5,
+    10,
+    20
+  ],
+  "native_binary": "build/native-spprc-counterfactual-prefix-v8r1/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "native_build_dir": "build/native-spprc-counterfactual-prefix-v8r1",
+  "permanent_forced_veto_arms": [
+    "QB1",
+    "QGR1"
+  ],
+  "processed_label_boundary": 4096,
+  "production_switch_authorized": false,
+  "representation_development": {
+    "collapsed_labels": 38,
+    "contexts": 38,
+    "matched_tasks": 228,
+    "maximum_gat_ba_gap_to_simple": 0.02,
+    "maximum_similar_opposite_label_fraction": 0.35,
+    "minimum_topology_rank_drop": 0.02,
+    "paired_prefix_fraction_of_qpf0": 0.02,
+    "paired_prefix_warm_p99_ms": 250.0,
+    "performance_authority": false,
+    "scale50_minimum_benefit_balanced_accuracy": 0.7,
+    "scale50_minimum_rank_accuracy": 0.65,
+    "taxed_oracle_gm_at_most": 0.97
+  },
+  "rollout_checkpoint_grid": [
+    128,
+    512,
+    2048
+  ],
+  "run_root": "runs/p0v5_counterfactual_prefix_gat_qd1_selector_v8r1_20260818",
+  "runtime_policy": "P0V5_ROOT_COUNTERFACTUAL_PREFIX_GAT_QD1_SELECTOR_V8",
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_gat_qd1_config.v8",
+  "selected_exact_config": "runs/p0v4_v5_exact_gat_binding_20260731/selected_exact_v5.yaml",
+  "selector_training": {
+    "attention_heads": 2,
+    "candidate_model": "gat",
+    "control_models": [
+      "mlp",
+      "linear",
+      "no_message",
+      "shuffled_topology"
+    ],
+    "dropout": 0.1,
+    "fold_count": 5,
+    "hidden_dim": 16,
+    "layers": 2,
+    "loss_weights": {
+      "adverse_bce": 1.0,
+      "beneficial_gain_huber": 0.5,
+      "benefit_bce": 1.0,
+      "qd1_vs_q0_rank": 0.25
+    },
+    "maximum_ensemble_parameters_exclusive": 90000,
+    "maximum_epochs": 200,
+    "maximum_parameters_per_seed_exclusive": 30000,
+    "ood_relative_margin": 0.05,
+    "patience": 25,
+    "seeds": [
+      61635,
+      91267,
+      170141
+    ],
+    "torch_threads": 1
+  },
+  "source_config": "/home/kai/work/GAT_BPC_moonTerk/configs/experiments/p0v5_counterfactual_prefix_gat_qd1_selector_v8r1.json",
+  "source_config_sha256": "324017127eea57501e8c6dfd1e6d448bff5fd65b996f3b5aeb868d1476c7ad7e",
+  "threshold_grid": {
+    "adverse_penalty": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "maximum_adverse_probability": [
+      0.02,
+      0.05,
+      0.1
+    ],
+    "maximum_disagreement": [
+      0.05,
+      0.1,
+      0.15
+    ],
+    "minimum_benefit_probability": [
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ],
+    "minimum_expected_gain": [
+      0.02,
+      0.05,
+      0.1
+    ]
+  },
+  "v7r3_run_root": "runs/p0v5_frontier_observability_root_cause_v7r3_20260818",
+  "v7r3_terminal_reason": "SCALE50_BENEFIT_HARM_NOT_SEPARABLE"
+}

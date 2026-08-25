@@ -1,0 +1,31 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_post_oracle_controller_freeze.v3",
+  "status": "FROZEN_WAITING_FOR_ACTION_SURFACE_V2_ORACLE_V5",
+  "development_only": true,
+  "deployable": false,
+  "frozen_at_local": "2026-08-03T07:03:00+08:00",
+  "oracle_summary": "runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_action_surface_v2_stage1.json",
+  "oracle_execution_freeze": "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_oracle_execution_freeze.json",
+  "oracle_execution_freeze_sha256": "bf09c8242d61cc06975a18a13b0637b7802ea56a52ee74eb064cd9e894d3a679",
+  "required_oracle_schema": "lunar_ice_bpc.p0v5_qg2_bounded_oracle.v5",
+  "required_supervision_schema": "lunar_ice_bpc.p0v5_qg2_action_reachable_supervision.v2",
+  "required_queue_action_surface": "same_terminal_class_and_reduced_cost_bucket.v1",
+  "models": ["linear", "mlp", "gat"],
+  "calibration_repeats": 3,
+  "allowed_exact_engine_hash": "0389484e5f5623f2",
+  "allowed_exact_action_policy_hashes": [
+    "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+    "b2f9eab6bd01d12a0f4319342550733ddb0510e559d5e6a6abc119765d2203e2"
+  ],
+  "frozen_file_sha256": {
+    "scripts/run_p0v5_qg2_action_surface_v2_training_after_oracle.py": "bcce157a174cbc1afa2278aa9148bc0a476e2e00fc9a331e40abcb7638d8deb2",
+    "scripts/train_p0v5_qg2_model_comparison.py": "9b3ea67b883a117efb05e97bb494017f1666e88c342b54b8683f0e4939f569e1",
+    "scripts/predict_p0v5_qg2_potential.py": "b4475d9dc26bd4cd7c8d7be02a67459183880891a48e131e8aabb4b464140beb",
+    "scripts/calibrate_p0v5_qg2_models.py": "633a0d8d62119ffd35456a6349f853823f029b36250837ebf13edc70fed0abb7",
+    "scripts/replay_p0v5_qg2_label_state_snapshot.py": "c119da7e394d330cc713aa2443141bad83e07ba22594e9fbead0c31b529cf238",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_action_surface_v2_oracle_execution_freeze.json": "bf09c8242d61cc06975a18a13b0637b7802ea56a52ee74eb064cd9e894d3a679"
+  },
+  "training_gate": "oracle_v5_pass_and_training_permitted",
+  "calibration_gate": "harmful_precision_heldout_gat_advantage_and_inference",
+  "inherited_guidance_environment_permitted": false
+}

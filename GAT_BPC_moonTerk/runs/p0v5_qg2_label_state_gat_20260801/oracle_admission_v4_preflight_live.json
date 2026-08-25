@@ -1,0 +1,30 @@
+{
+  "bounded_context_limit": 300,
+  "bounded_context_limit_per_scale": 150,
+  "coverage": {
+    "30": {
+      "context_count": 1,
+      "instance_count": 1,
+      "preaction_stratum_counts": {
+        "root:plain:r30_plus:missing": 1
+      }
+    },
+    "50": {
+      "context_count": 0,
+      "instance_count": 0,
+      "preaction_stratum_counts": {}
+    }
+  },
+  "deployable": false,
+  "development_only": true,
+  "oracle_gate": {
+    "context_count": 1,
+    "passed": false,
+    "reason": "scale30_and_scale50_each_require_20_contexts_from_10_instances"
+  },
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_bounded_oracle.v3",
+  "source_state_index": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_qg2_label_state_gat_20260801/admission_v4_live_snapshot_index.json",
+  "source_state_index_sha256": "43c53586874a6853a58584ff029fa2d941c3c04aa9167a69f8a09bcf6860ef56",
+  "status": "INSUFFICIENT_SNAPSHOT_COVERAGE",
+  "training_permitted": false
+}

@@ -1,0 +1,17 @@
+{
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "detail": {
+    "decision": "representation_budget.decision.json",
+    "development_e2e_outcomes": 0,
+    "formal_outcomes": 0,
+    "heldout_outcomes": 0,
+    "immediate_cause": "PREFIX_COST_GATE_FAILED_BEFORE_OOF",
+    "report": "representation_development.report.json"
+  },
+  "development_only": true,
+  "failed_stage": "REPRESENTATION_TRAIN",
+  "production_switch_authorized": false,
+  "reason": "COUNTERFACTUAL_PREFIX_NOT_IDENTIFIABLE",
+  "schema_version": "lunar_ice_bpc.p0v5_counterfactual_prefix_terminal.v8"
+}

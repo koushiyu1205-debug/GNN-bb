@@ -1,0 +1,389 @@
+{
+  "conservative_total_p99_ms": 15.239989566303253,
+  "inference_p99_ms": 4.718930926173925,
+  "maximum_fraction_of_qpf0": 0.01771900623868113,
+  "rows": [
+    {
+      "cell_graph_build_wall_seconds": 0.000222136,
+      "combined_wall_seconds": 0.005132747908648431,
+      "conservative_separate_graph_build_wall_seconds": 0.0006957479999999999,
+      "context_id": "v5_s30_07318c0416425be5_0",
+      "fraction_of_qpf0": 0.005618523710018729,
+      "label_graph_build_wall_seconds": 0.000473612,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004436999908648431
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.00322542,
+      "combined_wall_seconds": 0.013554197047114313,
+      "conservative_separate_graph_build_wall_seconds": 0.009378489,
+      "context_id": "v5_s30_296a3155f2f99afa_0",
+      "fraction_of_qpf0": 7.882539107293373e-05,
+      "label_graph_build_wall_seconds": 0.006153069,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004175708047114313
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.003826581,
+      "combined_wall_seconds": 0.015239989566303253,
+      "conservative_separate_graph_build_wall_seconds": 0.011111526,
+      "context_id": "v5_s30_296a3155f2f99afa_1",
+      "fraction_of_qpf0": 0.0001301867913764122,
+      "label_graph_build_wall_seconds": 0.007284945,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004128463566303253
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.003196844,
+      "combined_wall_seconds": 0.014524098422410012,
+      "conservative_separate_graph_build_wall_seconds": 0.010063352000000001,
+      "context_id": "v5_s30_36658f9c48a480aa_0",
+      "fraction_of_qpf0": 0.0004757228687545442,
+      "label_graph_build_wall_seconds": 0.006866508,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004460746422410011
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.002153157,
+      "combined_wall_seconds": 0.01096587744232911,
+      "conservative_separate_graph_build_wall_seconds": 0.006726188,
+      "context_id": "v5_s30_36658f9c48a480aa_1",
+      "fraction_of_qpf0": 0.000253549827456405,
+      "label_graph_build_wall_seconds": 0.004573031,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004239689442329109
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.002299294,
+      "combined_wall_seconds": 0.010890768961436868,
+      "conservative_separate_graph_build_wall_seconds": 0.006669592,
+      "context_id": "v5_s30_4a75319d174fdd19_0",
+      "fraction_of_qpf0": 0.00180805994584632,
+      "label_graph_build_wall_seconds": 0.004370298,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004221176961436868
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.00229716,
+      "combined_wall_seconds": 0.011255684631028414,
+      "conservative_separate_graph_build_wall_seconds": 0.007102209,
+      "context_id": "v5_s30_4c3e017314d9a3ee_0",
+      "fraction_of_qpf0": 0.006975468776598443,
+      "label_graph_build_wall_seconds": 0.004805049,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004153475631028414
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.00107002,
+      "combined_wall_seconds": 0.0076327215508157015,
+      "conservative_separate_graph_build_wall_seconds": 0.00319104,
+      "context_id": "v5_s30_5ac004e434340ddd_0",
+      "fraction_of_qpf0": 2.942035794269885e-05,
+      "label_graph_build_wall_seconds": 0.00212102,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0044416815508157015
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000807131,
+      "combined_wall_seconds": 0.006891342529811322,
+      "conservative_separate_graph_build_wall_seconds": 0.0026389409999999997,
+      "context_id": "v5_s30_6cc232d48d44f2d3_0",
+      "fraction_of_qpf0": 0.01771900623868113,
+      "label_graph_build_wall_seconds": 0.00183181,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004252401529811323
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.00042506,
+      "combined_wall_seconds": 0.006202136430083096,
+      "conservative_separate_graph_build_wall_seconds": 0.0017812029999999999,
+      "context_id": "v5_s30_6f17b70d5674dc08_0",
+      "fraction_of_qpf0": 0.008461716427072333,
+      "label_graph_build_wall_seconds": 0.001356143,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004420933430083096
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000276434,
+      "combined_wall_seconds": 0.005422513439593375,
+      "conservative_separate_graph_build_wall_seconds": 0.000888571,
+      "context_id": "v5_s30_716f194babe1bf7d_0",
+      "fraction_of_qpf0": 0.01343457747773447,
+      "label_graph_build_wall_seconds": 0.000612137,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004533942439593375
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000321426,
+      "combined_wall_seconds": 0.005149114023128986,
+      "conservative_separate_graph_build_wall_seconds": 0.000973804,
+      "context_id": "v5_s30_77176536c5b0f521_0",
+      "fraction_of_qpf0": 7.275361438690025e-05,
+      "label_graph_build_wall_seconds": 0.000652378,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004175310023128986
+    },
+    {
+      "cell_graph_build_wall_seconds": 9.4065e-05,
+      "combined_wall_seconds": 0.0048187719948038455,
+      "conservative_separate_graph_build_wall_seconds": 0.000321075,
+      "context_id": "v5_s30_77176536c5b0f521_2",
+      "fraction_of_qpf0": 6.683848132249927e-05,
+      "label_graph_build_wall_seconds": 0.00022701,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004497696994803846
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000425232,
+      "combined_wall_seconds": 0.005678821981068611,
+      "conservative_separate_graph_build_wall_seconds": 0.0012500459999999999,
+      "context_id": "v5_s30_9e28af267ed553c3_1",
+      "fraction_of_qpf0": 0.000301457614094469,
+      "label_graph_build_wall_seconds": 0.000824814,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004428775981068611
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.002480367,
+      "combined_wall_seconds": 0.011932650579314053,
+      "conservative_separate_graph_build_wall_seconds": 0.007602197,
+      "context_id": "v5_s30_a7acc5b02e62e549_0",
+      "fraction_of_qpf0": 0.00029518223874795165,
+      "label_graph_build_wall_seconds": 0.00512183,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004330453579314053
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.002021895,
+      "combined_wall_seconds": 0.010661054028295458,
+      "conservative_separate_graph_build_wall_seconds": 0.006438588,
+      "context_id": "v5_s30_a7acc5b02e62e549_1",
+      "fraction_of_qpf0": 0.00024074825188928763,
+      "label_graph_build_wall_seconds": 0.004416693,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004222466028295457
+    },
+    {
+      "cell_graph_build_wall_seconds": 7.5179e-05,
+      "combined_wall_seconds": 0.004178232103244484,
+      "conservative_separate_graph_build_wall_seconds": 0.000219437,
+      "context_id": "v5_s30_c3b4e15cc7f5a44f_0",
+      "fraction_of_qpf0": 0.0001925329372949577,
+      "label_graph_build_wall_seconds": 0.000144258,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0039587951032444835
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.001997049,
+      "combined_wall_seconds": 0.010174674018494189,
+      "conservative_separate_graph_build_wall_seconds": 0.00584464,
+      "context_id": "v5_s30_e5f80e8bd698b75d_0",
+      "fraction_of_qpf0": 0.0005130348391604256,
+      "label_graph_build_wall_seconds": 0.003847591,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004330034018494189
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.001891445,
+      "combined_wall_seconds": 0.010105551995953858,
+      "conservative_separate_graph_build_wall_seconds": 0.0057194640000000005,
+      "context_id": "v5_s30_fbd070417ed00ce5_0",
+      "fraction_of_qpf0": 0.0009745672607034748,
+      "label_graph_build_wall_seconds": 0.003828019,
+      "scale": 30,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004386087995953858
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.00035317,
+      "combined_wall_seconds": 0.005714194036646903,
+      "conservative_separate_graph_build_wall_seconds": 0.001163607,
+      "context_id": "v5_s50_0901f02491d45908_2",
+      "fraction_of_qpf0": 0.00029846501630525894,
+      "label_graph_build_wall_seconds": 0.000810437,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0045505870366469026
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.001246698,
+      "combined_wall_seconds": 0.008050588905157089,
+      "conservative_separate_graph_build_wall_seconds": 0.0036255140000000003,
+      "context_id": "v5_s50_125aaef31ef11d35_1",
+      "fraction_of_qpf0": 0.0008227990924152203,
+      "label_graph_build_wall_seconds": 0.002378816,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004425074905157089
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000842113,
+      "combined_wall_seconds": 0.006838408609414875,
+      "conservative_separate_graph_build_wall_seconds": 0.002483668,
+      "context_id": "v5_s50_125aaef31ef11d35_2",
+      "fraction_of_qpf0": 0.0008611027679920686,
+      "label_graph_build_wall_seconds": 0.001641555,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0043547406094148755
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000113066,
+      "combined_wall_seconds": 0.004869015548049152,
+      "conservative_separate_graph_build_wall_seconds": 0.000391769,
+      "context_id": "v5_s50_14c6262160809d66_1",
+      "fraction_of_qpf0": 0.00010899995543187949,
+      "label_graph_build_wall_seconds": 0.000278703,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004477246548049152
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000357196,
+      "combined_wall_seconds": 0.005495691106178403,
+      "conservative_separate_graph_build_wall_seconds": 0.001055224,
+      "context_id": "v5_s50_16407bf4d988d595_0",
+      "fraction_of_qpf0": 0.00010937222249528886,
+      "label_graph_build_wall_seconds": 0.000698028,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004440467106178403
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.00010057,
+      "combined_wall_seconds": 0.004737984391267181,
+      "conservative_separate_graph_build_wall_seconds": 0.000348598,
+      "context_id": "v5_s50_22e4e44594b5766b_0",
+      "fraction_of_qpf0": 0.00024814479400146343,
+      "label_graph_build_wall_seconds": 0.000248028,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.0043893863912671804
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000281386,
+      "combined_wall_seconds": 0.005549914585261345,
+      "conservative_separate_graph_build_wall_seconds": 0.00083203,
+      "context_id": "v5_s50_22e4e44594b5766b_2",
+      "fraction_of_qpf0": 0.00019019998223116693,
+      "label_graph_build_wall_seconds": 0.000550644,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004717884585261345
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.001792609,
+      "combined_wall_seconds": 0.009953737425574004,
+      "conservative_separate_graph_build_wall_seconds": 0.005388154,
+      "context_id": "v5_s50_23cc0c6fee9f1fa0_2",
+      "fraction_of_qpf0": 1.6486006657069506e-05,
+      "label_graph_build_wall_seconds": 0.003595545,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004565583425574005
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000143534,
+      "combined_wall_seconds": 0.0050422725368520025,
+      "conservative_separate_graph_build_wall_seconds": 0.000456724,
+      "context_id": "v5_s50_3f257a94c89bf615_0",
+      "fraction_of_qpf0": 0.00010736195958182873,
+      "label_graph_build_wall_seconds": 0.00031319,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004585548536852002
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000292943,
+      "combined_wall_seconds": 0.005579592926173925,
+      "conservative_separate_graph_build_wall_seconds": 0.0008606619999999999,
+      "context_id": "v5_s50_510dcbb1be8deee5_2",
+      "fraction_of_qpf0": 0.0005249638126062895,
+      "label_graph_build_wall_seconds": 0.000567719,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004718930926173925
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000359636,
+      "combined_wall_seconds": 0.005389028506256818,
+      "conservative_separate_graph_build_wall_seconds": 0.001071533,
+      "context_id": "v5_s50_56286c37063f6048_0",
+      "fraction_of_qpf0": 0.0001412506145608167,
+      "label_graph_build_wall_seconds": 0.000711897,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004317495506256819
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.001920928,
+      "combined_wall_seconds": 0.011462003931824206,
+      "conservative_separate_graph_build_wall_seconds": 0.006895829,
+      "context_id": "v5_s50_665810f5957bfe6b_1",
+      "fraction_of_qpf0": 0.0005293208140864992,
+      "label_graph_build_wall_seconds": 0.004974901,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004566174931824207
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000657969,
+      "combined_wall_seconds": 0.006613930082410455,
+      "conservative_separate_graph_build_wall_seconds": 0.002124603,
+      "context_id": "v5_s50_79478c234c73e4f2_1",
+      "fraction_of_qpf0": 0.0004516149767125901,
+      "label_graph_build_wall_seconds": 0.001466634,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004489327082410455
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000419198,
+      "combined_wall_seconds": 0.00578480893681717,
+      "conservative_separate_graph_build_wall_seconds": 0.001207582,
+      "context_id": "v5_s50_7f3230fed387dae8_0",
+      "fraction_of_qpf0": 6.391188093126777e-05,
+      "label_graph_build_wall_seconds": 0.000788384,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004577226936817169
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.001237669,
+      "combined_wall_seconds": 0.00824948260732174,
+      "conservative_separate_graph_build_wall_seconds": 0.0037103300000000004,
+      "context_id": "v5_s50_7f3230fed387dae8_2",
+      "fraction_of_qpf0": 4.026386143466299e-05,
+      "label_graph_build_wall_seconds": 0.002472661,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004539152607321739
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000213081,
+      "combined_wall_seconds": 0.004990480980681002,
+      "conservative_separate_graph_build_wall_seconds": 0.000619547,
+      "context_id": "v5_s50_8e35efca611548b7_2",
+      "fraction_of_qpf0": 0.00030015162558208355,
+      "label_graph_build_wall_seconds": 0.000406466,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004370933980681002
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000200453,
+      "combined_wall_seconds": 0.005204058525304556,
+      "conservative_separate_graph_build_wall_seconds": 0.0006099359999999999,
+      "context_id": "v5_s50_9003925e2924006a_1",
+      "fraction_of_qpf0": 0.00044921209396471166,
+      "label_graph_build_wall_seconds": 0.000409483,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004594122525304556
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.000209234,
+      "combined_wall_seconds": 0.005132174467171848,
+      "conservative_separate_graph_build_wall_seconds": 0.000619072,
+      "context_id": "v5_s50_a21f4ca58f222d77_2",
+      "fraction_of_qpf0": 3.1194709190474744e-05,
+      "label_graph_build_wall_seconds": 0.000409838,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004513102467171848
+    },
+    {
+      "cell_graph_build_wall_seconds": 0.00034577,
+      "combined_wall_seconds": 0.005346801549019754,
+      "conservative_separate_graph_build_wall_seconds": 0.001066804,
+      "context_id": "v5_s50_ea7975bf0465b1c7_1",
+      "fraction_of_qpf0": 0.0003375142802542084,
+      "label_graph_build_wall_seconds": 0.000721034,
+      "scale": 50,
+      "tensorization_plus_ensemble_inference_wall_seconds": 0.004279997549019754
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_multires_frontier_cost.v1",
+  "separate_graph_build_sum_is_conservative": true
+}

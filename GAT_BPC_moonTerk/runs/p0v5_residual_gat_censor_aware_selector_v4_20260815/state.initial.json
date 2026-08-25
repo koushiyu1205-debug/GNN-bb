@@ -1,0 +1,11 @@
+{
+  "current_stage": "FRESH_ROOT_COLLECTION",
+  "deployment_authorized": false,
+  "development_only": true,
+  "experiment_id": "p0v5_residual_gat_censor_aware_selector_v4_20260815",
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_state.v4",
+  "status": "READY",
+  "terminal": false,
+  "terminal_decision": null
+}

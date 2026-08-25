@@ -1,0 +1,9 @@
+{
+  "qb1_forced_veto_both_scales": true,
+  "schema_version": "lunar_ice_bpc.p0v5_residual_gat_v3_diagnostic_binding.v4",
+  "v3_outcome_rows_imported": 0,
+  "v3_outcomes_diagnostic_only": true,
+  "v3_snapshots_imported": 0,
+  "v3_terminal_path": "/home/kai/work/GAT_BPC_moonTerk/runs/p0v5_interaction_gat_queue_selector_v3_20260814/terminal_decision.json",
+  "v3_terminal_sha256": "6dd75ffc68f7ad3247ab27ce5d75fe273f9260085d5c6091ac100b41213f68b6"
+}

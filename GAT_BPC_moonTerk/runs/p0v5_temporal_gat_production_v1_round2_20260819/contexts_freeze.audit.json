@@ -1,0 +1,23 @@
+{
+  "context_count": 155,
+  "context_count_by_scale_partition": {
+    "scale30_calibration": 11,
+    "scale30_train": 33,
+    "scale50_calibration": 26,
+    "scale50_train": 85
+  },
+  "contexts_freeze_sha256": "8a55f1263df0ca0d065cdad9955c909bc4e1447470c42f6d7fbe89787605838b",
+  "errors": [],
+  "idempotent_freeze_rerun_exit_zero": true,
+  "instance_count_by_scale": {
+    "30": 43,
+    "50": 52
+  },
+  "maximum_contexts_per_instance": 3,
+  "partial_file_count": 0,
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_context_freeze_audit.v1",
+  "selected_resource_censored_eligibility_count": 19,
+  "selection_exact_earliest_three": true,
+  "snapshot_census_count": 183,
+  "status": "PASS"
+}

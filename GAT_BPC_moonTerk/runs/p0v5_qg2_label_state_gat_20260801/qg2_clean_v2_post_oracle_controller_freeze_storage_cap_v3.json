@@ -1,0 +1,32 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_post_oracle_controller_freeze.v2",
+  "status": "FROZEN_AFTER_STORAGE_CAP_NAMESPACE_ALIGNMENT_BEFORE_ORACLE_COMPLETION_OR_MODEL_TRAINING",
+  "development_only": true,
+  "deployable": false,
+  "frozen_at_local": "2026-08-02T22:35:00+08:00",
+  "collection_id": "qg2_clean_v2",
+  "amendment_id": "storage_cap_downstream_namespace_alignment_v1",
+  "frozen_file_sha256": {
+    "scripts/run_p0v5_qg2_training_after_oracle.py": "802d0ccf0941de2557e9e11ec2df8dfdb59abe3780c9420309c36ae69cbb1761",
+    "scripts/run_p0v5_qg2_clean_v2_training_after_oracle.py": "ec9a476394eefb102a94c7e49c3982d70187b6f7939982996da632d59869df4e",
+    "scripts/train_p0v5_qg2_model_comparison.py": "f70b3148e0b8759e5924e521c47e1d5e461c5fa6c668fa9d84d665369bc44ca4",
+    "scripts/calibrate_p0v5_qg2_models.py": "a2d9c3d8583e60681cd979b49c4fdb409aa47733430a0709ff584cc1567563cf",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_oracle_execution_freeze_storage_cap_v3.json": "602b8fd6fc2cabfcd6831aaff18383f39107f7317dd84f328a65a2f833f7dff8"
+  },
+  "oracle_controller_state": "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v2_oracle_storage_cap_v2_controller_state.json",
+  "oracle_summary": "runs/p0v5_qg2_label_state_gat_20260801/oracle_qg2_clean_v2_storage_cap_v2_stage1.json",
+  "training_gate": "bounded_oracle_v4_pass_and_training_permitted",
+  "models": [
+    "linear",
+    "mlp",
+    "gat"
+  ],
+  "calibration_repeats": 3,
+  "allowed_exact_engine_hash": "0389484e5f5623f2",
+  "allowed_exact_action_policy_hashes": [
+    "9dcedb7b74c0a9c20a3a64484067b87300b9267e8bd450fcfff74d2a8c7406ca",
+    "b2f9eab6bd01d12a0f4319342550733ddb0510e559d5e6a6abc119765d2203e2"
+  ],
+  "inherited_guidance_or_snapshot_environment_permitted": false,
+  "automatic_e2e_after_calibration": false
+}

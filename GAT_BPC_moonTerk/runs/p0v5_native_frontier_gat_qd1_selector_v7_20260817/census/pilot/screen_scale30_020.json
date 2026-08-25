@@ -1,0 +1,21 @@
+{
+  "arm_outcomes_read": 0,
+  "candidate_index": 20,
+  "cohort": "pilot",
+  "generation_seed": 974116933,
+  "instance_content_hash": "4fe9257c2f956009",
+  "instance_id": "lunar_ice_sp50_030_001_seed974416934",
+  "instance_path": "/home/kai/work/GAT_BPC_moonTerk/data/p0v5_native_frontier_gat_qd1_selector_v7_pilot_candidates/scale30/candidate_020/lunar_ice_sp50_030/instance_001_logical_graph.json",
+  "instance_sha256": "674d972f3c6343b234d5c75550f8fb6ab6092862029b21b1e65d7112275bdf85",
+  "legal_snapshot_count": 0,
+  "reason": "NO_NATURAL_V5_ROOT_FALLBACK",
+  "root_wall_not_used": true,
+  "scale": 30,
+  "schema_version": "lunar_ice_bpc.p0v5_v7_candidate_screen.v1",
+  "screen_status": "INELIGIBLE",
+  "selection_inputs": [
+    "candidate_index",
+    "legal_snapshot_count_ge_1"
+  ],
+  "snapshots": []
+}

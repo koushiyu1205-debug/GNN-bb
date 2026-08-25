@@ -394,3 +394,39 @@ the evidence bank:
 | CL023–CL025: missing learning results | EXP-1–EXP-11; RES-6–RES-10 |
 | CL026–CL029: forbidden claims | Title constraints; INT-6; RW-9–RW-10; all guardrail columns |
 | CL030: citation-required context | INT-1–INT-5; RW-1–RW-10 |
+# 2026-08-03 P0V4+V5/QG2 replacement blueprint
+
+This update supersedes older paragraph plans wherever they describe a generic pricing-plus-branch GAT as the current implementation.
+
+| Section | Revised paragraph function | Evidence allocation | Claim boundary |
+|---|---|---|---|
+| Abstract | Define lunar model; state P0V4+V5 exact pipeline; state QG2 ordering-only candidate; report 80/80 at 5–30 and 15/20 at 50; withhold GAT performance | EV038–EV042 | No GAT acceleration claim |
+| 1 | Funnel from in-situ lunar evidence need to multi-path multi-trip routing, exact-search burden, then current exact and learning contributions | EV032–EV042; locked citations | Three contributions only: model, exact algorithm/learning interface, benchmark/evaluation |
+| 3 | Preserve no-task-wait formulation, fixed mission-epoch inputs, normalized objective, full classical feasibility conditions and route master | EV029, EV031–EV035 | No departure-time-dependent path attributes inside a solve |
+| 4.1 | Present deterministic P0V4+V5 flow before learning | EV038 | Midpoint and cut screens are accelerators, not proofs |
+| 4.3 | Add bidirectional midpoint witness stage, true-RC audit, diverse batch admission and exhaustive P0V4 fallback | EV038 | Only fallback exhaustion proves no negative column |
+| 4.4 | Replace old top-cut-only rule with deterministic group screen over root-only SRI-3 candidates | EV038 | Screening changes cut commitment only; cut validity remains mathematical |
+| 4.5 | Retain exact Ryan–Foster branch rule | EV030, EV038 | No current learned branch result |
+| 4.6 | Replace generic GAT with QG2 label-state ordering: action surface, features, supervision, fail-closed activation | EV041–EV042 | Design/implementation status only |
+| 4.7 | Extend invariance lemma to midpoint, group screen and within-bucket QG2 permutations | EV031, EV038, EV041 | Conditional exactness, not guaranteed finite-time closure |
+| 5 | Define paired P0V4/Q0/QG2 experiment; separate Oracle, calibration, E2E and formal gates | EV039–EV042 | All QG2 outcome fields remain TBD |
+| 6.1 | Report current exact baseline | EV039–EV040 | 50-task incomplete cases shown explicitly |
+| 6.2 | Report V5 component status without unrun causal ablation | EV038 | No component speedup unless paired ablation is frozen |
+| 6.3 | Record rejected earlier GAT paths only as design evidence; do not use them as proposed-result support | GAT closeout plus EV042 | Negative/unfinished evidence kept distinct |
+| 6.4 | State QG2 preparation status and activation criteria | EV041–EV042 | No learned result |
+| 7–8 | Discuss exactness scope, computational frontier and pending learning/seasonal evidence | EV039–EV042 | No continuous-terrain or seasonal optimum claim |
+
+# 2026-08-03 Chinese narrative-rewrite contract
+
+This contract supersedes implementation-status wording in the visible Chinese manuscript while preserving the mathematical and evidence boundaries above.
+
+| Section | Reader question | Narrative move | Evidence retained | Material moved out of the visible argument |
+|---|---|---|---|---|
+| Abstract | What lunar planning problem is solved, by what exact mechanism, and what is already known? | Problem and lunar resource coupling → route-column model → exact/learning division → bounded deterministic evidence | Equation (11) objective identity; EV039–EV042 | Internal version names, model qualification status and development history |
+| 1 | Why does remote water evidence lead to a fleet-routing problem? | Remote anomaly → in-situ evidence → south-pole path trade-offs → multi-path multi-trip structure → pricing bottleneck → proof-preserving learning | C042, C054, C055, C061, C062; EV032–EV042 | Failed learning branches and implementation acceptance language |
+| 2 | Which research lines are combined, and what remains unresolved? | Lunar local/task planning → route-column exact VRP → learning-guided search; each subsection ends at the paper-specific gap | C001–C003, C009, C020–C030, C041–C055 | Proof-ledger vocabulary and generic citation listing |
+| 3 | What is feasible, and how is a complete mission represented? | Task network → no-wait trip timing → route topology/time/resources → multi-trip route → set-partitioning master | EV029, EV031–EV035 | Code validation-model terminology and uncalibrated physical mixing coefficients |
+| 4 | How does the solver progress from finding columns to proving a node? | RMP → fast negative-column witnesses → exhaustive SPPRC → root valid cuts → deterministic branch → local GAT order → whole-tree proof | EV038, EV041–EV042; exactness lemmas | Raw implementation IDs, hash/checklist prose and learned-cut or learned-branch implications |
+| 5 | How will each contribution be tested fairly? | Questions → official lunar data and instance construction → paired deterministic and learning comparisons → implementation → metrics | EV010–EV011, EV033, EV039–EV042; C063–C064 | Gate/oracle/deployment vocabulary and historical version comparisons |
+| 6 | What is supported now, and what still requires experiments? | Report exact scalability first; state missing causal, learning and epoch evidence without assigning effects | EV039–EV040 | Failed-model development chronicle and visible project-management instructions |
+| 7–8 | What do the formulation and current evidence mean for lunar planning? | Lunar decision interpretation → exactness and resource boundary → model limits and extensions → concise conclusion | EV009–EV011, EV025, EV039–EV042 | Repetition of implementation checks and speculative operational claims |

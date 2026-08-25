@@ -1,0 +1,53 @@
+{
+  "boundary_graph_count_by_scale": {
+    "30": 44,
+    "50": 139
+  },
+  "boundary_graph_count_by_scale_partition": {
+    "scale30_calibration": 11,
+    "scale30_train": 33,
+    "scale50_calibration": 32,
+    "scale50_train": 107
+  },
+  "boundary_reached_and_graph_built_count": 183,
+  "eligibility_count": 183,
+  "engine_status_counts": {
+    "COMPLETE": 103,
+    "FOUND_NEGATIVE_PARTIAL": 59,
+    "MEMORY_LIMIT": 1,
+    "TIMEOUT": 20
+  },
+  "errors": [],
+  "guidance_authority_violation_count": 0,
+  "label_drop_count": 0,
+  "partial_file_count": 0,
+  "resource_censored_replay_count": 21,
+  "resource_censored_source_states": [
+    "0c72516eb026205d01d6dc76344467fa45e340ede88b7a194aa1b3761dbb3e60",
+    "1a986d86d535cffb77bc038089db354d22f7bc934d9ad0765bb156f2e6058f66",
+    "1cbfb6f496dea39306cd0e0db5d065c9a5acabf67b4237ee043cb5c2e3c01f99",
+    "2bed47a7111a1d23f4d952e2d6bb686fd425879b61afb535aa9ed22eba561061",
+    "3c425c359d846cd1a537e3298c4fcb66364b94b3de84ddba994002f1f2f9248d",
+    "4d1f3fe77aea65d4522821a635e20d1899f0b16c91de0532a14173bc8bcd5e06",
+    "548a5fd7e11045d5f1b1b1be584daf0d9daad8eb5fce6ca77cd2091ed5865ada",
+    "650fe199bab8c03912ac0517eded10a43b1cb278f43c5a07af6734783ad9ee11",
+    "6bfa5d96681bca41d61dbfb1105086b908a4deefb03eb9df3ba1a6507e742cf2",
+    "711ac66c4787e5894f9072596850f53120e6974ab220031c6029b08575839af3",
+    "7c0e62d39bda6c3c333499e554f4effd1e5f41b7d837b69179c7c76662c2507f",
+    "7c5a7e3a1d05ff19a38d62445b7e26817bcabd702fd694b549fe03b4da1266ad",
+    "9ad417fc85ddb57e97ad7b1dec8b1807d724d5e9d4dd672168f7947d97741acc",
+    "a9c581b51ac04c8a37c0990e59fba61cf9c9ff1aa4e1066706ce80a11b68e225",
+    "b81d77a9d63e3ab4c89c767613142481fea3bc8c1a7c5a63319b9cd46b8a4b73",
+    "bb48686da68e9733d779d9b999050999750436db2939d675298e171f0a97e3e1",
+    "c5477068758fd1ced30c4a74f0677724bc4fc76de929e33757b2591d178aed74",
+    "cfb9bb0ede50616f27bce70217c3535a7b8132d4fcb2588d783ebd62c4f0e595",
+    "e5ff98c210e1b156e9a5b47a21ceb51b613707ff5db9505cf203cb6ab4495094",
+    "eae6175428accff0b5ab3e980c3b3b3566b6f04956fadae159e789453227f298",
+    "f41c9af23f62308a31ed8babda11c1c1ddd6dc217eb801790551ab7069e74dc0"
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_context_eligibility_audit.v1",
+  "source_snapshot_count": 183,
+  "status": "PASS",
+  "unique_eligibility_sha256_count": 183,
+  "unique_frontier_graph_hash_count": 183
+}

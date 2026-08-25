@@ -1,0 +1,101 @@
+{
+  "accepted_decisions": {
+    "data_policy": "REUSE_D5_THEN_OUTCOME_BLIND_EXTENSION_IF_NEEDED",
+    "gat_scientific_core_required": true,
+    "learned_stay_q0_in_first_policy_round": false,
+    "manuscript_work_authorized": false,
+    "production_gate_preference": {
+      "e2e_improvement_at_least": 0.05,
+      "must_pass_pre_outcome_addressable_wall_feasibility": true
+    },
+    "safety_statistics": {
+      "confidence": 0.95,
+      "harm_upper_at_most": 0.1,
+      "minimum_activated_independent_instances_if_zero_harm": 29,
+      "raw_capacity_must_be_computed_from_activation_and_reserve": true,
+      "unit": "INSTANCE_LEVEL_POLICY_OUTCOME"
+    },
+    "scale30": {
+      "fallback_on_gate_failure": "LITERAL_Q0",
+      "policy_hypothesis": "DETERMINISTIC_QD1_AFTER_FROZEN_BOUNDARY"
+    },
+    "scale50": {
+      "first_stage_actions": [
+        "CONTINUE_QD1",
+        "REVERT_Q0"
+      ],
+      "policy_hypothesis": "TEMPORAL_GAT_POST_TRIAL_SELECTOR"
+    }
+  },
+  "authority": {
+    "additional_formal_response": "plan/GAT/P0V4_V5_Temporal_GAT_Additional_5_Questions_Formal_Response_20260825.md",
+    "decision_response": "plan/GAT/Temporal_GAT_10_Questions_Revised_Response_20260825.md",
+    "d5_handoff": "plan/GAT/CODEX_HANDOFF_P0V4_V5_TEMPORAL_GAT_V2_D5_CURRENT_STATE_20260825_ZH.md",
+    "v2_protocol": "plan/GAT/P0V4_V5_TEMPORAL_GAT_V2_FAILURE_AWARE_REUSE_PROTOCOL_REVISION_20260825_ZH.md"
+  },
+  "clarifications": {
+    "addressable_wall_without_arm_outcomes": "SCENARIO_CEILING_ONLY",
+    "d5_action_support_outcomes_exist": false,
+    "early_middle_late_requires_coverage_and_right_censor_audit": true,
+    "gat_topology_identifiability_audit_is_not_topology_value_evidence": true,
+    "safety_b_raw_instance_count_is_not_yet_frozen": true
+  },
+  "eligibility_resume": {
+    "authorized": true,
+    "completion_target": 274,
+    "hard_stop_after_completion": true,
+    "requires_binding_pass": true,
+    "requires_single_writer": true
+  },
+  "created_at": "2026-08-25T16:58:33+08:00",
+  "current_d5_snapshot": {
+    "active_eligibility_writer_count": 0,
+    "arm_outcome_count": 0,
+    "eligibility_final_count": 31,
+    "eligibility_target_count": 274,
+    "partial_artifact_count": 0
+  },
+  "deployment_authorized": false,
+  "experiment_id": null,
+  "must_not_run": [
+    "ANY_QUEUE_ARM_TASK",
+    "CONTEXT_FREEZE_V1",
+    "TRAIN_SCHEDULE_V1",
+    "MODEL_TRAINING",
+    "PRODUCTION_REGISTRY_UPDATE",
+    "MANUSCRIPT_EDIT"
+  ],
+  "harm_contracts": {
+    "pool_scales": false,
+    "scale30": "FIXED_QD1_SCALE30_VS_LITERAL_Q0",
+    "scale50_activated_subset_secondary": true,
+    "scale50_primary": "FULL_TEMPORAL_GAT_POLICY_VS_LITERAL_Q0"
+  },
+  "next_required_stage": "AUTHORIZED_COMPLETE_D5_ELIGIBILITY_THEN_HARD_STOP_AUDITS",
+  "policy_round_frozen": false,
+  "production_switch_authorized": false,
+  "schema_version": "lunar_ice_bpc.temporal_gat_accepted_decisions_preimplementation.v1",
+  "status": "FORMAL_DECISIONS_INTEGRATED_PROPOSALS_NOT_FROZEN",
+  "topology_budget": {
+    "maximum_outcome_bearing_rounds": 3,
+    "round2_requires_causal_representation_repair": true,
+    "round3_requires_two_round_root_cause_pass": true,
+    "terminate_current_hypothesis_after_three_failures": true
+  },
+  "topology_gate_proposal_defaults": {
+    "bootstrap_replicates": 10000,
+    "cluster_unit": "INSTANCE",
+    "familywise_alpha": 0.05,
+    "minimum_frozen_shuffle_seeds": 10,
+    "multiplicity": "HOLM_BONFERRONI",
+    "paired_policy_ratio_point_estimate_at_most": 0.98,
+    "paired_policy_ratio_upper_95_ci_below": 1.0,
+    "requires_user_confirmation_before_freeze": true
+  },
+  "unresolved_before_policy_freeze": [
+    "USER_CONFIRM_TOPOLOGY_GATE_PROPOSAL",
+    "AUDIT_DERIVE_SAFETY_B_RAW_CAPACITY",
+    "AUDIT_DERIVE_ADDRESSABLE_WALL_GATE",
+    "FREEZE_PER_ROUND_JOB_AND_TIME_CAP"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_oracle_execution_freeze.v1",
+  "status": "FROZEN_BEFORE_ANY_CLEAN_CORPUS_QO2_OUTCOME",
+  "development_only": true,
+  "deployable": false,
+  "frozen_at_local": "2026-08-01T20:38:56+08:00",
+  "replay_schema": "lunar_ice_bpc.p0v5_qg2_snapshot_replay.v3",
+  "oracle_schema": "lunar_ice_bpc.p0v5_qg2_bounded_oracle.v4",
+  "cache_identity": [
+    "source_state_hash",
+    "source_engine_hash",
+    "source_config_hash",
+    "source_exact_action_policy_hash",
+    "policy",
+    "potential_file_sha256",
+    "random_seed",
+    "guidance_bucket_width",
+    "requested_wall_time_limit_sec",
+    "requested_memory_limit_gb",
+    "requested_label_trace",
+    "repeat_index"
+  ],
+  "frozen_file_sha256": {
+    "scripts/replay_p0v5_qg2_label_state_snapshot.py": "fe9c9ce0c66e37cc5300fd1cf3c0be71b29ee16362bd291f552cd66988a602d5",
+    "scripts/fit_p0v5_qo2_leaked_label_state_oracle.py": "b0a51181567305603d87b4a0198de63027889d2254360a55d76450aa63e45d83",
+    "scripts/run_p0v5_qg2_bounded_oracle.py": "3c1f03e4330ba24f736a120c5c623d5eb0b349a779bb2f15d4c203d3348d6740",
+    "scripts/train_p0v5_qg2_model_comparison.py": "f70b3148e0b8759e5924e521c47e1d5e461c5fa6c668fa9d84d665369bc44ca4",
+    "scripts/predict_p0v5_qg2_potential.py": "1f5e1f2a2491894b1b807037c10e71f084156f9d12bb5938be559063bf9920cf",
+    "scripts/calibrate_p0v5_qg2_models.py": "a2d9c3d8583e60681cd979b49c4fdb409aa47733430a0709ff584cc1567563cf",
+    "scripts/run_p0v5_qg2_clean_v1_tree_supplement.py": "fef64ba1efc0ab967cfb2dc7c368cbfc0d56f49df38a68cb6b2f65d97e801772",
+    "scripts/run_p0v5_qg2_oracle_after_collection.py": "b65eb7c21bcd1e0d1ff8eef2c1525ad4430cd8e5020fb1d1c047d264e7382a1b",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v1_collection_freeze.json": "2e097f1c574ec9d132a560c7d9e6580d93874f69d45dccdea87a302da6e6f60d",
+    "runs/p0v5_qg2_label_state_gat_20260801/qg2_clean_v1_tree_supplement_freeze.json": "afb7546902fab0d6e2f5e153e31d2ccc0217152107fc8110c29c73084c391d12",
+    "data/p0v5_qg2_oracle_development_v3/manifest.json": "ff37cd88b9fc9fbe6f38a5e8b7e0d9466a1b739fee27119ff7fb4acf267b05eb"
+  },
+  "maximum_oracle_contexts": 300,
+  "maximum_oracle_contexts_per_scale": 150,
+  "additional_sampling_after_failed_300_context_gate": false,
+  "training_before_oracle_pass": false
+}

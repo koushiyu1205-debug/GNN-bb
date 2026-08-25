@@ -1,0 +1,306 @@
+{
+  "candidate_trained": false,
+  "decision": "FAIL",
+  "deployment_authorized": false,
+  "detail": {
+    "boundary_metrics": {
+      "30": {
+        "4096": {
+          "benefit_instances": 8,
+          "contexts": 8,
+          "determined_contexts": 8,
+          "determined_instances": 8,
+          "fixed_qpd1_net_gm": 0.8208422458519479,
+          "harm_instances": 0,
+          "instance_rows": [
+            {
+              "context_count": 1,
+              "instance_hash": "296a3155f2f99afa",
+              "net_ratio": 0.4724955603101647,
+              "probe_ratio": 1.005521272643877
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "4c3e017314d9a3ee",
+              "net_ratio": 0.9058866093326388,
+              "probe_ratio": 1.0118778011726877
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "5ac004e434340ddd",
+              "net_ratio": 0.8790208481866661,
+              "probe_ratio": 0.9999861807593994
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "6f17b70d5674dc08",
+              "net_ratio": 0.9429716885562138,
+              "probe_ratio": 1.0137422763469384
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "716f194babe1bf7d",
+              "net_ratio": 0.8836746457976677,
+              "probe_ratio": 1.0080428482247803
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "9e28af267ed553c3",
+              "net_ratio": 0.9173164435730591,
+              "probe_ratio": 1.0012562504848612
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "e5f80e8bd698b75d",
+              "net_ratio": 0.8903482622088074,
+              "probe_ratio": 0.9897911225099574
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "fbd070417ed00ce5",
+              "net_ratio": 0.8048903294962075,
+              "probe_ratio": 0.9995217254851357
+            }
+          ],
+          "net_oracle_gm": 0.8208422458519479,
+          "neutral_or_harm_instances": 0,
+          "probe_overhead_gm": 1.0036911948406462,
+          "probe_overhead_worst_context_ratio": 1.0137422763469384,
+          "qpd1_winner_instances": 8,
+          "resource_censor_contexts": 0,
+          "resource_censor_instances": 0,
+          "strong_benefit_instances": 8
+        }
+      },
+      "50": {
+        "16384": {
+          "benefit_instances": 4,
+          "contexts": 8,
+          "determined_contexts": 8,
+          "determined_instances": 8,
+          "fixed_qpd1_net_gm": 1.160861396915262,
+          "harm_instances": 3,
+          "instance_rows": [
+            {
+              "context_count": 1,
+              "instance_hash": "0901f02491d45908",
+              "net_ratio": 0.9596975992416046,
+              "probe_ratio": 1.006012401646462
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "125aaef31ef11d35",
+              "net_ratio": 0.9703147413212053,
+              "probe_ratio": 0.994775575928642
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "14c6262160809d66",
+              "net_ratio": 1.0031419808349777,
+              "probe_ratio": 1.0062854830760537
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "16407bf4d988d595",
+              "net_ratio": 0.9715777111383901,
+              "probe_ratio": 1.014834919065072
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "23cc0c6fee9f1fa0",
+              "net_ratio": 0.65428223845,
+              "probe_ratio": 1.0054732505053923
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "56286c37063f6048",
+              "net_ratio": 3.036151092072633,
+              "probe_ratio": 0.9742406158423678
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "9003925e2924006a",
+              "net_ratio": 1.070091495279675,
+              "probe_ratio": 1.0150175482974775
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "ea7975bf0465b1c7",
+              "net_ratio": 1.7094112027232142,
+              "probe_ratio": 0.9976517584321266
+            }
+          ],
+          "net_oracle_gm": 0.9365613124942742,
+          "neutral_or_harm_instances": 4,
+          "probe_overhead_gm": 1.0017094980225125,
+          "probe_overhead_worst_context_ratio": 1.0150175482974775,
+          "qpd1_winner_instances": 4,
+          "resource_censor_contexts": 0,
+          "resource_censor_instances": 0,
+          "strong_benefit_instances": 1
+        },
+        "4096": {
+          "benefit_instances": 2,
+          "contexts": 8,
+          "determined_contexts": 7,
+          "determined_instances": 7,
+          "fixed_qpd1_net_gm": 1.262340807758605,
+          "harm_instances": 3,
+          "instance_rows": [
+            {
+              "context_count": 1,
+              "instance_hash": "0901f02491d45908",
+              "net_ratio": 0.9703967083617044,
+              "probe_ratio": 1.0116975542091513
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "125aaef31ef11d35",
+              "net_ratio": 0.9665479102973985,
+              "probe_ratio": 0.9971064030686085
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "14c6262160809d66",
+              "net_ratio": 0.993803684023055,
+              "probe_ratio": 0.998253015771344
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "16407bf4d988d595",
+              "net_ratio": 0.9818616104008104,
+              "probe_ratio": 1.0005579903022552
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "56286c37063f6048",
+              "net_ratio": 3.0704248490041754,
+              "probe_ratio": 0.9994347394694748
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "9003925e2924006a",
+              "net_ratio": 1.0652662322305677,
+              "probe_ratio": 1.011533545579387
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "ea7975bf0465b1c7",
+              "net_ratio": 1.7063029332063986,
+              "probe_ratio": 1.0017252768819331
+            }
+          ],
+          "net_oracle_gm": 0.9874232956386089,
+          "neutral_or_harm_instances": 5,
+          "probe_overhead_gm": 1.0028851697081758,
+          "probe_overhead_worst_context_ratio": 1.0116975542091513,
+          "qpd1_winner_instances": 4,
+          "resource_censor_contexts": 0,
+          "resource_censor_instances": 0,
+          "strong_benefit_instances": 0
+        },
+        "8192": {
+          "benefit_instances": 3,
+          "contexts": 8,
+          "determined_contexts": 7,
+          "determined_instances": 7,
+          "fixed_qpd1_net_gm": 1.260553797258148,
+          "harm_instances": 3,
+          "instance_rows": [
+            {
+              "context_count": 1,
+              "instance_hash": "0901f02491d45908",
+              "net_ratio": 0.9685931056023067,
+              "probe_ratio": 1.0000805106562776
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "125aaef31ef11d35",
+              "net_ratio": 0.946953338273016,
+              "probe_ratio": 1.0115448616480212
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "14c6262160809d66",
+              "net_ratio": 1.0040239410316207,
+              "probe_ratio": 0.9973870288581643
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "16407bf4d988d595",
+              "net_ratio": 0.9625167376698416,
+              "probe_ratio": 0.996222920146225
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "56286c37063f6048",
+              "net_ratio": 3.082527191771776,
+              "probe_ratio": 1.010406261558858
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "9003925e2924006a",
+              "net_ratio": 1.082152118358287,
+              "probe_ratio": 0.9984311030632411
+            },
+            {
+              "context_count": 1,
+              "instance_hash": "ea7975bf0465b1c7",
+              "net_ratio": 1.7104569688792617,
+              "probe_ratio": 0.9962442062517314
+            }
+          ],
+          "net_oracle_gm": 0.9823546844468024,
+          "neutral_or_harm_instances": 4,
+          "probe_overhead_gm": 1.0014550732316194,
+          "probe_overhead_worst_context_ratio": 1.0115448616480212,
+          "qpd1_winner_instances": 3,
+          "resource_censor_contexts": 0,
+          "resource_censor_instances": 0,
+          "strong_benefit_instances": 1
+        }
+      }
+    },
+    "correctness_redline_count": 0,
+    "decision": "FAIL",
+    "failed_conditions": {
+      "30": {
+        "4096": []
+      },
+      "50": {
+        "16384": [
+          "minimum_strong_benefit_instances"
+        ],
+        "4096": [
+          "net_oracle_gm",
+          "minimum_strong_benefit_instances"
+        ],
+        "8192": [
+          "net_oracle_gm",
+          "minimum_strong_benefit_instances"
+        ]
+      }
+    },
+    "heldout_e2e_formal_authorized": false,
+    "passing_boundaries": {
+      "30": [
+        4096
+      ],
+      "50": []
+    },
+    "reason": "SCALE50_LATE_SWITCH_SUPPORT_GATE_FAILED",
+    "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_oracle_audit.v10r1",
+    "selected_scale30_boundary": 4096,
+    "selected_scale50_boundary": null,
+    "temporal_gat_training_authorized": false
+  },
+  "development_only": true,
+  "diagnostic_only": true,
+  "heldout_e2e_formal_authorized": false,
+  "production_switch_authorized": false,
+  "reason": "SCALE50_LATE_SWITCH_SUPPORT_GATE_FAILED",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_frontier_audit_terminal.v10r1",
+  "stage": "POST_TERMINAL_ANALYZER_CORRECTION_AUDIT",
+  "temporal_gat_training_authorized": false,
+  "v10_source_terminal_rewritten": false
+}

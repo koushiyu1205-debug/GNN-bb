@@ -1,0 +1,42 @@
+{
+  "case_count": 500,
+  "checks": [
+    "literal_Q0_disabled_temporal_mode",
+    "route_payload_and_reduced_cost_inputs",
+    "exact_status_and_certificate_fields",
+    "pop_derived_counters",
+    "atomic_bidirectional_migration_fault_injection",
+    "500_randomized_force_trial_continue_revert_exact_differentials",
+    "state_176_byte_abi_and_portable_parity",
+    "deterministic_telemetry_hash"
+  ],
+  "decision": "PASS",
+  "deployment_authorized": false,
+  "mismatch_case_indices": [],
+  "mismatch_count": 0,
+  "native_ctest_output_sha256": "ea6447134b4409cecf947f730c3676ce69e3cb4a264e5d8e823ca78268f1af2c",
+  "native_ctest_pass": true,
+  "native_test_binary": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-temporal-frontier-v10/lunar_spprc_native_tests",
+  "native_test_binary_sha256": "89dc37621f15600c9cc3871df4f224a201f4208f9e9528e2aee43d3074a0f37f",
+  "python_contract_output_sha256": "0d1f329ee91338e7b03dd944241b5c7e19c20b79532dd704048feca6eed2b182",
+  "python_contract_test_count": 20,
+  "python_contract_test_paths": [
+    "tests/test_p0v5_temporal_gat_production_v1.py",
+    "tests/test_real_map_edge_checkpoint.py"
+  ],
+  "python_contract_tests_pass": true,
+  "reference_build_info_hash": "b3c2357d406864a1385778ebdc2641a2c4e479a08c8bd70dbaedbff2ca0d0ce6",
+  "reference_case_hashes_sha256": "7b23752fb9367c2d95e6718066c4dd35a39469662e3c44a4240539ae452a088b",
+  "reference_module_path": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8r1/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "reference_native_binary": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-counterfactual-prefix-v8r1/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "reference_native_binary_sha256": "9c480887292fc9bd2cdddf2df89031067a4298860213fc6d0e9fc1c95fa3103f",
+  "schema_version": "lunar_ice_bpc.p0v5_temporal_gat_native_differential.v1",
+  "source_freeze_sha256": "8e79971ae042c66b8261d95da24ae38e1b587b34074950495fe963fba997aa9c",
+  "temporal_action_randomized_exact_case_count": 500,
+  "temporal_action_randomized_exact_mismatch_count": 0,
+  "temporal_build_info_hash": "34601f3285ed7ab2f4909e3cc9e30962c6e0d731da1b9d4ead31e3cb57db8b7b",
+  "temporal_case_hashes_sha256": "7b23752fb9367c2d95e6718066c4dd35a39469662e3c44a4240539ae452a088b",
+  "temporal_module_path": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-temporal-frontier-v10/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "temporal_native_binary": "/home/kai/work/GAT_BPC_moonTerk/build/native-spprc-temporal-frontier-v10/lunar_spprc_native.cpython-313-x86_64-linux-gnu.so",
+  "temporal_native_binary_sha256": "fb03af89bdc5edfe696c715d51b83104e3ed248316360234d60de03e3e50dcfa"
+}

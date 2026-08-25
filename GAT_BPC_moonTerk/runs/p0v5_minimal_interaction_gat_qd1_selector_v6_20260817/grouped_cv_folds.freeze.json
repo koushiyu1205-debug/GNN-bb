@@ -1,0 +1,149 @@
+{
+  "fold_count": 5,
+  "instance_grouped": true,
+  "rows": [
+    {
+      "fold": 0,
+      "instance_hash": "6cc232d48d44f2d3",
+      "scale": 30
+    },
+    {
+      "fold": 1,
+      "instance_hash": "5ac004e434340ddd",
+      "scale": 30
+    },
+    {
+      "fold": 2,
+      "instance_hash": "f4bc9660f12da0de",
+      "scale": 30
+    },
+    {
+      "fold": 3,
+      "instance_hash": "4c3e017314d9a3ee",
+      "scale": 30
+    },
+    {
+      "fold": 4,
+      "instance_hash": "6f17b70d5674dc08",
+      "scale": 30
+    },
+    {
+      "fold": 0,
+      "instance_hash": "fbd070417ed00ce5",
+      "scale": 30
+    },
+    {
+      "fold": 1,
+      "instance_hash": "a7acc5b02e62e549",
+      "scale": 30
+    },
+    {
+      "fold": 2,
+      "instance_hash": "7ad0c8d59c88bbe1",
+      "scale": 30
+    },
+    {
+      "fold": 3,
+      "instance_hash": "296a3155f2f99afa",
+      "scale": 30
+    },
+    {
+      "fold": 4,
+      "instance_hash": "716f194babe1bf7d",
+      "scale": 30
+    },
+    {
+      "fold": 0,
+      "instance_hash": "07318c0416425be5",
+      "scale": 30
+    },
+    {
+      "fold": 1,
+      "instance_hash": "36658f9c48a480aa",
+      "scale": 30
+    },
+    {
+      "fold": 2,
+      "instance_hash": "77176536c5b0f521",
+      "scale": 30
+    },
+    {
+      "fold": 3,
+      "instance_hash": "4a75319d174fdd19",
+      "scale": 30
+    },
+    {
+      "fold": 0,
+      "instance_hash": "0901f02491d45908",
+      "scale": 50
+    },
+    {
+      "fold": 1,
+      "instance_hash": "665810f5957bfe6b",
+      "scale": 50
+    },
+    {
+      "fold": 2,
+      "instance_hash": "22e4e44594b5766b",
+      "scale": 50
+    },
+    {
+      "fold": 3,
+      "instance_hash": "510dcbb1be8deee5",
+      "scale": 50
+    },
+    {
+      "fold": 4,
+      "instance_hash": "ea7975bf0465b1c7",
+      "scale": 50
+    },
+    {
+      "fold": 0,
+      "instance_hash": "62d180c8d93ff71c",
+      "scale": 50
+    },
+    {
+      "fold": 1,
+      "instance_hash": "79478c234c73e4f2",
+      "scale": 50
+    },
+    {
+      "fold": 2,
+      "instance_hash": "7f3230fed387dae8",
+      "scale": 50
+    },
+    {
+      "fold": 3,
+      "instance_hash": "23cc0c6fee9f1fa0",
+      "scale": 50
+    },
+    {
+      "fold": 4,
+      "instance_hash": "14c6262160809d66",
+      "scale": 50
+    },
+    {
+      "fold": 0,
+      "instance_hash": "9003925e2924006a",
+      "scale": 50
+    },
+    {
+      "fold": 1,
+      "instance_hash": "8e35efca611548b7",
+      "scale": 50
+    },
+    {
+      "fold": 2,
+      "instance_hash": "a21f4ca58f222d77",
+      "scale": 50
+    },
+    {
+      "fold": 3,
+      "instance_hash": "125aaef31ef11d35",
+      "scale": 50
+    }
+  ],
+  "schema_version": "lunar_ice_bpc.p0v5_interaction_gat_qd1_cv_folds.v1",
+  "source_v5_folds_sha256": "0a215bc132691fecffa6c352e548ba84de19933c4832b27c4c1cea06accf8eab",
+  "status": "FROZEN_BEFORE_ANY_V5_ARM_OUTCOME"
+}

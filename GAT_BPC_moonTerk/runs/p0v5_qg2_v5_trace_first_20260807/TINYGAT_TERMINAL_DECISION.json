@@ -1,0 +1,27 @@
+{
+  "schema_version": "lunar_ice_bpc.p0v5_qg2_v5_tinygat_terminal_decision.v1",
+  "status": "TERMINATED_NEGATIVE",
+  "decision_time": "2026-08-07T12:28:46+08:00",
+  "decision_authority": "user_requested_stop_after_clear_negative_evidence",
+  "development_only": true,
+  "deployable": false,
+  "production_switch_authorized": false,
+  "model_class": "QG2TinyGAT",
+  "checkpoint_sha256": "c283fa1fcecc70f67cd9540ff92b24253d692b9e9e8fdb0bdf53e98dea1c4836",
+  "completed_matched_context_count": 3,
+  "completed_matched_beneficial_count": 0,
+  "completed_matched_geometric_mean_ratio": 1.2969444774777903,
+  "heavy_context": {
+    "state_hash": "1ceab640c7be1580bfbbe75807b8609870783c51746b739f23006aedd2feb9f3",
+    "q0_complete_wall_sec": [278.955859014, 290.750027478],
+    "tinygat_timeout_wall_sec": [301.645890126, 301.663124803, 301.779680573],
+    "comparison": "tinygat_adverse_censor"
+  },
+  "scale50_force_on_context_count": 0,
+  "narrow_bucket_screen_started": false,
+  "qd1_qb1_new_collection_started": false,
+  "context_gat_started": false,
+  "mlp_linear_started": false,
+  "exact_control_modified": false,
+  "next_action": "do_not_continue_current_tinygat_queue_ordering_experiments"
+}
